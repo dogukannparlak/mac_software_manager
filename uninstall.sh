@@ -11,6 +11,40 @@ ask_confirmation() {
     [[ "$response" == "y" || "$response" == "Y" ]]
 }
 
+# Download the official Homebrew (un)installer over HTTPS and run it, refusing
+# to execute anything empty or truncated. Same baseline as setup_mac.sh: no
+# published checksum to pin against, but HTTPS+TLS1.2 is enforced, content
+# actually has to be present, and it has to parse as bash before it runs.
+run_homebrew_script() {
+    local url="$1"
+    local label="$2"
+    local tmp_file
+    tmp_file="$(mktemp "${TMPDIR:-/tmp}/homebrew_${label}.XXXXXX")" || return 1
+
+    if ! curl -fLsS --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 30 "$url" -o "$tmp_file"; then
+        echo "${fg[red]}❌ Error: Could not download the Homebrew $label script.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp_file" ]]; then
+        echo "${fg[red]}❌ Error: Homebrew $label script downloaded empty. Aborting.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if ! bash -n "$tmp_file" 2>/dev/null; then
+        echo "${fg[red]}❌ Error: Homebrew $label script failed a basic syntax check (truncated or tampered). Aborting.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    /bin/bash "$tmp_file"
+    local rc=$?
+    rm -f "$tmp_file"
+    return $rc
+}
+
 echo "${fg[red]}=== Mac Software Manager: Uninstaller v1.5.0 ===${reset_color}"
 
 # 1. Remove the SwiftBar Plugin
@@ -72,7 +106,8 @@ if command -v brew &> /dev/null; then
     echo ""
     echo "${fg[yellow]}WARNING: Uninstalling Homebrew will remove ALL brew-installed packages!${reset_color}"
     if ask_confirmation "Do you want to completely uninstall Homebrew from this system?"; then
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+        run_homebrew_script "https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh" "uninstall" || \
+            echo "${fg[red]}❌ Homebrew uninstall failed or was refused. Continuing with the rest of the cleanup.${reset_color}"
     fi
 fi
 
