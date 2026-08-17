@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  checks:
+    name: Syntax, versions and checksums
+    # macOS runner: the scripts rely on zsh, plutil, shasum and BSD sed
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse every script with zsh
+        run: |
+          set -e
+          for script in setup_mac.sh uninstall.sh update_system.1h.sh tools/*.sh; do
+            echo "==> $script"
+            zsh -n "$script"
+          done
+
+      - name: Version strings match VERSION
+        run: ./tools/sync_version.sh --check
+
+      - name: SHA256SUMS matches the distributed scripts
+        # Self-update refuses to install anything not listed here, so a stale
+        # SHA256SUMS would silently freeze every installation.
+        run: ./tools/generate_checksums.sh --check
+
+      - name: Plugin renders without touching the network
+        # A menu render must never shell out to brew/mas/curl: it reads the
+        # cache only. Running it against an empty HOME proves it still produces
+        # a menu (and does not hang) when no cache exists yet.
+        run: |
+          set -e
+          export HOME="$RUNNER_TEMP/fakehome"
+          mkdir -p "$HOME"
+          # brew exists on the runner, so the pre-flight check passes
+          output=$(./update_system.1h.sh)
+          echo "$output" | head -20
+          echo "$output" | grep -q "Refresh now" \
+            || { echo "::error::render did not produce a full menu"; exit 1; }
+
+  shellcheck:
+    name: shellcheck (advisory)
+    runs-on: ubuntu-latest
+    # shellcheck has no zsh mode. Running it as bash surfaces genuine quoting
+    # problems but also flags zsh-only syntax, so this job never blocks.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck as bash
+        run: |
+          shellcheck --shell=bash --severity=warning \
+            setup_mac.sh uninstall.sh update_system.1h.sh tools/*.sh || true
