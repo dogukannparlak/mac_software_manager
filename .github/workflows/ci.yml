@@ -19,7 +19,7 @@ jobs:
       - name: Parse every script with zsh
         run: |
           set -e
-          for script in setup_mac.sh uninstall.sh update_system.1h.sh tools/*.sh; do
+          for script in setup_mac.sh uninstall.sh update_system.1h.sh lib/*.sh tools/*.sh; do
             echo "==> $script"
             zsh -n "$script"
           done
@@ -35,16 +35,39 @@ jobs:
       - name: Plugin renders without touching the network
         # A menu render must never shell out to brew/mas/curl: it reads the
         # cache only. Running it against an empty HOME proves it still produces
-        # a menu (and does not hang) when no cache exists yet.
+        # a menu (and does not hang) when no cache exists yet. MSU_LIB_DIR
+        # points the engine at this checkout's lib/ directly, the same way
+        # the bats suite does - no install step needed.
         run: |
           set -e
           export HOME="$RUNNER_TEMP/fakehome"
+          export MSU_LIB_DIR="$PWD/lib"
           mkdir -p "$HOME"
           # brew exists on the runner, so the pre-flight check passes
           output=$(./update_system.1h.sh)
           echo "$output" | head -20
           echo "$output" | grep -q "Refresh now" \
             || { echo "::error::render did not produce a full menu"; exit 1; }
+
+      - name: Install bats-core
+        run: brew install bats-core
+
+      - name: Shell function tests (bats)
+        # Tests source the script from a zsh subprocess (see the
+        # $ZSH_EVAL_CONTEXT guard at the top of section 5 in
+        # update_system.1h.sh) to load its functions without triggering a
+        # real run - never a bash 'source' of a zsh-syntax file.
+        run: bats tests/
+
+  swift-tests:
+    name: Swift unit tests (GuideApp)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swift test
+        run: swift test --package-path GuideApp
 
   shellcheck:
     name: shellcheck (advisory)
@@ -62,4 +85,4 @@ jobs:
       - name: Run shellcheck as bash
         run: |
           shellcheck --shell=bash --severity=warning \
-            setup_mac.sh uninstall.sh update_system.1h.sh tools/*.sh || true
+            setup_mac.sh uninstall.sh update_system.1h.sh lib/*.sh tools/*.sh || true
