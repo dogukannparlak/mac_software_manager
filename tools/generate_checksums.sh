@@ -15,12 +15,25 @@ set -o pipefail
 REPO_ROOT="${0:a:h:h}"
 cd "$REPO_ROOT"
 
-# Files fetched by setup_mac.sh and by the plugin's self-update
+# Files fetched by setup_mac.sh and by the plugin's self-update. The lib/*.sh
+# list must match LIB_NAMES in update_system.1h.sh (and setup_mac.sh) - all of
+# them are downloaded and verified as one atomic set, so a missing or stale
+# checksum here would silently exclude a file from that guarantee.
 typeset -a DISTRIBUTED_FILES
 DISTRIBUTED_FILES=(
     setup_mac.sh
     uninstall.sh
     update_system.1h.sh
+    lib/utils.sh
+    lib/cache.sh
+    lib/ignored.sh
+    lib/history.sh
+    lib/selfupdate.sh
+    lib/updaters.sh
+    lib/selfupdate_apps.sh
+    lib/app_install.sh
+    lib/run_modes.sh
+    lib/menu.sh
 )
 
 for file in "${DISTRIBUTED_FILES[@]}"; do
