@@ -59,6 +59,10 @@ final class ToolkitSettings {
     var autostart = true
     var cleanupEnabled = true
     var autoInstallApps = false
+    /// Empty means no Codeberg mirror is configured: downloads and self-update
+    /// fall back to GitHub only, and the shell engine surfaces that in its
+    /// own "Config Warnings" menu entry.
+    var codebergUsername = ""
 
     /// Set when the file could not be written, so the UI can say so.
     private(set) var lastError: String?
@@ -103,6 +107,8 @@ final class ToolkitSettings {
             cleanupEnabled = (value == "1")
         case "AUTO_INSTALL_APPS":
             autoInstallApps = (value == "1")
+        case "CODEBERG_USERNAME":
+            codebergUsername = (value == "YOUR_CODEBERG_USERNAME") ? "" : value
         default:
             break
         }
@@ -135,6 +141,9 @@ final class ToolkitSettings {
 
         # Replace self-updating apps (Sparkle/GitHub) directly (1=Enabled, 0=Disabled)
         AUTO_INSTALL_APPS="\(autoInstallApps ? "1" : "0")"
+
+        # Codeberg username for the backup mirror (blank = GitHub only, no dual-source verification)
+        CODEBERG_USERNAME="\(codebergUsername)"
 
         """
 

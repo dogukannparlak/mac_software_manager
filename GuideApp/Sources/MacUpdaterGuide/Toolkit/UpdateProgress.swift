@@ -27,6 +27,11 @@ struct UpdateProgress: Equatable, Sendable {
         case single
         case complete
         case unknown
+        /// The toolkit process itself exited non-zero or was killed - caught on
+        /// the Swift side (ToolkitController), not written by the shell script.
+        /// Distinct from a stale "running" state: this means the process is
+        /// definitely gone, not just quiet.
+        case processError = "process-error"
 
         var label: Localized {
             switch self {
@@ -41,6 +46,7 @@ struct UpdateProgress: Equatable, Sendable {
             case .single: return Localized("Updating", "Güncelleniyor")
             case .complete: return Localized("Finished", "Bitti")
             case .unknown: return Localized("Working…", "Çalışıyor…")
+            case .processError: return Localized("Update failed", "Güncelleme başarısız oldu")
             }
         }
     }
@@ -50,6 +56,11 @@ struct UpdateProgress: Equatable, Sendable {
     var item: String
     var index: Int?
     var total: Int?
+
+    /// The only format version this build understands. See CACHE_FORMAT.md -
+    /// the shell writer (`PROGRESS_FORMAT_VERSION` in update_system.1h.sh)
+    /// and this must agree, or `parse` fails closed instead of misreading.
+    static let formatVersion = "v1"
 
     /// A run that died without writing a final state would otherwise leave the
     /// menu claiming to be busy forever.
@@ -92,20 +103,36 @@ struct UpdateProgress: Equatable, Sendable {
             return nil
         }
 
+        return parse(raw: raw, modified: modified)
+    }
+
+    /// The parsing logic in isolation, taking the file's raw content and
+    /// modification date directly rather than reading them from disk - kept
+    /// separate from `load()` (which is tied to the real, non-injectable
+    /// `ToolkitPaths.cacheFile` location) so it can be unit-tested against
+    /// arbitrary payloads without touching the filesystem.
+    ///
+    /// A missing or unrecognized version field (fields[0]) returns `nil` -
+    /// the same "nothing to show" outcome every other malformed line already
+    /// gets. Before the version field existed, an incompatible format would
+    /// fall through to `State(rawValue: fields[0]) ?? .done`, silently
+    /// reporting an unreadable line as a *successful* update; failing closed
+    /// here is the whole point of the marker.
+    static func parse(raw: String, modified: Date, now: Date = Date()) -> UpdateProgress? {
         let fields = raw
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: "|")
-        guard fields.count >= 2 else { return nil }
+        guard fields.count >= 3, fields[0] == formatVersion else { return nil }
 
         var progress = UpdateProgress(
-            state: State(rawValue: fields[0]) ?? .done,
-            phase: Phase(rawValue: fields[1]) ?? .unknown,
-            item: fields.count > 2 ? fields[2] : "",
-            index: fields.count > 3 ? Int(fields[3]) : nil,
-            total: fields.count > 4 ? Int(fields[4]) : nil
+            state: State(rawValue: fields[1]) ?? .done,
+            phase: Phase(rawValue: fields[2]) ?? .unknown,
+            item: fields.count > 3 ? fields[3] : "",
+            index: fields.count > 4 ? Int(fields[4]) : nil,
+            total: fields.count > 5 ? Int(fields[5]) : nil
         )
 
-        if progress.state == .running, Date().timeIntervalSince(modified) > staleAfter {
+        if progress.state == .running, now.timeIntervalSince(modified) > staleAfter {
             progress.state = .failed
         }
 

@@ -10,6 +10,11 @@ let package = Package(
         .executableTarget(
             name: "MacUpdaterGuide",
             path: "Sources/MacUpdaterGuide"
+        ),
+        .testTarget(
+            name: "MacUpdaterGuideTests",
+            dependencies: ["MacUpdaterGuide"],
+            path: "Tests/MacUpdaterGuideTests"
         )
     ]
 )

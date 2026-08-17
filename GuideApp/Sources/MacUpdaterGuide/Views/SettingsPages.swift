@@ -499,6 +499,7 @@ struct AboutPage: View {
     @Environment(\.openURL) private var openURL
 
     @State private var updatePending = false
+    @State private var settings = ToolkitSettings()
 
     var body: some View {
         SettingsPage(
@@ -555,22 +556,35 @@ struct AboutPage: View {
             }
 
             Card {
-                HStack(spacing: 12) {
-                    Button {
-                        openURL(ToolkitVersion.projectURL)
-                    } label: {
-                        Label(UIStrings.visitProject[loc.language], systemImage: "link")
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        Button {
+                            openURL(ToolkitVersion.projectURL)
+                        } label: {
+                            Label(UIStrings.visitProject[loc.language], systemImage: "link")
+                        }
+                        if let mirrorURL = ToolkitVersion.mirrorURL(username: settings.codebergUsername) {
+                            Button {
+                                openURL(mirrorURL)
+                            } label: {
+                                Label(UIStrings.visitMirror[loc.language], systemImage: "arrow.triangle.branch")
+                            }
+                        }
+                        Spacer()
                     }
-                    Button {
-                        openURL(ToolkitVersion.mirrorURL)
-                    } label: {
-                        Label(UIStrings.visitMirror[loc.language], systemImage: "arrow.triangle.branch")
+
+                    if ToolkitVersion.mirrorURL(username: settings.codebergUsername) == nil {
+                        Text(UIStrings.mirrorNotConfigured[loc.language])
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    Spacer()
                 }
             }
         }
-        .task { updatePending = toolkit.toolkitUpdatePending }
+        .task {
+            updatePending = toolkit.toolkitUpdatePending
+            settings.load()
+        }
     }
 }
 

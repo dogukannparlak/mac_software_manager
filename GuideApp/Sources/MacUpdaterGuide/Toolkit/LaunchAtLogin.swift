@@ -60,9 +60,15 @@ enum ToolkitVersion {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
     }
 
-    // TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below.
     static let projectURL = URL(string: "https://github.com/dogukannparlak/mac_software_manager")!
-    static let mirrorURL = URL(string: "https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager")!
+
+    /// The Codeberg mirror URL, or nil when no username is configured
+    /// (ToolkitSettings.codebergUsername empty or still the literal
+    /// placeholder). Callers must not offer a mirror link when this is nil.
+    static func mirrorURL(username: String) -> URL? {
+        guard !username.isEmpty, username != "YOUR_CODEBERG_USERNAME" else { return nil }
+        return URL(string: "https://codeberg.org/\(username)/mac_software_manager")
+    }
 }
 
 /// Homebrew's own version and how stale its local database is.

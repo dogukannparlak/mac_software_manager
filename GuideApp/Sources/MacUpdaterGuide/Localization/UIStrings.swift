@@ -162,6 +162,10 @@ extension UIStrings {
     )
     static let visitProject = Localized("Project page", "Proje sayfası")
     static let visitMirror = Localized("Mirror", "Yansı")
+    static let mirrorNotConfigured = Localized(
+        "No Codeberg mirror configured. Downloads are verified against GitHub only.",
+        "Codeberg yansısı yapılandırılmamış. İndirmeler yalnızca GitHub'a karşı doğrulanıyor."
+    )
 
     static let launchAtLogin = Localized("Open at login", "Girişte aç")
     static let launchAtLoginHelp = Localized(

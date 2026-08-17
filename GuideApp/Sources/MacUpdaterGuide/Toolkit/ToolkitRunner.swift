@@ -93,9 +93,10 @@ final class ToolkitController {
         isRefreshing = true
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
-            await Self.run(script: script, arguments: ["refresh_cache", force ? "force" : "auto"])
+            let outcome = await Self.run(script: script, arguments: ["refresh_cache", force ? "force" : "auto"])
             await MainActor.run {
                 guard let self else { return }
+                if !outcome.succeeded { self.lastMessage = outcome.summary }
                 self.isRefreshing = false
                 self.reload()
             }
@@ -120,11 +121,14 @@ final class ToolkitController {
 
         if preferences.runUpdatesInTerminal {
             Task {
-                await Self.run(script: script, arguments: ["launch_update", scope])
-                await MainActor.run { self.startProgressWatch() }
+                let outcome = await Self.run(script: script, arguments: ["launch_update", scope])
+                await MainActor.run {
+                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    self.startProgressWatch()
+                }
             }
         } else {
-            Self.runDetached(script: script, arguments: ["run", scope])
+            runDetached(script: script, arguments: ["run", scope])
             startProgressWatch()
         }
     }
@@ -135,11 +139,14 @@ final class ToolkitController {
 
         if preferences.runUpdatesInTerminal {
             Task {
-                await Self.run(script: script, arguments: ["install_app", name, liveOrDry])
-                await MainActor.run { self.startProgressWatch() }
+                let outcome = await Self.run(script: script, arguments: ["install_app", name, liveOrDry])
+                await MainActor.run {
+                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    self.startProgressWatch()
+                }
             }
         } else {
-            Self.runDetached(script: script, arguments: ["run", "install", name, liveOrDry])
+            runDetached(script: script, arguments: ["run", "install", name, liveOrDry])
             startProgressWatch()
         }
     }
@@ -161,11 +168,14 @@ final class ToolkitController {
 
         if preferences.runUpdatesInTerminal {
             Task {
-                await Self.run(script: script, arguments: ["update_app"] + details)
-                await MainActor.run { self.startProgressWatch() }
+                let outcome = await Self.run(script: script, arguments: ["update_app"] + details)
+                await MainActor.run {
+                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    self.startProgressWatch()
+                }
             }
         } else {
-            Self.runDetached(script: script, arguments: ["run", "single"] + details)
+            runDetached(script: script, arguments: ["run", "single"] + details)
             startProgressWatch()
         }
     }
@@ -178,7 +188,7 @@ final class ToolkitController {
     /// would want to watch in a terminal.
     func checkHomebrewDatabase() {
         guard let script = scriptURL else { return }
-        Self.runDetached(script: script, arguments: ["brew_update"])
+        runDetached(script: script, arguments: ["brew_update"])
         startProgressWatch()
     }
 
@@ -186,16 +196,22 @@ final class ToolkitController {
     func ignore(type: String, id: String, name: String) {
         guard let script = scriptURL else { return }
         Task {
-            await Self.run(script: script, arguments: ["ignore_app", type, id, name])
-            await MainActor.run { self.reload() }
+            let outcome = await Self.run(script: script, arguments: ["ignore_app", type, id, name])
+            await MainActor.run {
+                if !outcome.succeeded { self.lastMessage = outcome.summary }
+                self.reload()
+            }
         }
     }
 
     func unignore(type: String, id: String, name: String) {
         guard let script = scriptURL else { return }
         Task {
-            await Self.run(script: script, arguments: ["unignore_app", type, id, name])
-            await MainActor.run { self.reload() }
+            let outcome = await Self.run(script: script, arguments: ["unignore_app", type, id, name])
+            await MainActor.run {
+                if !outcome.succeeded { self.lastMessage = outcome.summary }
+                self.reload()
+            }
         }
     }
 
@@ -203,7 +219,10 @@ final class ToolkitController {
     func checkToolkitUpdate() {
         guard let script = scriptURL else { return }
         Task {
-            await Self.run(script: script, arguments: ["check_updates"])
+            let outcome = await Self.run(script: script, arguments: ["check_updates"])
+            if !outcome.succeeded {
+                await MainActor.run { self.lastMessage = outcome.summary }
+            }
         }
     }
 
@@ -243,35 +262,106 @@ final class ToolkitController {
 
     // MARK: - Process helper
 
+    /// What a toolkit process invocation actually did, instead of assuming it
+    /// worked because it ran. A crash, a timeout, or any non-zero exit all
+    /// count as failure here, whatever the shell script's own progress file
+    /// (which a killed or crashed process never gets to update) says.
+    ///
+    /// Internal (not private) so ProcessOutcomeTests/ToolkitRunnerRunTests can
+    /// construct and exercise it directly via '@testable import'.
+    struct ProcessOutcome: Sendable {
+        let exitCode: Int32
+        let reason: Process.TerminationReason
+        let stderr: String
+
+        var succeeded: Bool { reason == .exit && exitCode == 0 }
+
+        var summary: String {
+            if !stderr.isEmpty { return stderr }
+            if reason == .uncaughtSignal { return "Process terminated by signal \(exitCode)." }
+            return "Process exited with status \(exitCode)."
+        }
+    }
+
+    /// Records a failed process invocation using the same state ProgressBanner
+    /// already renders for a failed update, so a crash is exactly as visible
+    /// as a script-reported failure - never a silent no-op.
+    private func reportFailure(_ outcome: ProcessOutcome) {
+        lastMessage = outcome.summary
+        progress = UpdateProgress(state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil)
+    }
+
     /// Starts a process and returns immediately, without waiting for it to
     /// exit. For the headless update path, where the process itself runs for
     /// as long as the update takes - the progress file, not this call's
     /// return, is what tells the caller when it is done.
-    private static func runDetached(script: URL, arguments: [String]) {
+    ///
+    /// A termination handler still watches in the background: if the process
+    /// launch fails outright, or the process later exits non-zero / is killed,
+    /// that is surfaced through the same failure state 'run(script:arguments:)'
+    /// uses - otherwise a crash before the script ever wrote a progress line
+    /// would leave the UI with nothing to show at all.
+    private func runDetached(script: URL, arguments: [String]) {
         let process = Process()
         process.executableURL = URL(filePath: "/bin/zsh")
         process.arguments = [script.path(percentEncoded: false)] + arguments
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try? process.run()
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+
+        process.terminationHandler = { [weak self] finished in
+            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrText = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let outcome = ProcessOutcome(
+                exitCode: finished.terminationStatus,
+                reason: finished.terminationReason,
+                stderr: stderrText
+            )
+            guard !outcome.succeeded else { return }
+            Task { @MainActor in
+                self?.reportFailure(outcome)
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            reportFailure(ProcessOutcome(exitCode: -1, reason: .uncaughtSignal, stderr: error.localizedDescription))
+        }
     }
 
-    private static func run(script: URL, arguments: [String]) async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+    /// Internal (not private) so ToolkitRunnerRunTests can call it directly
+    /// with a small fixture script, exercising the real Process/Pipe plumbing
+    /// rather than just the ProcessOutcome decision logic.
+    static func run(script: URL, arguments: [String]) async -> ProcessOutcome {
+        await withCheckedContinuation { (continuation: CheckedContinuation<ProcessOutcome, Never>) in
             let process = Process()
             process.executableURL = URL(filePath: "/bin/zsh")
             process.arguments = [script.path(percentEncoded: false)] + arguments
             process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
+            let stderrPipe = Pipe()
+            process.standardError = stderrPipe
 
-            process.terminationHandler = { _ in
-                continuation.resume()
+            process.terminationHandler = { finished in
+                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrText = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                continuation.resume(returning: ProcessOutcome(
+                    exitCode: finished.terminationStatus,
+                    reason: finished.terminationReason,
+                    stderr: stderrText
+                ))
             }
 
             do {
                 try process.run()
             } catch {
-                continuation.resume()
+                continuation.resume(returning: ProcessOutcome(
+                    exitCode: -1,
+                    reason: .uncaughtSignal,
+                    stderr: error.localizedDescription
+                ))
             }
         }
     }
