@@ -21,7 +21,7 @@ echo "${fg[blue]}██║ ╚═╝ ██║██║  ██║╚███�
 echo "${fg[blue]}╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝${reset_color}"
 echo ""
 echo "${fg[cyan]}--------------------------------------------------${reset_color}"
-echo "${fg[bold]}  mac_software_updater${reset_color} v1.4.0.2"
+echo "${fg[bold]}  mac_software_updater${reset_color} v1.5.0"
 echo "${fg[cyan]}  Software Update & Application Migration Toolkit${reset_color}"
 echo "${fg[cyan]}--------------------------------------------------${reset_color}"
 echo "This script will: "
@@ -30,9 +30,20 @@ echo "2. Check and Migrate your applications to managed versions"
 echo "3. Configure real-time update monitoring"
 echo ""
 
+# Homebrew: never let a query command trigger an implicit 'brew update'.
+# The setup flow runs 'brew update' explicitly where fresh metadata is required.
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_HINTS=1
+
 # Failover configuration
-URL_PRIMARY_BASE="https://raw.githubusercontent.com/pr-fuzzylogic/mac_software_updater/main"
-URL_BACKUP_BASE="https://codeberg.org/pr-fuzzylogic/mac_software_updater/raw/branch/main"
+# TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below
+# once you have one, or remove the backup path entirely.
+URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_updater/main"
+URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/raw/branch/main"
+
+# Paths of a possible previous installation
+APP_DIR="$HOME/Library/Application Support/MacSoftwareUpdater"
+CONFIG_FILE="$APP_DIR/settings.conf"
 
 # ==============================================================================
 # 2. HELPER FUNCTIONS
@@ -44,10 +55,15 @@ download_with_failover() {
     local file_name="$1"
     local output_path="$2"
 
+    # Records which mirror served the file, so the integrity check knows which
+    # SHA256SUMS counts as the "same source" one.
+    DOWNLOAD_SOURCE=""
+
     # Try Primary (GitHub)
     # -f fails on HTTP errors (404), -L follows redirects, -s silent
     if curl -fLsS --proto '=https' --tlsv1.2 --connect-timeout 5 "$URL_PRIMARY_BASE/$file_name" -o "$output_path"; then
         echo "✅ GitHub available, file downloaded"
+        DOWNLOAD_SOURCE="primary"
         return 0
     fi
 
@@ -56,10 +72,228 @@ download_with_failover() {
     # Try Backup (Codeberg)
     if curl -fLsS --proto '=https' --tlsv1.2 --connect-timeout 8 "$URL_BACKUP_BASE/$file_name" -o "$output_path"; then
         echo "✅ Codeberg available, file downloaded"
+        DOWNLOAD_SOURCE="backup"
         return 0
     fi
     echo "⚠️ Secondary source (Codeberg) failed too."
     return 1
+}
+
+# Expected SHA256 for a file according to a given source's SHA256SUMS
+remote_expected_hash() {
+    local base_url="$1"
+    local file_name="$2"
+    local sums=""
+
+    sums=$(curl -fLsS --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 20 \
+        "$base_url/SHA256SUMS" 2>/dev/null) || return 1
+
+    # SHA256SUMS lines are "<64 hex>  <filename>"
+    print -r -- "$sums" | awk -v target="$file_name" '
+        { name = $2; sub(/^\*/, "", name) }
+        name == target { print $1; found = 1; exit }
+        END { exit !found }
+    '
+}
+
+# Verify a downloaded script before it is installed:
+# checksum from the source it came from, the other mirror agreeing, and the
+# file actually parsing as zsh.
+verify_download() {
+    local file_name="$1"
+    local file_path="$2"
+    local want_header="${3:-}"
+    local actual="" expected_same="" expected_other="" same_base="" other_base=""
+
+    if [[ ! -s "$file_path" ]]; then
+        echo "❌ Integrity: downloaded $file_name is empty."
+        return 1
+    fi
+
+    if ! zsh -n "$file_path" 2>/dev/null; then
+        echo "❌ Integrity: $file_name is not valid zsh (truncated or modified)."
+        return 1
+    fi
+
+    if [[ -n "$want_header" ]] && ! grep -q "$want_header" "$file_path"; then
+        echo "❌ Integrity: $file_name is missing its '$want_header' marker."
+        return 1
+    fi
+
+    if [[ "$DOWNLOAD_SOURCE" == "backup" ]]; then
+        same_base="$URL_BACKUP_BASE"
+        other_base="$URL_PRIMARY_BASE"
+    else
+        same_base="$URL_PRIMARY_BASE"
+        other_base="$URL_BACKUP_BASE"
+    fi
+
+    actual=$(calculate_hash "$file_path") || return 1
+
+    if ! expected_same=$(remote_expected_hash "$same_base" "$file_name"); then
+        echo "❌ Integrity: no SHA256SUMS entry for $file_name at the download source."
+        return 1
+    fi
+
+    if [[ "$actual" != "$expected_same" ]]; then
+        echo "❌ Integrity: checksum mismatch for $file_name."
+        echo "   expected $expected_same"
+        echo "   got      $actual"
+        return 1
+    fi
+
+    if expected_other=$(remote_expected_hash "$other_base" "$file_name"); then
+        if [[ "$expected_other" != "$expected_same" ]]; then
+            echo "❌ Integrity: GitHub and Codeberg publish different checksums for $file_name."
+            return 1
+        fi
+        echo "✅ Integrity verified for $file_name (both sources agree)."
+    else
+        echo "⚠️ Second source unreachable: $file_name verified against one source only."
+    fi
+
+    return 0
+}
+
+# Calculate SHA256 Hash
+calculate_hash() {
+    if [[ ! -f "$1" ]]; then return 1; fi
+    shasum -a 256 "$1" | awk '{print $1}'
+}
+
+# Download to a temporary file, verify, then move into place.
+# The destination is never touched unless every check passes.
+download_verified() {
+    local file_name="$1"
+    local output_path="$2"
+    local want_header="${3:-}"
+    local tmp_file=""
+    local rc=0
+
+    tmp_file="$(mktemp "${TMPDIR:-/tmp}/${file_name}.XXXXXX")" || return 1
+
+    if download_with_failover "$file_name" "$tmp_file" && \
+       verify_download "$file_name" "$tmp_file" "$want_header"; then
+        mv "$tmp_file" "$output_path" || rc=1
+    else
+        rc=1
+        rm -f "$tmp_file"
+    fi
+
+    return $rc
+}
+
+# Read a single KEY="value" setting from an existing settings.conf.
+# Returns non-zero when the file or the key is missing.
+read_existing_setting() {
+    local key="$1"
+    local line=""
+
+    [[ -f "$CONFIG_FILE" ]] || return 1
+
+    line=$(grep -E "^${key}=\"[^\"]*\"$" "$CONFIG_FILE" 2>/dev/null | tail -n 1) || return 1
+    [[ -n "$line" ]] || return 1
+
+    line="${line#*=}"
+    line="${line#\"}"
+    line="${line%\"}"
+    print -r -- "$line"
+}
+
+# ------------------------------------------------------------------------------
+# CASK TOKEN MATCHING
+# ------------------------------------------------------------------------------
+# User-maintained overrides, one per line:  App Name|cask-token
+# Some tokens cannot be derived from the app name at all ("lghub" is the cask
+# "logitech-g-hub"), so there has to be a way to state the answer directly.
+TOKEN_MAP_FILE="$APP_DIR/app_token_map.conf"
+
+lookup_token_override() {
+    local app_name="$1"
+    local map_name map_token
+
+    [[ -f "$TOKEN_MAP_FILE" ]] || return 1
+
+    while IFS='|' read -r map_name map_token || [[ -n "$map_name" ]]; do
+        # Trim surrounding whitespace from both fields
+        map_name="${map_name#"${map_name%%[![:space:]]*}"}"
+        map_name="${map_name%"${map_name##*[![:space:]]}"}"
+        [[ -z "$map_name" || "$map_name" == \#* ]] && continue
+
+        map_token="${map_token#"${map_token%%[![:space:]]*}"}"
+        map_token="${map_token%"${map_token##*[![:space:]]}"}"
+        [[ -z "$map_token" ]] && continue
+
+        if [[ "${map_name:l}" == "${app_name:l}" ]]; then
+            print -r -- "$map_token"
+            return 0
+        fi
+    done < "$TOKEN_MAP_FILE"
+
+    return 1
+}
+
+# Split camelCase / PascalCase names into kebab-case.
+#   AltTab          -> alt-tab
+#   BetterTouchTool -> better-touch-tool
+#   HTTPServer      -> http-server
+# Homebrew hyphenates where the app name does not, so the plain lowercase form
+# ("alttab") misses these casks entirely.
+camel_to_kebab() {
+    print -r -- "$1" \
+        | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g; s/([A-Z]+)([A-Z][a-z])/\1-\2/g' \
+        | tr '[:upper:]' '[:lower:]' \
+        | tr ' ' '-' \
+        | sed -E 's/-+/-/g; s/^-//; s/-$//'
+}
+
+# Ordered list of plausible cask tokens for an app name, most likely first.
+# A manual override wins outright - nothing is guessed after it.
+cask_token_candidates() {
+    local app_name="$1"
+    local override="" base="" camel="" current="" variant=""
+    typeset -a out
+
+    if override=$(lookup_token_override "$app_name"); then
+        print -r -- "$override"
+        return 0
+    fi
+
+    base=$(print -r -- "$app_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+    camel=$(camel_to_kebab "$app_name")
+
+    out=("$base")
+    [[ -n "$camel" && "$camel" != "$base" ]] && out+=("$camel")
+    out+=("${base}-app")
+
+    # Strip a trailing version number ("Downie 4" -> "downie")
+    variant=$(print -r -- "$base" | sed -E 's/-[0-9]+$//')
+    [[ "$variant" != "$base" ]] && out+=("$variant")
+
+    # Dot-less variants ("draw.io" -> "drawio")
+    variant="${base//./}"
+    [[ "$variant" != "$base" ]] && out+=("$variant")
+    variant="${camel//./}"
+    [[ -n "$camel" && "$variant" != "$camel" ]] && out+=("$variant")
+
+    # Progressive truncation ("synology-drive-client" -> "synology-drive")
+    for current in "$base" "$camel"; do
+        [[ -n "$current" ]] || continue
+        while [[ "$current" == *-* ]]; do
+            current="${current%-*}"
+            out+=("$current")
+        done
+    done
+
+    # (u) keeps the first occurrence of each token and drops later duplicates
+    print -rl -- "${(@u)out}"
+}
+
+# Escape a string for use inside an AppleScript double-quoted literal.
+# Backslashes must be doubled first, otherwise the quote escaping is undone.
+applescript_escape() {
+  local escaped="${1//\\/\\\\}"
+  print -r -- "${escaped//\"/\\\"}"
 }
 
 # Helper function for yes/no confirmations
@@ -83,24 +317,53 @@ ask_confirmation() {
     fi
 }
 
+# Actual process name of an app bundle.
+# The bundle name and the executable often differ (Visual Studio Code ->
+# "Electron", Ghostty -> "ghostty"), so read CFBundleExecutable and fall back
+# to the bundle name.
+app_process_name() {
+    local app_name="$1"
+    local plist="/Applications/${app_name}.app/Contents/Info.plist"
+    local exec_name=""
+
+    if [[ -f "$plist" ]]; then
+        exec_name=$(defaults read "$plist" CFBundleExecutable 2>/dev/null || true)
+    fi
+
+    print -r -- "${exec_name:-$app_name}"
+}
+
+# Is this specific app running?
+# 'pgrep -f' matches anywhere in the full command line, so short names like
+# "Notes" or "Mail" match unrelated processes - and the killall that follows
+# would then hit the wrong one. '-x' requires an exact process-name match.
+app_is_running() {
+    local proc_name
+    proc_name=$(app_process_name "$1")
+    pgrep -x "$proc_name" >/dev/null 2>&1
+}
+
 quit_app() {
     local app_name="$1"
+    local proc_name
+    proc_name=$(app_process_name "$app_name")
+
     # Basic check if running
-    if pgrep -f "$app_name" >/dev/null; then
+    if app_is_running "$app_name"; then
         echo "Closing ${fg[bold]}$app_name${reset_color}..."
         # Graceful quit attempt
-        osascript -e "quit app \"$app_name\"" 2>/dev/null || true
+        osascript -e "quit app \"$(applescript_escape "$app_name")\"" 2>/dev/null || true
         # Wait up to 5 seconds
         for i in {1..5}; do
-            if ! pgrep -f "$app_name" >/dev/null; then break; fi
+            if ! app_is_running "$app_name"; then break; fi
             sleep 1
         done
 
         # Force kill if still lingering
-        if pgrep -f "$app_name" >/dev/null; then
+        if app_is_running "$app_name"; then
             echo "Forcing close..."
             # Prevent script exit if killall fails (e.g. permission mismatch)
-            killall "$app_name" 2>/dev/null || true
+            killall -- "$proc_name" 2>/dev/null || true
         fi
     fi
 }
@@ -156,18 +419,91 @@ remove_backup() {
     return 0
 }
 
-# Ensures a clean installation of a Homebrew Cask by removing existing metadata.
-# This forces Homebrew to re-register the app bundle and update its internal database.
-install_brew_cask_clean() {
-    local token="$1"
-    # Remove existing metadata to prevent "already installed" errors
-    # and ensure the app bundle is properly linked/copied to /Applications.
-    if brew list --cask "$token" &>/dev/null; then
-        echo "Unlinking existing Homebrew metadata to force clean install..."
-        brew uninstall --cask "$token" 2>/dev/null
+restart_app_if_needed() {
+    local app="$1"
+    local was_running="$2"
+
+    [[ "$was_running" -eq 1 ]] || return 0
+    echo "Restarting ${fg[bold]}$app${reset_color}..."
+    # Give the system a moment to register the new bundle
+    sleep 1
+    open -a "$app" || echo "${fg[yellow]}Could not restart app automatically.${reset_color}"
+}
+
+# Bring an app that already sits in /Applications under Homebrew management.
+#
+# Preferred path is 'brew install --cask --adopt': Homebrew takes over the
+# existing bundle instead of deleting and re-downloading it, so there is no
+# window where the user has no app and nothing to roll back.
+#
+# Adoption requires the installed bundle to match the cask's artifacts. When it
+# does not, this falls back to the previous move-aside-and-reinstall flow,
+# restoring the backup if the install fails.
+migrate_app_to_cask() {
+    local app="$1"
+    local token="$2"
+    local app_path="/Applications/${app}.app"
+    local backup_path="/Applications/${app}.app.bak"
+    local was_running=0
+    local needs_sudo=0
+
+    app_is_running "$app" && was_running=1
+    quit_app "$app"
+
+    echo "Adopting the existing installation (no re-download)..."
+    if brew install --cask --adopt "$token"; then
+        echo "${fg[green]}Migration successful - adopted in place.${reset_color}"
+        restart_app_if_needed "$app" "$was_running"
+        return 0
     fi
+
+    echo "${fg[yellow]}Adoption not possible. Falling back to a clean re-install...${reset_color}"
+
+    if ! backup_app "$app_path" "$backup_path"; then
+        echo "${fg[red]}Aborting: could not back up the current app.${reset_color}"
+        restart_app_if_needed "$app" "$was_running"
+        return 1
+    fi
+    needs_sudo=$USED_SUDO
+
+    # Remove stale metadata so Homebrew re-registers the bundle cleanly
+    if brew list --cask "$token" &>/dev/null; then
+        echo "Unlinking existing Homebrew metadata..."
+        brew uninstall --cask "$token" 2>/dev/null || true
+    fi
+
     echo "Installing managed version via Homebrew..."
-    brew install --cask "$token"
+    if brew install --cask "$token"; then
+        echo "${fg[green]}Migration successful!${reset_color}"
+        remove_backup "$backup_path" "$needs_sudo"
+        restart_app_if_needed "$app" "$was_running"
+        return 0
+    fi
+
+    # FAILURE - ROLLBACK
+    echo ""
+    echo "${fg[red]}❌ Error: Homebrew installation failed!${reset_color}"
+    echo "Restoring original application from backup..."
+
+    if [[ -d "$app_path" ]]; then
+        if [[ "$needs_sudo" -eq 1 ]]; then
+            sudo rm -rf "$app_path"
+        else
+            rm -rf "$app_path" || sudo rm -rf "$app_path"
+        fi
+    fi
+
+    if [[ -d "$backup_path" ]]; then
+        if [[ "$needs_sudo" -eq 1 ]]; then
+            sudo mv "$backup_path" "$app_path"
+        else
+            mv "$backup_path" "$app_path" || sudo mv "$backup_path" "$app_path"
+        fi
+    fi
+
+    echo "${fg[yellow]}Original application restored. Nothing changed.${reset_color}"
+    restart_app_if_needed "$app" "$was_running"
+    return 1
 }
 
 # ==============================================================================
@@ -175,8 +511,45 @@ install_brew_cask_clean() {
 # ==============================================================================
 echo "Starting environment configuration..."
 
+# --- Preserve an existing installation's settings -----------------------------
+# Re-running setup must never silently reset the update channel, the autostart
+# state or the App Store preference. Existing values become the new defaults.
+EXISTING_TERMINAL=""
+EXISTING_MAS=""
+EXISTING_BRANCH=""
+EXISTING_AUTOSTART=""
+EXISTING_CLEANUP=""
+EXISTING_AUTO_INSTALL=""
+
+if [[ -f "$CONFIG_FILE" ]]; then
+    EXISTING_TERMINAL=$(read_existing_setting "PREFERRED_TERMINAL" || true)
+    EXISTING_MAS=$(read_existing_setting "MAS_ENABLED" || true)
+    EXISTING_BRANCH=$(read_existing_setting "UPDATE_BRANCH" || true)
+    EXISTING_AUTOSTART=$(read_existing_setting "AUTOSTART" || true)
+    EXISTING_CLEANUP=$(read_existing_setting "CLEANUP_ENABLED" || true)
+    EXISTING_AUTO_INSTALL=$(read_existing_setting "AUTO_INSTALL_APPS" || true)
+
+    echo "${fg[green]}✓${reset_color} Existing configuration found - your settings will be kept."
+    [[ -n "$EXISTING_BRANCH" ]] && echo "  Update channel : $EXISTING_BRANCH"
+    [[ -n "$EXISTING_TERMINAL" ]] && echo "  Terminal       : $EXISTING_TERMINAL"
+    echo ""
+
+    # Stay on the channel the user is actually on, otherwise this re-install
+    # would hand a beta user the stable plugin while the config still says develop.
+    if [[ "$EXISTING_BRANCH" == "develop" ]]; then
+        URL_PRIMARY_BASE="${URL_PRIMARY_BASE%/main}/develop"
+        URL_BACKUP_BASE="${URL_BACKUP_BASE%/main}/develop"
+        echo "${fg[yellow]}Beta channel active: components will be fetched from 'develop'.${reset_color}"
+        echo ""
+    fi
+fi
+
+# Default answer follows the previous choice (first install defaults to yes)
+MAS_DEFAULT="y"
+[[ "$EXISTING_MAS" == "0" ]] && MAS_DEFAULT="n"
+
 MAS_ENABLED=1
-if ! ask_confirmation "Do you want to enable App Store (mas) updates?" y; then
+if ! ask_confirmation "Do you want to enable App Store (mas) updates?" "$MAS_DEFAULT"; then
     MAS_ENABLED=0
     echo "${fg[yellow]}App Store updates will be disabled.${reset_color}"
 else
@@ -338,29 +711,9 @@ if ask_confirmation "Do you want to run the application migration? (Scanning and
         fi
 
         # 3. Fallback Check: Smart Heuristic Matching
-        # Generates potential Cask tokens from the app filename to find matches in Homebrew.
-        token_base=$(echo "$app_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+        # Candidate tokens (manual override, camelCase split, truncations, ...)
         match_found=0
-        candidates=()
-
-        # Add exact match and common Homebrew suffix variant
-        candidates+=("$token_base")
-        candidates+=("${token_base}-app")
-
-        # Strip trailing version numbers (e.g., "Downie 4" -> "downie")
-        token_no_version=$(echo "$token_base" | sed -E 's/-[0-9]+$//')
-        if [[ "$token_no_version" != "$token_base" ]]; then candidates+=("$token_no_version"); fi
-
-        # Remove dots to match dot-less Cask names (e.g., "draw.io" -> "drawio")
-        token_no_dots=$(echo "$token_base" | tr -d '.')
-        if [[ "$token_no_dots" != "$token_base" ]]; then candidates+=("$token_no_dots"); fi
-
-        # Progressive truncation: strip words from the end (e.g., "synology-drive-client" -> "synology-drive")
-        current_token="$token_base"
-        while [[ "$current_token" == *-* ]]; do
-            current_token="${current_token%-*}"
-            candidates+=("$current_token")
-        done
+        candidates=("${(@f)$(cask_token_candidates "$app_name")}")
 
         # Validate candidates against the list of locally installed casks
         for candidate in "${candidates[@]}"; do
@@ -506,7 +859,9 @@ if ask_confirmation "Do you want to run the application migration? (Scanning and
         fi
 
         # Check Homebrew
-        token=$(echo "$app" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+        typeset -a token_candidates
+        token_candidates=("${(@f)$(cask_token_candidates "$app")}")
+        token="${token_candidates[1]}"
         brew_info_output=$(brew info --cask "$token" 2>/dev/null || true)
 
         if [[ -n "$brew_info_output" ]]; then
@@ -520,24 +875,8 @@ if ask_confirmation "Do you want to run the application migration? (Scanning and
             fi
             brew_available=1
         else
-            # Generate token variations to try
-            typeset -a token_candidates
-            token_candidates=("$token")
-
-            # Try progressively removing words from the end (e.g. "cleanshot-x" -> "cleanshot")
-            current_token="$token"
-            while [[ "$current_token" == *-* ]]; do
-                current_token="${current_token%-*}"
-                token_candidates+=("$current_token")
-            done
-
-            # Try variations without dots (e.g. "draw-io" -> "drawio")
-            token_no_dots=$(echo "$token" | tr -d '.')
-            if [[ "$token_no_dots" != "$token" ]]; then
-                token_candidates+=("$token_no_dots")
-            fi
-
-            # Try to find a match by testing each candidate with brew info
+            # token_candidates already holds every variation worth trying
+            # (manual override, camelCase split, dot-less, truncations)
             match_found=0
             matched_token=""
             for candidate in "${token_candidates[@]}"; do
@@ -622,7 +961,7 @@ if ask_confirmation "Do you want to run the application migration? (Scanning and
                 if ask_confirmation "Install from App Store and overwrite current version?" y; then
                     # Check if running before closing
                     was_running=0
-                    if pgrep -f "$app" >/dev/null; then was_running=1; fi
+                    if app_is_running "$app"; then was_running=1; fi
                     quit_app "$app"
 
                     app_path="/Applications/${app}.app"
@@ -658,90 +997,25 @@ if ask_confirmation "Do you want to run the application migration? (Scanning and
              if [[ "$brew_available" -eq 1 ]]; then
                  # Clarify action to the user
                  if ask_confirmation "Install '$token' via Brew Cask (Migrate to managed)?" y; then
-                    # Graceful application termination
-                    was_running=0
-                    if pgrep -f "$app" >/dev/null; then was_running=1; fi
-                    quit_app "$app"
-
-                    app_path="/Applications/${app}.app"
-                    backup_path="/Applications/${app}.app.bak"
-                    backup_app "$app_path" "$backup_path"
-                    needs_sudo=$USED_SUDO
-
-                    if install_brew_cask_clean "$token"; then
-                         echo "${fg[green]}Migration successful!${reset_color}"
-                         remove_backup "$backup_path" "$needs_sudo"
-                         # Restart app if it was previously running
-                         if [[ "$was_running" -eq 1 ]]; then
-                            echo "Restarting ${fg[bold]}$app${reset_color}..."
-                            # Wait till system registers new bundle
-                            sleep 1
-                            open -a "$app" || echo "${fg[yellow]}Could not restart app automatically.${reset_color}"
-                        fi
-                    else
-                        # FAILURE - ROLLBACK
-                        echo ""
-                        echo "${fg[red]}❌ Error: Homebrew installation failed!${reset_color}"
-                        echo "Restoring original application from backup..."
-                        if [[ -d "$app_path" ]]; then
-                            if [[ "$needs_sudo" -eq 1 ]]; then
-                                sudo rm -rf "$app_path"
-                            else
-                                rm -rf "$app_path" || sudo rm -rf "$app_path"
-                            fi
-                        fi
-                        if [[ "$needs_sudo" -eq 1 ]]; then
-                            sudo mv "$backup_path" "$app_path"
-                        else
-                            mv "$backup_path" "$app_path" || sudo mv "$backup_path" "$app_path"
-                        fi
-                        echo "${fg[yellow]}Original application restored. Nothing changed.${reset_color}"
-                    fi
+                    # migrate_app_to_cask owns quit, adopt/backup, install and rollback
+                    migrate_app_to_cask "$app" "$token" || true
                  fi
              else
                  # Manual fallback logic
                  echo "${fg[yellow]}No automatic match found.${reset_color}"
+                 echo "${fg[cyan]}Tip:${reset_color} add a permanent mapping to $TOKEN_MAP_FILE"
+                 echo "     in the form:  $app|correct-cask-token"
                  echo -n "Enter Cask name manually (or enter to skip): "
                  read -r user_token
                  if [[ -n "$user_token" ]]; then
                      if brew info --cask "$user_token" &> /dev/null; then
                         if ask_confirmation "Try installing '$user_token'?"; then
-                            was_running=0
-                            if pgrep -f "$app" >/dev/null; then was_running=1; fi
-                            quit_app "$app"
-                            app_path="/Applications/${app}.app"
-                            backup_path="/Applications/${app}.app.bak"
-                            backup_app "$app_path" "$backup_path"
-                            needs_sudo=$USED_SUDO
+                            migrate_app_to_cask "$app" "$user_token" || true
 
-                            if install_brew_cask_clean "$user_token"; then
-                                echo "${fg[green]}Migration successful!${reset_color}"
-                                remove_backup "$backup_path" "$needs_sudo"
-                                # Restart app if it was previously running
-                                if [[ "$was_running" -eq 1 ]]; then
-                                    echo "Restarting ${fg[bold]}$app${reset_color}..."
-                                    # Wait till system registers new bundle
-                                    sleep 1
-                                    open -a "$app" || echo "${fg[yellow]}Could not restart app automatically.${reset_color}"
-                                fi
-                            else
-                                # FAILURE - ROLLBACK
-                                echo ""
-                                echo "${fg[red]}❌ Error: Homebrew installation failed!${reset_color}"
-                                echo "Restoring original application..."
-                                if [[ -d "$app_path" ]]; then
-                                    if [[ "$needs_sudo" -eq 1 ]]; then
-                                        sudo rm -rf "$app_path"
-                                    else
-                                        rm -rf "$app_path" || sudo rm -rf "$app_path"
-                                    fi
-                                fi
-                                if [[ "$needs_sudo" -eq 1 ]]; then
-                                    sudo mv "$backup_path" "$app_path"
-                                else
-                                    mv "$backup_path" "$app_path" || sudo mv "$backup_path" "$app_path"
-                                fi
-                                echo "${fg[yellow]}Restored.${reset_color}"
+                            # Remember the answer so the next run matches it directly
+                            if ! lookup_token_override "$app" >/dev/null; then
+                                print -r -- "$app|$user_token" >> "$TOKEN_MAP_FILE"
+                                echo "${fg[green]}Saved mapping to $TOKEN_MAP_FILE${reset_color}"
                             fi
                         fi
                      else
@@ -787,12 +1061,28 @@ fi
 # Create plugin directory
 mkdir -p "$PLUGIN_DIR"
 
-# Define directory and configuration file path for the updater
-APP_DIR="$HOME/Library/Application Support/MacSoftwareUpdater"
-# Left in code for future use. Removed auto plugin updates to avoid block by github
-#CONFIG_FILE="$APP_DIR/settings.conf"
+# APP_DIR and CONFIG_FILE are defined at the top of this script, because the
+# existing configuration has to be read before the first question is asked.
 mkdir -p "$APP_DIR"
 chmod 700 "$APP_DIR" 2>/dev/null || true
+
+# Seed the manual token map with instructions, but never overwrite the user's
+if [[ ! -f "$TOKEN_MAP_FILE" ]]; then
+    cat > "$TOKEN_MAP_FILE" << 'EOF'
+# Manual application -> Homebrew cask token mapping.
+#
+# One mapping per line:   App Name|cask-token
+# "App Name" is the bundle name without ".app", exactly as shown in
+# /Applications. Matching is case insensitive. Lines starting with # are ignored.
+#
+# Use this when the automatic guess is wrong or impossible to derive, e.g.:
+#   lghub|logitech-g-hub
+#   Sublime Text|sublime-text
+#
+# A mapping always wins over the automatic guesses.
+EOF
+    chmod 600 "$TOKEN_MAP_FILE" 2>/dev/null || true
+fi
 
 echo ""
 echo "${fg[yellow]}=== PLUGIN SETTINGS ===${reset_color}"
@@ -800,9 +1090,6 @@ echo "${fg[yellow]}=== PLUGIN SETTINGS ===${reset_color}"
 # Terminal App Configuration
 echo ""
 echo "Detecting available terminal applications..."
-
-# Define config file
-CONFIG_FILE="$APP_DIR/settings.conf"
 
 # Detect installed terminal apps
 typeset -a detected_terminals
@@ -828,6 +1115,18 @@ echo "  ${fg[green]}✓${reset_color} Terminal (Apple) available"
 # Present terminal selection if user has options
 SELECTED_TERMINAL="Terminal"
 
+# Default index points at the previously configured terminal when it is still installed
+DEFAULT_TERMINAL_INDEX=1
+if [[ -n "$EXISTING_TERMINAL" ]]; then
+    for i in {1..${#detected_terminals[@]}}; do
+        if [[ "${detected_terminals[$i]}" == "$EXISTING_TERMINAL" ]]; then
+            DEFAULT_TERMINAL_INDEX=$i
+            break
+        fi
+    done
+fi
+SELECTED_TERMINAL="${detected_terminals[$DEFAULT_TERMINAL_INDEX]}"
+
 if [[ ${#detected_terminals[@]} -gt 1 ]]; then
     echo ""
     echo "Select your preferred terminal app for running updates:"
@@ -835,20 +1134,35 @@ if [[ ${#detected_terminals[@]} -gt 1 ]]; then
         echo "  [$i] ${detected_terminals[$i]}"
     done
 
-    echo -n "Enter your choice [1-${#detected_terminals[@]}] (default: 1): "
+    echo -n "Enter your choice [1-${#detected_terminals[@]}] (default: $DEFAULT_TERMINAL_INDEX - $SELECTED_TERMINAL): "
     read -r terminal_choice
 
     # Validate input
     if [[ -n "$terminal_choice" ]] && [[ "$terminal_choice" =~ ^[0-9]+$ ]] && \
        [[ "$terminal_choice" -ge 1 ]] && [[ "$terminal_choice" -le ${#detected_terminals[@]} ]]; then
         SELECTED_TERMINAL="${detected_terminals[$terminal_choice]}"
-    else
-        SELECTED_TERMINAL="${detected_terminals[1]}"
     fi
 fi
 
 echo ""
 echo "Selected terminal: ${fg[cyan]}$SELECTED_TERMINAL${reset_color}"
+
+# Carry over settings this wizard does not ask about, so a re-run never drops a
+# user off the beta channel or silently re-enables autostart.
+WRITE_BRANCH="main"
+case "$EXISTING_BRANCH" in
+    "main"|"develop") WRITE_BRANCH="$EXISTING_BRANCH" ;;
+esac
+
+WRITE_AUTOSTART="1"
+[[ "$EXISTING_AUTOSTART" == "0" ]] && WRITE_AUTOSTART="0"
+
+WRITE_CLEANUP="1"
+[[ "$EXISTING_CLEANUP" == "0" ]] && WRITE_CLEANUP="0"
+
+# Replacing app bundles automatically stays off unless the user turned it on
+WRITE_AUTO_INSTALL="0"
+[[ "$EXISTING_AUTO_INSTALL" == "1" ]] && WRITE_AUTO_INSTALL="1"
 
 # Write configuration file
 cat > "$CONFIG_FILE" << EOF
@@ -863,10 +1177,18 @@ PREFERRED_TERMINAL="$SELECTED_TERMINAL"
 MAS_ENABLED="$MAS_ENABLED"
 
 # Update Channel (main=Stable, develop=Beta)
-UPDATE_BRANCH="main"
+UPDATE_BRANCH="$WRITE_BRANCH"
 
 # SwiftBar Autostart State (Syncs with System Events)
-AUTOSTART="1"
+AUTOSTART="$WRITE_AUTOSTART"
+
+# Run 'brew cleanup --prune=all' after each update (1=Enabled, 0=Disabled)
+CLEANUP_ENABLED="$WRITE_CLEANUP"
+
+# Replace self-updating apps (Sparkle/GitHub) directly from the menu
+# (1=Enabled, 0=Disabled). Off by default: every install still verifies the
+# developer Team ID and Gatekeeper, but it does replace a running application.
+AUTO_INSTALL_APPS="$WRITE_AUTO_INSTALL"
 EOF
 
 chmod 600 "$CONFIG_FILE" 2>/dev/null || true
@@ -875,22 +1197,43 @@ echo "Configuration saved to: ${fg[cyan]}$CONFIG_FILE${reset_color}"
 
 # Install/Update the Main Plugin (Only this goes to SwiftBar folder)
 echo "Fetching latest monitor plugin..."
-TARGET_PLUGIN="$PLUGIN_DIR/update_system.1h.sh"
 
-if download_with_failover "update_system.1h.sh" "$TARGET_PLUGIN"; then
-    echo "Latest version downloaded successfully."
+# A previous install may use a different refresh interval (update_system.6h.sh).
+# Reuse that exact file name, otherwise SwiftBar would run two copies of the
+# plugin side by side - two menu bar icons, two parallel update checks.
+# (Nom) = no error when nothing matches, newest modification time first, so the
+# copy SwiftBar has actually been running is the one that survives.
+typeset -a existing_plugins
+existing_plugins=("$PLUGIN_DIR"/update_system.*.sh(Nom))
+
+TARGET_PLUGIN="$PLUGIN_DIR/update_system.1h.sh"
+if [[ ${#existing_plugins[@]} -gt 0 ]]; then
+    TARGET_PLUGIN="${existing_plugins[1]}"
+    echo "Existing plugin found: ${fg[cyan]}${TARGET_PLUGIN:t}${reset_color} (refresh interval kept)"
+fi
+
+# Remove every other copy so only one plugin instance survives
+for stale_plugin in "${existing_plugins[@]}"; do
+    if [[ "$stale_plugin" != "$TARGET_PLUGIN" ]]; then
+        echo "${fg[yellow]}Removing duplicate plugin: ${stale_plugin:t}${reset_color}"
+        rm -f "$stale_plugin"
+    fi
+done
+
+if download_verified "update_system.1h.sh" "$TARGET_PLUGIN" "bitbar.title"; then
+    echo "Latest version downloaded and verified."
 elif [[ -f "./update_system.1h.sh" ]]; then
-    echo "Download failed, using local copy..."
+    echo "${fg[yellow]}Remote copy unavailable or unverified - using the local copy from this installer.${reset_color}"
     cp "./update_system.1h.sh" "$TARGET_PLUGIN"
 else
-    echo "${fg[red]}❌ Critical Error: No source found for plugin.${reset_color}"
+    echo "${fg[red]}❌ Critical Error: No verified source found for plugin.${reset_color}"
     exit 1
 fi
 chmod +x "$TARGET_PLUGIN"
 
 # Install Uninstaller to App Support (Not Plugin Dir)
 echo "Updating Uninstaller..."
-if ! download_with_failover "uninstall.sh" "$APP_DIR/uninstall.sh"; then
+if ! download_verified "uninstall.sh" "$APP_DIR/uninstall.sh"; then
     [[ -f "./uninstall.sh" ]] && cp "./uninstall.sh" "$APP_DIR/uninstall.sh"
 fi
 chmod +x "$APP_DIR/uninstall.sh"
