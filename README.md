@@ -149,7 +149,7 @@ Manage the plugin behavior directly from the menu.
 | :--- | :--- |
 | **Update Frequency** | Toggle check intervals: `1h`, `2h`, `6h`, `12h`, or `1d`. |
 | **Terminal App** | Choose preferred terminal: `Terminal`, `iTerm2`, `Warp`, `Alacritty`, or `Ghostty`. |
-| **Self-Update** | Check for updates. The plugin will scan GitHub and Codeberg for its own new versions. |
+| **Self-Update** | Check for updates. Verified against GitHub, plus your configured Codeberg mirror if you set one (see `CODEBERG_USERNAME` below) - GitHub only otherwise, and the menu shows a warning when no mirror is set. |
 | **Update Channel** | Switch between `Stable (Main)` and `Beta (Develop)` releases instantly. |
 | **App Store** | Toggle `mas` integration on/off directly from the menu. |
 
@@ -165,10 +165,10 @@ curl -L https://github.com/dogukannparlak/mac_software_manager/releases/download
 
 **Option B: Emergency Mirror (Codeberg)**
 ```bash
-zsh -c "$(curl -fsSL https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/main/setup_mac.sh)"
+zsh -c "$(curl -fsSL https://codeberg.org/<your-codeberg-username>/mac_software_manager/raw/branch/main/setup_mac.sh)"
 ```
 
-> There is no Codeberg mirror yet — `YOUR_CODEBERG_USERNAME` above (and everywhere else in this repo) is a placeholder. Fill it in if you set one up, or drop Option B entirely.
+> Option B only works once you've pushed this repo to your own Codeberg account and substituted `<your-codeberg-username>` above. `setup_mac.sh` will then ask for that same username and save it as `CODEBERG_USERNAME` in `settings.conf` - every download and self-update check from that point on verifies against **both** GitHub and Codeberg, and refuses to install a plugin update if the two disagree. Leave the prompt blank to skip the mirror entirely; downloads still work, verified against GitHub only, and the menu shows a "Config Warnings" entry saying so rather than silently downgrading the guarantee.
 
 ### 2. Follow the Wizard
 The script will prompt you on how to handle detected applications. You can choose to migrate them or skip the process entirely.

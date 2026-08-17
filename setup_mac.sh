@@ -35,11 +35,11 @@ echo ""
 export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_ENV_HINTS=1
 
-# Failover configuration
-# TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below
-# once you have one, or remove the backup path entirely.
+# Failover configuration. URL_BACKUP_BASE is filled in once CODEBERG_USERNAME
+# is known (existing config, or the prompt further down) - see the "Failover
+# Mirror" section. Until then it stays empty, meaning "GitHub only".
 URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_manager/main"
-URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/main"
+URL_BACKUP_BASE=""
 
 # Paths of a possible previous installation
 APP_DIR="$HOME/Library/Application Support/MacSoftwareUpdater"
@@ -296,6 +296,41 @@ applescript_escape() {
   print -r -- "${escaped//\"/\\\"}"
 }
 
+# Download the official Homebrew (un)installer over HTTPS and run it, refusing
+# to execute anything empty or truncated. Homebrew's installer is a moving
+# target with no published checksum to pin against, so this applies the same
+# baseline every other download in this script gets: HTTPS+TLS1.2 enforced,
+# content actually present, and it has to parse as bash before it runs.
+run_homebrew_script() {
+    local url="$1"
+    local label="$2"
+    local tmp_file
+    tmp_file="$(mktemp "${TMPDIR:-/tmp}/homebrew_${label}.XXXXXX")" || return 1
+
+    if ! curl -fLsS --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 30 "$url" -o "$tmp_file"; then
+        echo "${fg[red]}❌ Error: Could not download the Homebrew $label script.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if [[ ! -s "$tmp_file" ]]; then
+        echo "${fg[red]}❌ Error: Homebrew $label script downloaded empty. Aborting.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    if ! bash -n "$tmp_file" 2>/dev/null; then
+        echo "${fg[red]}❌ Error: Homebrew $label script failed a basic syntax check (truncated or tampered). Aborting.${reset_color}"
+        rm -f "$tmp_file"
+        return 1
+    fi
+
+    /bin/bash "$tmp_file"
+    local rc=$?
+    rm -f "$tmp_file"
+    return $rc
+}
+
 # Helper function for yes/no confirmations
 ask_confirmation() {
     local prompt="$1"
@@ -520,6 +555,7 @@ EXISTING_BRANCH=""
 EXISTING_AUTOSTART=""
 EXISTING_CLEANUP=""
 EXISTING_AUTO_INSTALL=""
+EXISTING_CODEBERG_USERNAME=""
 
 if [[ -f "$CONFIG_FILE" ]]; then
     EXISTING_TERMINAL=$(read_existing_setting "PREFERRED_TERMINAL" || true)
@@ -528,6 +564,7 @@ if [[ -f "$CONFIG_FILE" ]]; then
     EXISTING_AUTOSTART=$(read_existing_setting "AUTOSTART" || true)
     EXISTING_CLEANUP=$(read_existing_setting "CLEANUP_ENABLED" || true)
     EXISTING_AUTO_INSTALL=$(read_existing_setting "AUTO_INSTALL_APPS" || true)
+    EXISTING_CODEBERG_USERNAME=$(read_existing_setting "CODEBERG_USERNAME" || true)
 
     echo "${fg[green]}✓${reset_color} Existing configuration found - your settings will be kept."
     [[ -n "$EXISTING_BRANCH" ]] && echo "  Update channel : $EXISTING_BRANCH"
@@ -538,11 +575,39 @@ if [[ -f "$CONFIG_FILE" ]]; then
     # would hand a beta user the stable plugin while the config still says develop.
     if [[ "$EXISTING_BRANCH" == "develop" ]]; then
         URL_PRIMARY_BASE="${URL_PRIMARY_BASE%/main}/develop"
-        URL_BACKUP_BASE="${URL_BACKUP_BASE%/main}/develop"
         echo "${fg[yellow]}Beta channel active: components will be fetched from 'develop'.${reset_color}"
         echo ""
     fi
 fi
+
+# --- Failover Mirror (Codeberg) -------------------------------------------
+# Optional: without a username here, every download in this script and in the
+# installed plugin falls back to GitHub only instead of the dual-source check
+# the README describes. Not a hard requirement, but left blank on purpose
+# rather than guessed, and the toolkit warns about it in the menu when unset.
+CODEBERG_USERNAME="$EXISTING_CODEBERG_USERNAME"
+echo "Failover mirror: downloads normally come from GitHub, with an optional"
+echo "Codeberg mirror as a second, independent source for integrity checks."
+echo -n "Codeberg username for the mirror (leave blank to skip) [${CODEBERG_USERNAME:-none}]: "
+read -r codeberg_input
+if [[ -n "$codeberg_input" ]]; then
+    if [[ "$codeberg_input" =~ ^[A-Za-z0-9](-?[A-Za-z0-9])*$ ]]; then
+        CODEBERG_USERNAME="$codeberg_input"
+    else
+        echo "${fg[yellow]}'$codeberg_input' doesn't look like a valid Codeberg username - ignoring it.${reset_color}"
+    fi
+fi
+
+if [[ -n "$CODEBERG_USERNAME" ]]; then
+    CODEBERG_BRANCH="main"
+    [[ "$EXISTING_BRANCH" == "develop" ]] && CODEBERG_BRANCH="develop"
+    URL_BACKUP_BASE="https://codeberg.org/$CODEBERG_USERNAME/mac_software_manager/raw/branch/$CODEBERG_BRANCH"
+    echo "${fg[green]}✓${reset_color} Codeberg mirror configured: $CODEBERG_USERNAME"
+else
+    URL_BACKUP_BASE=""
+    echo "${fg[yellow]}No Codeberg mirror configured - downloads will be verified against GitHub only.${reset_color}"
+fi
+echo ""
 
 # Default answer follows the previous choice (first install defaults to yes)
 MAS_DEFAULT="y"
@@ -564,7 +629,7 @@ if ! command -v brew &> /dev/null; then
     echo "${fg[yellow]}Homebrew not found in PATH. Starting installation...${reset_color}"
     echo "Homebrew is required to manage your packages and updates."
     echo "Note: If you believe Homebrew is already installed, please cancel (Ctrl+C) and add it to your PATH."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    run_homebrew_script "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" "install" || exit 1
     if [[ -f /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)";
     elif [[ -f /usr/local/bin/brew ]]; then eval "$(/usr/local/bin/brew shellenv)"; fi
 else
@@ -1091,26 +1156,29 @@ echo "${fg[yellow]}=== PLUGIN SETTINGS ===${reset_color}"
 echo ""
 echo "Detecting available terminal applications..."
 
+# Supported terminals: display name -> /Applications bundle name (only where
+# they differ). Single source of truth for THIS script; update_system.1h.sh
+# runs as a separate, independently downloadable script and keeps its own
+# copy (TERMINAL_APP_ORDER / TERMINAL_APP_BUNDLE) in sync by hand - add a new
+# terminal to both when one shows up.
+typeset -a TERMINAL_APP_ORDER
+TERMINAL_APP_ORDER=(Terminal iTerm2 Warp Alacritty Ghostty)
+typeset -A TERMINAL_APP_BUNDLE
+TERMINAL_APP_BUNDLE=(iTerm2 iTerm)
+
 # Detect installed terminal apps
 typeset -a detected_terminals
 detected_terminals=("Terminal")  # Apple Terminal is always available
-
-if [[ -d "/Applications/iTerm.app" ]]; then
-    detected_terminals+=("iTerm2")
-    echo "  ${fg[green]}✓${reset_color} iTerm2 detected"
-fi
-
-if [[ -d "/Applications/Warp.app" ]]; then
-    detected_terminals+=("Warp")
-    echo "  ${fg[green]}✓${reset_color} Warp detected"
-fi
-
-if [[ -d "/Applications/Alacritty.app" ]]; then
-    detected_terminals+=("Alacritty")
-    echo "  ${fg[green]}✓${reset_color} Alacritty detected"
-fi
-
 echo "  ${fg[green]}✓${reset_color} Terminal (Apple) available"
+
+for candidate_terminal in "${TERMINAL_APP_ORDER[@]}"; do
+    [[ "$candidate_terminal" == "Terminal" ]] && continue
+    candidate_bundle="${TERMINAL_APP_BUNDLE[$candidate_terminal]:-$candidate_terminal}"
+    if [[ -d "/Applications/${candidate_bundle}.app" ]]; then
+        detected_terminals+=("$candidate_terminal")
+        echo "  ${fg[green]}✓${reset_color} $candidate_terminal detected"
+    fi
+done
 
 # Present terminal selection if user has options
 SELECTED_TERMINAL="Terminal"
@@ -1189,11 +1257,46 @@ CLEANUP_ENABLED="$WRITE_CLEANUP"
 # (1=Enabled, 0=Disabled). Off by default: every install still verifies the
 # developer Team ID and Gatekeeper, but it does replace a running application.
 AUTO_INSTALL_APPS="$WRITE_AUTO_INSTALL"
+
+# Codeberg username for the backup mirror (blank = GitHub only, no dual-source
+# verification). Set from the "Failover Mirror" prompt earlier in this script.
+CODEBERG_USERNAME="$CODEBERG_USERNAME"
 EOF
 
 chmod 600 "$CONFIG_FILE" 2>/dev/null || true
 echo "Configuration saved to: ${fg[cyan]}$CONFIG_FILE${reset_color}"
 
+
+# Install/Update the Engine Library (lib/*.sh)
+# update_system.1h.sh is now a bootstrap + dispatcher that sources its actual
+# functions from $APP_DIR/lib at runtime - it cannot run at all without these,
+# so they have to land before the plugin file itself. Kept in $APP_DIR
+# (not the SwiftBar plugin folder) for the same reason setup_mac.sh/
+# uninstall.sh already are - see "Remove utility scripts from SwiftBar Plugin
+# Directory" further down for the bug that taught this project that lesson.
+# This list MUST match LIB_NAMES in update_system.1h.sh exactly.
+echo "Fetching engine library..."
+typeset -a LIB_NAMES
+LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install run_modes menu)
+
+mkdir -p "$APP_DIR/lib"
+LIB_INSTALL_FAILED=0
+for lib_name in "${LIB_NAMES[@]}"; do
+    lib_file="lib/${lib_name}.sh"
+    if download_verified "$lib_file" "$APP_DIR/$lib_file"; then
+        :
+    elif [[ -f "./$lib_file" ]]; then
+        echo "${fg[yellow]}$lib_file unavailable or unverified remotely - using the local copy from this installer.${reset_color}"
+        cp "./$lib_file" "$APP_DIR/$lib_file"
+    else
+        echo "${fg[red]}❌ Critical Error: No verified source found for $lib_file.${reset_color}"
+        LIB_INSTALL_FAILED=1
+    fi
+done
+if [[ "$LIB_INSTALL_FAILED" == "1" ]]; then
+    echo "${fg[red]}❌ One or more engine library files could not be installed. The plugin will not run correctly until this is fixed - re-run this installer.${reset_color}"
+    exit 1
+fi
 
 # Install/Update the Main Plugin (Only this goes to SwiftBar folder)
 echo "Fetching latest monitor plugin..."
