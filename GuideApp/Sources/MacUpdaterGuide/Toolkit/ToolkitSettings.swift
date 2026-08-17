@@ -1,0 +1,217 @@
+import Foundation
+import Observation
+
+enum TerminalApp: String, CaseIterable, Identifiable, Sendable {
+    case terminal = "Terminal"
+    case iTerm2 = "iTerm2"
+    case warp = "Warp"
+    case alacritty = "Alacritty"
+    case ghostty = "Ghostty"
+
+    var id: String { rawValue }
+    var displayName: String { rawValue }
+
+    /// Bundle folder to look for, so the picker can grey out what is missing.
+    var applicationName: String {
+        switch self {
+        case .terminal: return "Terminal"
+        case .iTerm2: return "iTerm"
+        case .warp: return "Warp"
+        case .alacritty: return "Alacritty"
+        case .ghostty: return "Ghostty"
+        }
+    }
+
+    var isInstalled: Bool {
+        if self == .terminal { return true }
+        return FileManager.default.fileExists(
+            atPath: "/Applications/\(applicationName).app"
+        )
+    }
+}
+
+enum UpdateChannel: String, CaseIterable, Identifiable, Sendable {
+    case stable = "main"
+    case beta = "develop"
+
+    var id: String { rawValue }
+
+    var label: Localized {
+        switch self {
+        case .stable: return Localized("Stable", "Kararlı")
+        case .beta: return Localized("Beta", "Beta")
+        }
+    }
+}
+
+/// Reads and writes the toolkit's `settings.conf`.
+///
+/// The shell side parses that file with a strict `KEY="value"` pattern and
+/// warns about anything it does not recognise, so this writes exactly the keys
+/// it knows about and nothing else. Settings that only concern this app (the
+/// refresh interval, for instance) live in UserDefaults instead.
+@Observable
+final class ToolkitSettings {
+
+    var preferredTerminal: TerminalApp = .terminal
+    var masEnabled = true
+    var channel: UpdateChannel = .stable
+    var autostart = true
+    var cleanupEnabled = true
+    var autoInstallApps = false
+
+    /// Set when the file could not be written, so the UI can say so.
+    private(set) var lastError: String?
+
+    init() {
+        load()
+    }
+
+    // MARK: - Loading
+
+    func load() {
+        lastError = nil
+
+        guard let contents = try? String(contentsOf: ToolkitPaths.settingsFile, encoding: .utf8) else {
+            return
+        }
+
+        for rawLine in contents.split(separator: "\n", omittingEmptySubsequences: true) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+
+            guard let separator = line.firstIndex(of: "=") else { continue }
+            let key = String(line[line.startIndex..<separator])
+            var value = String(line[line.index(after: separator)...])
+            value = value.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+
+            apply(key: key, value: value)
+        }
+    }
+
+    private func apply(key: String, value: String) {
+        switch key {
+        case "PREFERRED_TERMINAL":
+            if let terminal = TerminalApp(rawValue: value) { preferredTerminal = terminal }
+        case "MAS_ENABLED":
+            masEnabled = (value == "1")
+        case "UPDATE_BRANCH":
+            if let parsed = UpdateChannel(rawValue: value) { channel = parsed }
+        case "AUTOSTART":
+            autostart = (value == "1")
+        case "CLEANUP_ENABLED":
+            cleanupEnabled = (value == "1")
+        case "AUTO_INSTALL_APPS":
+            autoInstallApps = (value == "1")
+        default:
+            break
+        }
+    }
+
+    // MARK: - Saving
+
+    /// Rewrites the whole file. Comments are regenerated rather than preserved,
+    /// which keeps the result identical to what the setup script produces.
+    func save() {
+        let contents = """
+        # Mac Software Updater Configuration
+        # Written by MacUpdaterGuide on \(Self.timestamp())
+
+        # Terminal app to use for running updates
+        # Valid values: Terminal, iTerm2, Warp, Alacritty, Ghostty
+        PREFERRED_TERMINAL="\(preferredTerminal.rawValue)"
+
+        # App Store Updates (1=Enabled, 0=Disabled)
+        MAS_ENABLED="\(masEnabled ? "1" : "0")"
+
+        # Update Channel (main=Stable, develop=Beta)
+        UPDATE_BRANCH="\(channel.rawValue)"
+
+        # SwiftBar Autostart State (Syncs with System Events)
+        AUTOSTART="\(autostart ? "1" : "0")"
+
+        # Run 'brew cleanup --prune=all' after each update (1=Enabled, 0=Disabled)
+        CLEANUP_ENABLED="\(cleanupEnabled ? "1" : "0")"
+
+        # Replace self-updating apps (Sparkle/GitHub) directly (1=Enabled, 0=Disabled)
+        AUTO_INSTALL_APPS="\(autoInstallApps ? "1" : "0")"
+
+        """
+
+        do {
+            try FileManager.default.createDirectory(
+                at: ToolkitPaths.supportDirectory,
+                withIntermediateDirectories: true
+            )
+            try contents.write(to: ToolkitPaths.settingsFile, atomically: true, encoding: .utf8)
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: ToolkitPaths.settingsFile.path(percentEncoded: false)
+            )
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private static func timestamp() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.string(from: Date())
+    }
+}
+
+/// Settings that belong to this app rather than to the shell toolkit.
+@Observable
+final class AppPreferences {
+    private static let intervalKey = "com.macupdater.guide.refreshMinutes"
+    private static let hideDockIconKey = "com.macupdater.guide.hideDockIcon"
+    private static let runInTerminalKey = "com.macupdater.guide.runUpdatesInTerminal"
+
+    /// How often the menu bar data is rebuilt, in minutes.
+    var refreshMinutes: Int {
+        didSet { UserDefaults.standard.set(refreshMinutes, forKey: Self.intervalKey) }
+    }
+
+    /// Off by default: updates run in the background and are reported through
+    /// the in-app progress bar instead of a terminal window popping up. Turn
+    /// this on to get the old behaviour back - a visible, watchable,
+    /// stoppable terminal session - for whenever that is what you want.
+    var runUpdatesInTerminal: Bool {
+        didSet { UserDefaults.standard.set(runUpdatesInTerminal, forKey: Self.runInTerminalKey) }
+    }
+
+    /// Live in the menu bar only: no Dock icon, no app menu.
+    /// The menu bar panel keeps its own Quit and Settings entries, so nothing
+    /// becomes unreachable when this is on.
+    var hideDockIcon: Bool {
+        didSet {
+            UserDefaults.standard.set(hideDockIcon, forKey: Self.hideDockIconKey)
+            // Changing the activation policy has to happen on the main actor,
+            // and it takes effect immediately - no relaunch needed.
+            let hidden = hideDockIcon
+            Task { @MainActor in DockVisibility.apply(hidden: hidden) }
+        }
+    }
+
+    static let intervalChoices = [30, 60, 120, 360, 720, 1440]
+
+    init() {
+        let stored = UserDefaults.standard.integer(forKey: Self.intervalKey)
+        refreshMinutes = Self.intervalChoices.contains(stored) ? stored : 60
+
+        hideDockIcon = UserDefaults.standard.bool(forKey: Self.hideDockIconKey)
+        runUpdatesInTerminal = UserDefaults.standard.bool(forKey: Self.runInTerminalKey)
+    }
+
+    static func intervalLabel(_ minutes: Int) -> Localized {
+        switch minutes {
+        case 30: return Localized("Every 30 minutes", "30 dakikada bir")
+        case 60: return Localized("Every hour", "Saatte bir")
+        case 120: return Localized("Every 2 hours", "2 saatte bir")
+        case 360: return Localized("Every 6 hours", "6 saatte bir")
+        case 720: return Localized("Every 12 hours", "12 saatte bir")
+        default: return Localized("Once a day", "Günde bir")
+        }
+    }
+}
