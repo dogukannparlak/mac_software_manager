@@ -25,3 +25,58 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+
+# ==============================================================================
+# Swift / SwiftPM  (GuideApp)
+# ==============================================================================
+
+# Build products. Roughly 100 MB of object files, rebuilt by `swift build`.
+.build/
+.swiftpm/
+
+# Assembled application bundles are build output, not source
+*.app/
+
+
+# ==============================================================================
+# Xcode
+# ==============================================================================
+
+DerivedData/
+build/
+
+# Per-user window layout, breakpoints and scheme state
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.xcscmblueprint
+*.xccheckout
+
+# Xcode 8+ / SwiftPM integration leftovers
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Product > Archive output (the project's scheme has an ArchiveAction)
+*.xcarchive/
+
+
+# ==============================================================================
+# Editors
+# ==============================================================================
+
+.vscode/
+.idea/
+*.swp
+*~
+
+
+# ==============================================================================
+# Notes
+# ==============================================================================
+# VERSION and SHA256SUMS are deliberately NOT ignored: self-update refuses to
+# install anything that is not listed in the committed SHA256SUMS, and
+# tools/sync_version.sh reads VERSION as the single source of truth.
