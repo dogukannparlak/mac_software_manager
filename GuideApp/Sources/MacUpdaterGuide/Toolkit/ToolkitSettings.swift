@@ -114,7 +114,7 @@ final class ToolkitSettings {
     /// which keeps the result identical to what the setup script produces.
     func save() {
         let contents = """
-        # Mac Software Updater Configuration
+        # Mac Software Manager Configuration
         # Written by MacUpdaterGuide on \(Self.timestamp())
 
         # Terminal app to use for running updates

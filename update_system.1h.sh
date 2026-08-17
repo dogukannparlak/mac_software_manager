@@ -6,7 +6,7 @@
 # <bitbar.author.github>dogukannparlak</bitbar.author.github>
 # <bitbar.desc>Monitors Homebrew and App Store updates, tracks history and stats.</bitbar.desc>
 # <bitbar.dependencies>brew,mas</bitbar.dependencies>
-# <bitbar.abouturl>https://github.com/dogukannparlak/mac_software_updater</bitbar.abouturl>
+# <bitbar.abouturl>https://github.com/dogukannparlak/mac_software_manager</bitbar.abouturl>
 # <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
 # <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
 # <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
@@ -163,11 +163,11 @@ VERSION=$(extract_version "$SCRIPT_FILE")
 # Failover & Network Config
 # TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below
 # once you have one, or remove the backup path entirely.
-URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_updater/$UPDATE_BRANCH"
-URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/raw/branch/$UPDATE_BRANCH"
+URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_manager/$UPDATE_BRANCH"
+URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/$UPDATE_BRANCH"
 USER_AGENT="MacSoftwareUpdater/$VERSION"
-PROJECT_URL="https://github.com/dogukannparlak/mac_software_updater"
-PROJECT_URL_CB="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater"
+PROJECT_URL="https://github.com/dogukannparlak/mac_software_manager"
+PROJECT_URL_CB="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager"
 
 # Colors (Light/Dark mode support)
 # Format: COLOR_LIGHT,COLOR_DARK
@@ -1915,7 +1915,7 @@ check_for_updates_manual() {
     if [[ "$http_code" == "304" ]]; then
         echo "✅ Status 304: No changes."
         rm -f "$PENDING_FLAG" "$temp_headers" "$temp_body"
-        osascript -e "display notification \"Plugin is up to date.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Plugin is up to date.\" with title \"Mac Software Manager\""
         return 0
     fi
 
@@ -1938,7 +1938,7 @@ check_for_updates_manual() {
 
     if [[ "$source_verified" != "true" ]]; then
         echo "❌ Error: Update connection to GitHub and Codeberg failed."
-        osascript -e "display notification \"Update connection to Github and Codeberg failed.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Update connection to Github and Codeberg failed.\" with title \"Mac Software Manager\""
         return 1
     fi
 
@@ -1958,22 +1958,22 @@ check_for_updates_manual() {
     if [[ "$local_hash" == "$remote_hash" ]]; then
         echo "ℹ️ Files are identical."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"You have the latest version (v$local_ver).\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"You have the latest version (v$local_ver).\" with title \"Mac Software Manager\""
 
     elif [[ "$local_ver" == "$remote_ver" ]]; then
         echo "ℹ️ Version matches, but hashes not. Ignoring. Verify local and remote version, probably cosmetical changes..."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"Up to date (v$local_ver).\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Up to date (v$local_ver).\" with title \"Mac Software Manager\""
 
     elif is-at-least "$remote_ver" "$local_ver"; then
         echo "⚠️ Remote version (v$remote_ver) is OLDER than local (v$local_ver)."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"Server has older version (v$remote_ver).\" with title \"Mac Software Updater\" subtitle \"Keeping local v$local_ver.\""
+        osascript -e "display notification \"Server has older version (v$remote_ver).\" with title \"Mac Software Manager\" subtitle \"Keeping local v$local_ver.\""
 
     else
         echo "✅ Valid Update: v$remote_ver > v$local_ver"
         touch "$PENDING_FLAG"
-        osascript -e "display notification \"New version v$remote_ver available!\" with title \"Mac Software Updater\" subtitle \"Click 'Update All' to install.\""
+        osascript -e "display notification \"New version v$remote_ver available!\" with title \"Mac Software Manager\" subtitle \"Click 'Update All' to install.\""
     fi
 }
 
@@ -2029,11 +2029,11 @@ if [[ "$1" == "change_interval" ]]; then
 
     if [[ "$SCRIPT_FILE" != "$NEW_PATH" ]]; then
         mv "$SCRIPT_FILE" "$NEW_PATH" && chmod +x "$NEW_PATH"
-        osascript -e "display notification \"Update frequency changed to $SELECTION.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Update frequency changed to $SELECTION.\" with title \"Mac Software Manager\""
         sleep 2
         open -g "swiftbar://refreshallplugins"
     else
-         osascript -e "display notification \"Frequency is already set to $SELECTION.\" with title \"Mac Software Updater\""
+         osascript -e "display notification \"Frequency is already set to $SELECTION.\" with title \"Mac Software Manager\""
     fi
     exit 0
 fi
@@ -2063,7 +2063,7 @@ if [[ "$1" == "toggle_autostart" ]]; then
         fi
     fi
 
-    osascript -e "display notification \"$MSG\" with title \"Mac Software Updater\""
+    osascript -e "display notification \"$MSG\" with title \"Mac Software Manager\""
     open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")"
     exit 0
 fi
@@ -2094,7 +2094,7 @@ if [[ "$1" == "change_terminal" ]]; then
     if [[ ! -f "$CONFIG_FILE" ]]; then
         mkdir -p "$APP_DIR"
         cat > "$CONFIG_FILE" << EOF
-# Mac Software Updater Configuration
+# Mac Software Manager Configuration
 # Generated on $(date)
 
 # Terminal app to use for running updates
@@ -2112,9 +2112,9 @@ EOF
     fi
 
     if [[ "$SELECTION" == "$CURRENT" ]]; then
-        osascript -e "display notification \"Terminal is already set to $SELECTION.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Terminal is already set to $SELECTION.\" with title \"Mac Software Manager\""
     else
-        osascript -e "display notification \"Terminal changed to $SELECTION.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Terminal changed to $SELECTION.\" with title \"Mac Software Manager\""
     fi
 
     exit 0
@@ -2144,7 +2144,7 @@ if [[ "$1" == "change_branch" ]]; then
 
     # Check if change is actually needed
     if [[ "$NEW_BRANCH" == "$CURRENT" ]]; then
-        osascript -e "display notification \"Already on $SELECTION channel.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Already on $SELECTION channel.\" with title \"Mac Software Manager\""
         exit 0
     fi
 
@@ -2163,8 +2163,8 @@ if [[ "$1" == "change_branch" ]]; then
     fi
 
     # Update URLs in memory immediately
-    URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_updater/$NEW_BRANCH"
-    URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/raw/branch/$NEW_BRANCH"
+    URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_manager/$NEW_BRANCH"
+    URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/$NEW_BRANCH"
 
     # Force Download and Overwrite
     TEMP_TARGET="$(mktemp "${TMPDIR:-/tmp}/update_system.branch_switch.XXXXXX")"
@@ -2182,11 +2182,11 @@ if [[ "$1" == "change_branch" ]]; then
         rm -f "$ETAG_FILE"
         spawn_cache_refresh "force"
 
-        osascript -e "display notification \"Switched to $SELECTION channel.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Switched to $SELECTION channel.\" with title \"Mac Software Manager\""
         open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")"
     else
         echo "❌ Error: Could not install the $NEW_BRANCH version. Reverting config."
-        osascript -e "display notification \"Channel switch failed. Config reverted.\" with title \"Mac Software Updater\""
+        osascript -e "display notification \"Channel switch failed. Config reverted.\" with title \"Mac Software Manager\""
         sed -i '' "s/^UPDATE_BRANCH=.*/UPDATE_BRANCH=\"$CURRENT\"/" "$CONFIG_FILE"
     fi
     exit 0
@@ -2349,7 +2349,7 @@ fi
 if [[ "$1" == "about_dialog" ]]; then
     TERM_APP="/System/Applications/Utilities/Terminal.app"
 
-    BUTTON=$(osascript -e 'on run {ver, termPath}' -e 'tell application "System Events"' -e 'activate' -e 'set myResult to display dialog "Mac Software Updater" & return & "Version " & ver & return & return & "An automated toolkit to monitor and update Homebrew & App Store applications." with title "About" buttons {"Visit Codeberg", "Visit GitHub", "Close"} default button "Close" cancel button "Close" with icon POSIX file (termPath & "/Contents/Resources/Terminal.icns")' -e 'return button returned of myResult' -e 'end tell' -e 'end run' -- "$VERSION" "$TERM_APP")
+    BUTTON=$(osascript -e 'on run {ver, termPath}' -e 'tell application "System Events"' -e 'activate' -e 'set myResult to display dialog "Mac Software Manager" & return & "Version " & ver & return & return & "An automated toolkit to monitor and update Homebrew & App Store applications." with title "About" buttons {"Visit Codeberg", "Visit GitHub", "Close"} default button "Close" cancel button "Close" with icon POSIX file (termPath & "/Contents/Resources/Terminal.icns")' -e 'return button returned of myResult' -e 'end tell' -e 'end run' -- "$VERSION" "$TERM_APP")
 
     if [[ "$BUTTON" == "Visit GitHub" ]]; then
         open "$PROJECT_URL"
@@ -2677,7 +2677,7 @@ if [[ "$1" == "run" ]]; then
             else
                 echo "❌ Plugin update aborted. The running version was left untouched."
                 if [[ "$MODE" == "plugin" ]]; then
-                    osascript -e "display notification \"Plugin update failed integrity check.\" with title \"Mac Software Updater\"" 2>/dev/null || true
+                    osascript -e "display notification \"Plugin update failed integrity check.\" with title \"Mac Software Manager\"" 2>/dev/null || true
                     sleep 2
                     exit 1
                 fi

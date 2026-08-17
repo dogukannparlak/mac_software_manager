@@ -21,7 +21,7 @@ echo "${fg[blue]}██║ ╚═╝ ██║██║  ██║╚███�
 echo "${fg[blue]}╚═╝     ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝${reset_color}"
 echo ""
 echo "${fg[cyan]}--------------------------------------------------${reset_color}"
-echo "${fg[bold]}  mac_software_updater${reset_color} v1.5.0"
+echo "${fg[bold]}  mac_software_manager${reset_color} v1.5.0"
 echo "${fg[cyan]}  Software Update & Application Migration Toolkit${reset_color}"
 echo "${fg[cyan]}--------------------------------------------------${reset_color}"
 echo "This script will: "
@@ -38,8 +38,8 @@ export HOMEBREW_NO_ENV_HINTS=1
 # Failover configuration
 # TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below
 # once you have one, or remove the backup path entirely.
-URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_updater/main"
-URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/raw/branch/main"
+URL_PRIMARY_BASE="https://raw.githubusercontent.com/dogukannparlak/mac_software_manager/main"
+URL_BACKUP_BASE="https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/main"
 
 # Paths of a possible previous installation
 APP_DIR="$HOME/Library/Application Support/MacSoftwareUpdater"
@@ -1166,7 +1166,7 @@ WRITE_AUTO_INSTALL="0"
 
 # Write configuration file
 cat > "$CONFIG_FILE" << EOF
-# Mac Software Updater Configuration
+# Mac Software Manager Configuration
 # Generated on $(date)
 
 # Terminal app to use for running updates

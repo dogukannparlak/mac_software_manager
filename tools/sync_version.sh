@@ -66,8 +66,8 @@ apply "update_system.1h.sh" \
     "<bitbar\.version>v${VERSION}</bitbar\.version>"
 
 apply "setup_mac.sh" \
-    "s|(mac_software_updater\\\$\{reset_color\} )v[0-9.]+|\1v${VERSION}|" \
-    "mac_software_updater\\\$\{reset_color\} v${VERSION}\"?$"
+    "s|(mac_software_manager\\\$\{reset_color\} )v[0-9.]+|\1v${VERSION}|" \
+    "mac_software_manager\\\$\{reset_color\} v${VERSION}\"?$"
 
 apply "uninstall.sh" \
     "s|(Uninstaller )v[0-9.]+|\1v${VERSION}|" \

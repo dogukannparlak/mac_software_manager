@@ -1,8 +1,8 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Last Commit](https://img.shields.io/gitea/last-commit/YOUR_CODEBERG_USERNAME/mac_software_updater?gitea_url=https%3A%2F%2Fcodeberg.org&label=last%20update&color=blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/commits/branch/main)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/releases)
+[![Last Commit](https://img.shields.io/gitea/last-commit/YOUR_CODEBERG_USERNAME/mac_software_manager?gitea_url=https%3A%2F%2Fcodeberg.org&label=last%20update&color=blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/commits/branch/main)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/releases)
 
 ![Platform](https://img.shields.io/badge/macOS-12%2B-blue?logo=apple&logoColor=white)
 ![Zsh](https://img.shields.io/badge/shell-Zsh-blue?logo=gnu-bash&logoColor=white)
@@ -15,9 +15,9 @@
 </div>
 
 
-# macOS Software Update & Migration Toolkit 
+# Mac Software Manager
 
-Mac Software Updater is a targeted automation tool designed to bring order to your macOS environment. This project combines **Homebrew**, **Mac App Store CLI (mas)**, and **SwiftBar** to solve two specific problems:
+Mac Software Manager is a targeted automation tool designed to bring order to your macOS environment. This project combines **Homebrew**, **Mac App Store CLI (mas)**, and **SwiftBar** to solve two specific problems:
 1.  **Migration:** Moving manually installed applications under the control of package managers (App Store or Homebrew).
 2.  **Updates:** Monitors updates from the menu bar and applies them via a single terminal command.
 
@@ -160,12 +160,12 @@ The fastest way to start is to run this command in your Terminal. It downloads a
 
 **Option A: Standard Install (GitHub)**
 ```bash
-curl -L https://github.com/dogukannparlak/mac_software_updater/releases/download/v1.5.0/Installer.zip -o Installer.zip && unzip -q Installer.zip && cd mac_software_updater && chmod +x setup_mac.sh && ./setup_mac.sh
+curl -L https://github.com/dogukannparlak/mac_software_manager/releases/download/v1.5.0/Installer.zip -o Installer.zip && unzip -q Installer.zip && cd mac_software_manager && chmod +x setup_mac.sh && ./setup_mac.sh
 ```
 
 **Option B: Emergency Mirror (Codeberg)**
 ```bash
-zsh -c "$(curl -fsSL https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater/raw/branch/main/setup_mac.sh)"
+zsh -c "$(curl -fsSL https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/raw/branch/main/setup_mac.sh)"
 ```
 
 > There is no Codeberg mirror yet — `YOUR_CODEBERG_USERNAME` above (and everywhere else in this repo) is a placeholder. Fill it in if you set one up, or drop Option B entirely.

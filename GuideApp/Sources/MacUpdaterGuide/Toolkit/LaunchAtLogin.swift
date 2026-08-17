@@ -61,8 +61,8 @@ enum ToolkitVersion {
     }
 
     // TODO: no Codeberg mirror set up yet - fill in YOUR_CODEBERG_USERNAME below.
-    static let projectURL = URL(string: "https://github.com/dogukannparlak/mac_software_updater")!
-    static let mirrorURL = URL(string: "https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_updater")!
+    static let projectURL = URL(string: "https://github.com/dogukannparlak/mac_software_manager")!
+    static let mirrorURL = URL(string: "https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager")!
 }
 
 /// Homebrew's own version and how stale its local database is.

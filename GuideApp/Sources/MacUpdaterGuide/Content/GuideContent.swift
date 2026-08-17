@@ -7,8 +7,8 @@ import Foundation
 enum GuideContent {
 
     static let appName = Localized(
-        "macOS Software Update & Migration Toolkit",
-        "macOS Yazılım Güncelleme ve Taşıma Aracı"
+        "Mac Software Manager",
+        "Mac Software Manager"
     )
 
     static let appTagline = Localized(
