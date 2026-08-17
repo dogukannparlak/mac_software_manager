@@ -1,0 +1,132 @@
+import SwiftUI
+
+/// A rounded icon tile in the style System Settings uses for its sections.
+struct IconTile: View {
+    let symbol: String
+    var size: CGFloat = 52
+    var tint: Color = .accentColor
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: size * 0.23, style: .continuous)
+            .fill(tint.gradient)
+            .frame(width: size, height: size)
+            .overlay {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.46, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+            .shadow(color: tint.opacity(0.25), radius: 4, y: 2)
+            .accessibilityHidden(true)
+    }
+}
+
+/// Grouped container matching the inset cards used across macOS settings UI.
+struct Card<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(18)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            }
+    }
+}
+
+/// A single bullet, aligned so wrapped lines stay indented under the text.
+struct BulletRow: View {
+    let text: String
+    var symbol: String = "circle.fill"
+    var symbolSize: CGFloat = 5
+    var tint: Color = .secondary
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: symbolSize))
+                .foregroundStyle(tint)
+                .frame(width: 14)
+                .offset(y: -1)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Numbered step, for anything that has to happen in order.
+struct StepRow: View {
+    let index: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("\(index)")
+                .font(.caption.monospacedDigit().weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.accentColor))
+                .accessibilityHidden(true)
+
+            Text(text)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// Note / caution box, tinted by role.
+struct Callout: View {
+    enum Role {
+        case note
+        case caution
+
+        var symbol: String {
+            switch self {
+            case .note: return "info.circle.fill"
+            case .caution: return "exclamationmark.triangle.fill"
+            }
+        }
+
+        var tint: Color {
+            switch self {
+            case .note: return .accentColor
+            case .caution: return .orange
+            }
+        }
+    }
+
+    let role: Role
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: role.symbol)
+                .font(.system(size: 15))
+                .foregroundStyle(role.tint)
+                .symbolRenderingMode(.hierarchical)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(role.tint.opacity(0.10))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(role.tint.opacity(0.22), lineWidth: 0.5)
+        }
+    }
+}
