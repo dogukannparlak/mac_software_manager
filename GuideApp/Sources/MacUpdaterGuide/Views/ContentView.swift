@@ -4,6 +4,7 @@ import SwiftUI
 enum SidebarItem: Hashable {
     case updates
     case installed
+    case cliTools
     case history
     case topic(GuideTopic.ID)
     case settings(SettingsSection)
@@ -15,6 +16,7 @@ struct ContentView: View {
     @Environment(LocalizationStore.self) private var loc
     @Environment(ToolkitController.self) private var toolkit
     @Environment(NavigationStore.self) private var navigation
+    @Environment(InventoryStore.self) private var inventory
 
     var body: some View {
         NavigationSplitView {
@@ -40,6 +42,8 @@ struct ContentView: View {
             UpdatesView()
         case .installed:
             InstalledAppsView()
+        case .cliTools:
+            CLIToolsView()
         case .history:
             HistoryView()
         case .topic(let id):
@@ -117,6 +121,23 @@ struct ContentView: View {
                         .foregroundStyle(Color.accentColor)
                 }
                 .tag(SidebarItem.installed)
+
+                Label {
+                    HStack {
+                        Text(UIStrings.navCLITools[loc.language])
+                        Spacer(minLength: 4)
+                        if !inventory.tools.isEmpty {
+                            Text("\(inventory.tools.count)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } icon: {
+                    Image(systemName: "terminal")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(Color.accentColor)
+                }
+                .tag(SidebarItem.cliTools)
 
                 Label {
                     Text(UIStrings.navHistory[loc.language])

@@ -1,7 +1,11 @@
 import SwiftUI
 
-/// Every installed application with its icon, version and where it came from,
-/// plus the Homebrew command line tools underneath.
+/// Every installed application with its icon, version and where it came from.
+/// The Homebrew CLI tools that used to live in a disclosure group at the
+/// bottom of this page now have their own page (`CLIToolsView`) - the list
+/// (leaves plus every transitive dependency) routinely outgrows the
+/// application list itself, and burying it under a second scroll made it easy
+/// to miss entirely.
 struct InstalledAppsView: View {
     @Environment(LocalizationStore.self) private var loc
     @Environment(ToolkitController.self) private var toolkit
@@ -10,11 +14,9 @@ struct InstalledAppsView: View {
 
     @State private var searchText = ""
     @State private var sourceFilter: InstallSource?
-    @State private var showsTools = false
     @State private var ignoredKeys: Set<String> = []
 
     private var apps: [InstalledApp] { inventory.apps }
-    private var tools: [InstalledTool] { inventory.tools }
     private var isLoading: Bool { inventory.isLoading && inventory.apps.isEmpty }
 
     private var filteredApps: [InstalledApp] {
@@ -24,11 +26,6 @@ struct InstalledAppsView: View {
             return app.name.localizedCaseInsensitiveContains(searchText)
                 || (app.token ?? "").localizedCaseInsensitiveContains(searchText)
         }
-    }
-
-    private var filteredTools: [InstalledTool] {
-        guard !searchText.isEmpty else { return tools }
-        return tools.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     private func ignoreKey(for app: InstalledApp) -> String {
@@ -59,16 +56,6 @@ struct InstalledAppsView: View {
                     }
                 } else {
                     appsCard
-
-                    DisclosureGroup(isExpanded: $showsTools) {
-                        toolsCard.padding(.top, 8)
-                    } label: {
-                        Label(
-                            String(format: UIStrings.showToolsFormat[loc.language], tools.count),
-                            systemImage: "terminal"
-                        )
-                        .font(.title3.weight(.semibold))
-                    }
                 }
             }
             .padding(28)
@@ -96,25 +83,21 @@ struct InstalledAppsView: View {
                 Text(UIStrings.navInstalled[loc.language])
                     .font(.system(.largeTitle).weight(.bold))
 
-                Text(String(
-                    format: UIStrings.installedSummaryFormat[loc.language],
-                    apps.count,
-                    tools.count
-                ))
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                Text(String(format: UIStrings.installedAppsSummaryFormat[loc.language], apps.count))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
         }
     }
 
+    // A fixed-width row would squeeze each pill and wrap its label
+    // mid-word; a horizontal scroller keeps every pill at its natural width
+    // instead and just scrolls past the visible edge.
     private var filterBar: some View {
-        ViewThatFits(in: .horizontal) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) { filterChips }
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) { filterChips }
-            }
         }
     }
 
@@ -168,53 +151,6 @@ struct InstalledAppsView: View {
         }
     }
 
-    private var toolsCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Card {
-                VStack(spacing: 0) {
-                    ForEach(Array(filteredTools.enumerated()), id: \.element.id) { index, tool in
-                        if index > 0 { Divider().padding(.vertical, 2) }
-                        HStack(spacing: 12) {
-                            Image(systemName: "terminal")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 30)
-
-                            Text(tool.name)
-                                .font(.body.monospaced())
-
-                            if tool.isPinned {
-                                Image(systemName: "pin.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
-                                    .help(UIStrings.pinned[loc.language])
-                            }
-
-                            Spacer(minLength: 8)
-
-                            Text(tool.version)
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                        .padding(.vertical, 5)
-                        .contextMenu {
-                            if tool.isPinned {
-                                Button(UIStrings.unpinFormula[loc.language]) {
-                                    toolkit.unignore(type: "brew", id: tool.name, name: tool.name)
-                                }
-                            } else {
-                                Button(UIStrings.pinFormula[loc.language]) {
-                                    toolkit.ignore(type: "brew", id: tool.name, name: tool.name)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .transition(.opacity)
-    }
 }
 
 private struct InstalledAppRow: View {
@@ -434,34 +370,6 @@ private struct SourceBadge: View {
         }
     }
 }
-
-private struct FilterChip: View {
-    let title: String
-    let count: Int
-    let isSelected: Bool
-    var tint: Color = .accentColor
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Text(title)
-                Text("\(count)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
-            }
-            .font(.callout)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 5)
-            .background {
-                Capsule().fill(isSelected ? tint : Color.secondary.opacity(0.12))
-            }
-            .foregroundStyle(isSelected ? Color.white : Color.primary)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
 
 /// One external-link slot in a row: a large, clearly tinted icon that always
 /// occupies the same space whether or not a link is available, and that asks

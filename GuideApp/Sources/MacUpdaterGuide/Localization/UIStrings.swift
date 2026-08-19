@@ -113,10 +113,7 @@ enum UIStrings {
     // MARK: - Installed applications page
 
     static let navInstalled = Localized("Installed Apps", "Yüklü Uygulamalar")
-    static let installedSummaryFormat = Localized(
-        "%d applications, %d command line tools",
-        "%d uygulama, %d komut satırı aracı"
-    )
+    static let installedAppsSummaryFormat = Localized("%d applications", "%d uygulama")
     static let applications = Localized("Applications", "Uygulamalar")
     static let searchApps = Localized("Search applications", "Uygulama ara")
     static let filterAll = Localized("All", "Tümü")
@@ -190,6 +187,12 @@ extension UIStrings {
         "Command line tools (%d)",
         "Komut satırı araçları (%d)"
     )
+    static let navCLITools = Localized("CLI Tools", "Komut Satırı Araçları")
+    static let cliToolsSummaryFormat = Localized(
+        "%d command line tools from Homebrew",
+        "Homebrew üzerinden %d komut satırı aracı"
+    )
+    static let searchCLITools = Localized("Search CLI tools", "Komut satırı aracı ara")
 }
 
 extension UIStrings {

@@ -81,6 +81,38 @@ struct StepRow: View {
     }
 }
 
+/// A single toggleable filter pill with a count badge - the "All / source /
+/// category" row used above both the Installed Apps and CLI Tools lists.
+struct FilterChip: View {
+    let title: String
+    let count: Int
+    let isSelected: Bool
+    var tint: Color = .accentColor
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text(title)
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
+                    .lineLimit(1)
+            }
+            .fixedSize()
+            .font(.callout)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background {
+                Capsule().fill(isSelected ? tint : Color.secondary.opacity(0.12))
+            }
+            .foregroundStyle(isSelected ? Color.white : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// Note / caution box, tinted by role.
 struct Callout: View {
     enum Role {
