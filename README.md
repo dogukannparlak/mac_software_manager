@@ -1,8 +1,8 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Last Commit](https://img.shields.io/gitea/last-commit/YOUR_CODEBERG_USERNAME/mac_software_manager?gitea_url=https%3A%2F%2Fcodeberg.org&label=last%20update&color=blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/commits/branch/main)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://codeberg.org/YOUR_CODEBERG_USERNAME/mac_software_manager/releases)
+[![Last Commit](https://img.shields.io/gitea/last-commit/dogukannparlak/mac_software_manager?gitea_url=https%3A%2F%2Fcodeberg.org&label=last%20update&color=blue)](https://codeberg.org/dogukannparlak/mac_software_manager/commits/branch/main)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://codeberg.org/dogukannparlak/mac_software_manager/releases)
 
 ![Platform](https://img.shields.io/badge/macOS-12%2B-blue?logo=apple&logoColor=white)
 ![Zsh](https://img.shields.io/badge/shell-Zsh-blue?logo=gnu-bash&logoColor=white)
