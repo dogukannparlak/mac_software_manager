@@ -93,7 +93,11 @@ final class ToolkitSettings {
         }
     }
 
-    private func apply(key: String, value: String) {
+    /// Internal (not private) so ToolkitSettingsParsingTests can exercise key
+    /// recognition/error handling directly, without going through `load()`'s
+    /// real, non-injectable file location - see the doc comment on
+    /// ProcessOutcome (ToolkitRunner.swift) for the same pattern.
+    func apply(key: String, value: String) {
         switch key {
         case "PREFERRED_TERMINAL":
             if let terminal = TerminalApp(rawValue: value) { preferredTerminal = terminal }
