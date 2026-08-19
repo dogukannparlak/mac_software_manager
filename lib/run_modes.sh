@@ -451,10 +451,15 @@ run_mode_system() {
                 fi
             fi
         done
-        # Re-run upgrade to catch anything else
+        # Re-run upgrade to catch anything else. Same '2>&1 | progress_tap'
+        # capture as the first attempt above - without it, Homebrew's own
+        # stderr (its "==>" status lines) leaks straight into this process's
+        # real stderr, and if anything later in the run fails, that leaked
+        # noise - not the actual error - is what Swift shows in the failure
+        # banner.
         echo "📦 Re-running upgrade after migration..."
         if [[ ${#brew_targets[@]} -gt 0 ]]; then
-             brew upgrade --greedy "${brew_targets[@]}" || true
+             brew upgrade --greedy "${brew_targets[@]}" 2>&1 | progress_tap "brew-upgrade" "${#brew_targets[@]}" || true
         fi
     fi
 
