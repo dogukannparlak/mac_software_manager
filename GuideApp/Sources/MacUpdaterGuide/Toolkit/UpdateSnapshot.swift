@@ -19,21 +19,22 @@ enum UpdateSource: String, Sendable {
         }
     }
 
-    var groupTitle: Localized {
+    /// The same `InstallSource` vocabulary the Installed Apps page groups
+    /// by, so a pending app update lands in the same bucket its inventory
+    /// entry would. `nil` for `.formula` - a CLI tool isn't "an app with an
+    /// install source", it gets its own section instead (see
+    /// `UpdateSnapshot.cliToolGroups`).
+    var installSource: InstallSource? {
         switch self {
-        case .formula, .cask: return Localized("Homebrew", "Homebrew")
-        case .appStore: return Localized("App Store", "App Store")
-        case .manual, .sparkle, .github:
-            return Localized("Manual update required", "Elle güncelleme gerekiyor")
-        }
-    }
-
-    /// Groups that are shown together in the menu.
-    var groupOrder: Int {
-        switch self {
-        case .formula, .cask: return 0
-        case .appStore: return 1
-        case .manual, .sparkle, .github: return 2
+        case .formula: return nil
+        case .cask: return .homebrew
+        // manual_updates is Apple's own titles the mas CLI misses - still
+        // App Store purchases, just detected a different way.
+        case .appStore, .manual: return .appStore
+        // Sparkle/GitHub self-updaters are, by definition, apps that did not
+        // come from Homebrew or the App Store - the same "manual" bucket
+        // InstalledInventory falls back to for anything else.
+        case .sparkle, .github: return .manual
         }
     }
 }
@@ -46,6 +47,10 @@ struct UpdateItem: Identifiable, Hashable, Sendable {
     let newVersion: String
     /// Download or release page, when the update cannot be installed from here.
     let link: URL?
+    /// Same taxonomy the CLI Tools page uses - assigned in
+    /// `UpdateSnapshot.load()`, once real description/leaf data is available.
+    /// The parsing helpers below default it to `.other`.
+    var category: CLIToolCategory = .other
 }
 
 /// Everything the menu bar shows, read from the cache the shell scripts write.
@@ -57,13 +62,30 @@ struct UpdateSnapshot: Sendable {
 
     var count: Int { items.count }
 
-    var groups: [(source: UpdateSource, items: [UpdateItem])] {
-        let grouped = Dictionary(grouping: items, by: \.source.groupOrder)
-        return grouped
-            .sorted { $0.key < $1.key }
-            .compactMap { _, value in
-                guard let first = value.first else { return nil }
-                return (first.source, value.sorted { $0.name.lowercased() < $1.name.lowercased() })
+    /// Pending app updates (everything but a formula), grouped by
+    /// `InstallSource` - the same split the Installed Apps page uses
+    /// (Homebrew / App Store / Installed manually).
+    var appGroups: [(source: InstallSource, items: [UpdateItem])] {
+        let grouped = Dictionary(grouping: items.filter { $0.source != .formula }) {
+            $0.source.installSource ?? .manual
+        }
+        return InstallSource.allCases
+            .sorted { $0.sortRank < $1.sortRank }
+            .compactMap { source -> (InstallSource, [UpdateItem])? in
+                guard let value = grouped[source], !value.isEmpty else { return nil }
+                return (source, value.sorted { $0.name.lowercased() < $1.name.lowercased() })
+            }
+    }
+
+    /// Pending formula updates, grouped by `CLIToolCategory` - the same
+    /// taxonomy the CLI Tools page uses.
+    var cliToolGroups: [(category: CLIToolCategory, items: [UpdateItem])] {
+        let grouped = Dictionary(grouping: items.filter { $0.source == .formula }, by: \.category)
+        return CLIToolCategory.allCases
+            .sorted { $0.sortRank < $1.sortRank }
+            .compactMap { category -> (CLIToolCategory, [UpdateItem])? in
+                guard let value = grouped[category], !value.isEmpty else { return nil }
+                return (category, value.sorted { $0.name.lowercased() < $1.name.lowercased() })
             }
     }
 
@@ -82,6 +104,15 @@ struct UpdateSnapshot: Sendable {
         snapshot.items += manualItems(ignoring: ignored)
         snapshot.items += selfUpdatingItems(ignoring: ignored)
 
+        let leaves = Set(contents(of: "brew_leaves"))
+        let hasLeavesData = !leaves.isEmpty
+        let formulaDescriptions = CLIToolCategorizer.parseDescriptions(contents(of: "brew_formulae_desc"))
+        let caskDescriptions = CLIToolCategorizer.parseDescriptions(contents(of: "brew_casks_desc"))
+
+        snapshot.items = snapshot.items.map { item in
+            categorized(item, leaves: leaves, hasLeavesData: hasLeavesData, formulaDescriptions: formulaDescriptions, caskDescriptions: caskDescriptions)
+        }
+
         snapshot.installedCount =
             lineCount("brew_casks") + lineCount("brew_formulae") + lineCount("mas_list")
 
@@ -90,6 +121,34 @@ struct UpdateSnapshot: Sendable {
             .max()
 
         return snapshot
+    }
+
+    /// Assigns each pending update the same category a CLI tool or app would
+    /// get on its respective inventory page. Formula updates reuse the
+    /// leaf/dependency split so a transitive library update still lands in
+    /// `.libraries` rather than cluttering a real category; every other
+    /// source (cask, App Store, manual, self-updating) is always
+    /// user-facing, so it is treated as a leaf.
+    private static func categorized(
+        _ item: UpdateItem,
+        leaves: Set<String>,
+        hasLeavesData: Bool,
+        formulaDescriptions: [String: String],
+        caskDescriptions: [String: String]
+    ) -> UpdateItem {
+        var item = item
+        switch item.source {
+        case .formula:
+            let isLeaf = !hasLeavesData || leaves.contains(item.name)
+            let description = formulaDescriptions[item.name]
+            item.category = CLIToolCategorizer.categorize(token: item.name, description: description, isLeaf: isLeaf)
+        case .cask:
+            let description = caskDescriptions[item.name]
+            item.category = CLIToolCategorizer.categorize(token: item.name, description: description, isLeaf: true)
+        case .appStore, .manual, .sparkle, .github:
+            item.category = CLIToolCategorizer.categorize(token: item.name, description: nil, isLeaf: true)
+        }
+        return item
     }
 
     private static func contents(of name: String) -> [String] {

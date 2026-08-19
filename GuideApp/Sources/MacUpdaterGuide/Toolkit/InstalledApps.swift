@@ -104,6 +104,14 @@ struct InstalledTool: Identifiable, Hashable, Sendable {
     let name: String
     let version: String
     let isPinned: Bool
+    /// True when `brew leaves` lists this formula - i.e. the user installed
+    /// it directly, rather than it arriving as someone else's dependency.
+    let isLeaf: Bool
+    /// From `brew desc`, when the local description index has it.
+    let description: String?
+    let category: CLIToolCategory
+    /// Only meaningful when `category == .libraries` - nil otherwise.
+    let librarySubcategory: LibrarySubcategory?
 }
 
 /// Scans the Applications folders and works out where each app came from.
@@ -133,14 +141,34 @@ enum InstalledInventory {
             )
         }
 
+        // Homebrew's own leaf/dependency split. An empty result here is
+        // ambiguous - it could mean "no direct installs" (real, if unlikely)
+        // or "the shell engine hasn't refreshed this cache key yet" (an
+        // older install just updated to a version that writes it). Treating
+        // every formula as a leaf in that case is the safer default: it
+        // falls back to the old flat categorization-by-description behavior
+        // rather than dumping the entire list into "Libraries & Dependencies".
+        let leavesCache = cacheLines("brew_leaves")
+        let leaves = Set(leavesCache)
+        let descriptions = CLIToolCategorizer.parseDescriptions(cacheLines("brew_formulae_desc"))
+
         let tools = cacheLines("brew_formulae").compactMap { line -> InstalledTool? in
             let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
             guard let token = parts.first else { return nil }
+            let isLeaf = leavesCache.isEmpty ? true : leaves.contains(token)
+            let description = descriptions[token]
+            let category = CLIToolCategorizer.categorize(token: token, description: description, isLeaf: isLeaf)
             return InstalledTool(
                 id: token,
                 name: token,
                 version: parts.count > 1 ? parts[1] : "",
-                isPinned: pinned.contains(token)
+                isPinned: pinned.contains(token),
+                isLeaf: isLeaf,
+                description: description,
+                category: category,
+                librarySubcategory: category == .libraries
+                    ? CLIToolCategorizer.librarySubcategory(token: token, description: description)
+                    : nil
             )
         }
 
