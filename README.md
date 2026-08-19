@@ -14,12 +14,12 @@
 
 </div>
 
-
 # Mac Software Manager
 
 Mac Software Manager is a targeted automation tool designed to bring order to your macOS environment. This project combines **Homebrew**, **Mac App Store CLI (mas)**, and **SwiftBar** to solve two specific problems:
-1.  **Migration:** Moving manually installed applications under the control of package managers (App Store or Homebrew).
-2.  **Updates:** Monitors updates from the menu bar and applies them via a single terminal command.
+
+1. **Migration:** Moving manually installed applications under the control of package managers (App Store or Homebrew).
+2. **Updates:** Monitors updates from the menu bar and applies them via a single terminal command.
 
 > **⚠️ Note to Contributors & Testers**
 >
@@ -48,7 +48,6 @@ Mac Software Manager is a targeted automation tool designed to bring order to yo
 * **One Menu Per App:** Every row on the Installed Apps page has a "…" menu with everything for that app — open its links, correct them, fix how it is tracked for updates, remap it to a Homebrew cask, ignore it — no more hunting through separate settings pages.
 * **Manual Homebrew Check:** A dedicated "Check Homebrew" action pulls the latest Homebrew and tap metadata (`brew update`) on demand, the same way the Updates page lets you re-check individual apps.
 
-
 ## ⚙️ How It Works
 
 This is not a generic maintenance utility. It is a small engine with a native interface on top:
@@ -57,19 +56,19 @@ This is not a generic maintenance utility. It is a small engine with a native in
 * The **SwiftUI app** (`GuideApp/`) reads that cache and drives the toolkit. It owns the menu bar item, so **SwiftBar is no longer required** — though the plugin still renders in SwiftBar if you prefer it.
 
 ### 1. Migration Wizard (`setup_mac.sh`)
+
 Run via terminal, this script scans your `/Applications` folder to detect unmanaged software. For every app found, it checks if a matching version exists in Homebrew or the App Store.
 
 * **Installation:** It can reuse your Homebrew and other tools, but if you don't have them, they will be installed
 * **Verification:** Distinguishes between System apps, Homebrew apps, and manually downloaded apps. It will only migrate unmanaged versions
 * **The Decision:** For every "unmanaged" app (e.g., Spotify or Chrome installed manually), it asks you for an action (depending on availability):
-    * **[A]pp Store:** Replaces the manual version with the official App Store version.
-    * **[B]rew Cask:** Replaces the manual version with a Homebrew Cask (preserving settings).
-    * **[L]eave:** Keeps the app exactly as it is.
+  * **[A]pp Store:** Replaces the manual version with the official App Store version.
+  * **[B]rew Cask:** Replaces the manual version with a Homebrew Cask (preserving settings).
+  * **[L]eave:** Keeps the app exactly as it is.
 * **🛡️Safety First:** Before any migration, it creates a local backup (`.app.bak`). If the new installation fails (network error, hash mismatch) it automatically restores the original application. Only removes the backup if the installation was 100% successful.
 
-
-
 ### 2. Update Engine (`update_system.x.sh`)
+
 The part that knows how things actually get updated.
 
 * **Status:** Collects pending updates from Homebrew, the App Store, Sparkle appcasts and GitHub release feeds, and caches the result so nothing has to wait on the network to see it.
@@ -80,6 +79,7 @@ The part that knows how things actually get updated.
 It runs standalone: `./update_system.1h.sh run all` does a full update from a terminal, no app required. Run with no arguments it prints a SwiftBar plugin menu, which is how the toolkit worked before the app existed.
 
 ### 3. The App (`GuideApp/`)
+
 A native SwiftUI app that puts a face on all of it. Open the Xcode project and run it.
 
 * **Menu bar item:** Created by the app itself. Shows the pending count and, when a run is in flight, which package it is on. Deliberately read-only — a glance, not a control panel. Turn on **Settings → General → Menu bar only** to drop the Dock icon and live entirely up there.
@@ -88,7 +88,6 @@ A native SwiftUI app that puts a face on all of it. Open the Xcode project and r
 * **History:** What was updated over the last 7 or 30 days, grouped by day, with failures marked rather than hidden.
 * **Settings:** Part of the same window, not a separate panel. Language, check interval, Dock icon, open at login, whether updates run in a terminal (and which one), App Store support, cleanup, automatic installation, update channel, ignored apps, cache, and the engine location — plus full editors for the tracking rules and Homebrew name mapping, so no configuration ever needs a text editor. Everything is written straight into the toolkit's config files, so the app and the terminal never disagree.
 * **Guide:** The whole feature guide built in, in English and Turkish, switchable without relaunching.
-
 
 ## 📸 Screenshots
 
@@ -131,39 +130,40 @@ A native SwiftUI app that puts a face on all of it. Open the Xcode project and r
   </tr>
 </table>
 
-
-
 ### Menu Bar States
 
-| Status | Icon Appearance | Description |
-| :--- | :--- | :--- |
-| **Up to Date** | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Everything Updated"> | System is clean, checkmark icon displayed. |
+| Status                  | Icon Appearance | Description                                |
+| :---------------------- | :-------------- | :----------------------------------------- |
+| **Up to Date**    | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Everything Updated"> | System is clean, checkmark icon displayed. |
 | **Updates Ready** | <img src="img/menubar_icon_update_ready.png?v=2" height="24" alt="Updates Ready"> | Badge with update count and red sync icon. |
-| **Plugin Update** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Plugin Update"> | New version of the toolkit is available. |
-
+| **Plugin Update** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Plugin Update"> | New version of the toolkit is available.   |
 
 ### Preferences & Control
+
 Manage the plugin behavior directly from the menu.
 
-| Feature | Description |
-| :--- | :--- |
-| **Update Frequency** | Toggle check intervals: `1h`, `2h`, `6h`, `12h`, or `1d`. |
-| **Terminal App** | Choose preferred terminal: `Terminal`, `iTerm2`, `Warp`, `Alacritty`, or `Ghostty`. |
-| **Self-Update** | Check for updates. Verified against GitHub, plus your configured Codeberg mirror if you set one (see `CODEBERG_USERNAME` below) - GitHub only otherwise, and the menu shows a warning when no mirror is set. |
-| **Update Channel** | Switch between `Stable (Main)` and `Beta (Develop)` releases instantly. |
-| **App Store** | Toggle `mas` integration on/off directly from the menu. |
+| Feature                    | Description                                                                                                                                                                                                   |
+| :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Update Frequency** | Toggle check intervals:`1h`, `2h`, `6h`, `12h`, or `1d`.                                                                                                                                            |
+| **Terminal App**     | Choose preferred terminal:`Terminal`, `iTerm2`, `Warp`, `Alacritty`, or `Ghostty`.                                                                                                                  |
+| **Self-Update**      | Check for updates. Verified against GitHub, plus your configured Codeberg mirror if you set one (see`CODEBERG_USERNAME` below) - GitHub only otherwise, and the menu shows a warning when no mirror is set. |
+| **Update Channel**   | Switch between`Stable (Main)` and `Beta (Develop)` releases instantly.                                                                                                                                    |
+| **App Store**        | Toggle`mas` integration on/off directly from the menu.                                                                                                                                                      |
 
 ## 🛠 Quick Start
 
 ### 1. Run the Installer
+
 The fastest way to start is to run this command in your Terminal. It downloads and triggers the migration wizard:
 
 **Option A: Standard Install (GitHub)**
+
 ```bash
 curl -L https://github.com/dogukannparlak/mac_software_manager/releases/download/v1.5.0/Installer.zip -o Installer.zip && unzip -q Installer.zip && cd mac_software_manager && chmod +x setup_mac.sh && ./setup_mac.sh
 ```
 
 **Option B: Emergency Mirror (Codeberg)**
+
 ```bash
 zsh -c "$(curl -fsSL https://codeberg.org/<your-codeberg-username>/mac_software_manager/raw/branch/main/setup_mac.sh)"
 ```
@@ -171,9 +171,11 @@ zsh -c "$(curl -fsSL https://codeberg.org/<your-codeberg-username>/mac_software_
 > Option B only works once you've pushed this repo to your own Codeberg account and substituted `<your-codeberg-username>` above. `setup_mac.sh` will then ask for that same username and save it as `CODEBERG_USERNAME` in `settings.conf` - every download and self-update check from that point on verifies against **both** GitHub and Codeberg, and refuses to install a plugin update if the two disagree. Leave the prompt blank to skip the mirror entirely; downloads still work, verified against GitHub only, and the menu shows a "Config Warnings" entry saying so rather than silently downgrading the guarantee.
 
 ### 2. Follow the Wizard
+
 The script will prompt you on how to handle detected applications. You can choose to migrate them or skip the process entirely.
 
 ### 3. Finish
+
 Once completed, the update engine is installed and configured.
 
 > **Important:** If macOS asks for permission to access your Documents folder, click **Allow**. This is required to write and read the plugin file.
@@ -222,6 +224,7 @@ This toolkit acts as the "glue" integrating standard macOS power-user tools:
 If you decide to remove the toolkit, an uninstaller script is automatically placed in your application support folder during setup.
 
 To uninstall:
+
 1. Open **Terminal**.
 2. Run the following command:
 
@@ -235,14 +238,14 @@ To uninstall:
 
 All live in `~/Library/Application Support/MacSoftwareUpdater/`.
 
-| File | Purpose |
-| --- | --- |
-| `settings.conf` | Terminal choice, App Store on/off, update channel, autostart, cleanup on/off. Re-running `setup_mac.sh` preserves these. |
-| `ignored_apps.conf` | Apps hidden from the update list (`type\|id\|name`). Managed from the menu. |
-| `tracked_apps.conf` | How individual apps are checked for updates. Edited from **Settings → Tracked Apps**, or per app from its "…" menu — no need to open it by hand. |
-| `app_token_map.conf` | Manual app name → Homebrew cask token mapping. Edited from **Settings → Name Mapping**, or per app from its "…" menu. |
-| `app_links.conf` | Corrections to an app's detected website / GitHub repository. App-only — the shell engine never reads it. Edited per app from its "…" menu (**Edit Links…**). |
-| `cache/` | Cached update data. Safe to delete; it is rebuilt automatically. |
+| File                   | Purpose                                                                                                                                                                |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings.conf`      | Terminal choice, App Store on/off, update channel, autostart, cleanup on/off. Re-running`setup_mac.sh` preserves these.                                              |
+| `ignored_apps.conf`  | Apps hidden from the update list (`type\|id\|name`). Managed from the menu.                                                                                            |
+| `tracked_apps.conf`  | How individual apps are checked for updates. Edited from**Settings → Tracked Apps**, or per app from its "…" menu — no need to open it by hand.               |
+| `app_token_map.conf` | Manual app name → Homebrew cask token mapping. Edited from**Settings → Name Mapping**, or per app from its "…" menu.                                          |
+| `app_links.conf`     | Corrections to an app's detected website / GitHub repository. App-only — the shell engine never reads it. Edited per app from its "…" menu (**Edit Links…**). |
+| `cache/`             | Cached update data. Safe to delete; it is rebuilt automatically.                                                                                                       |
 
 ### `tracked_apps.conf`
 
@@ -294,6 +297,7 @@ Either field can be left blank to keep the automatically detected value for
 just that one. Purely local: the shell engine never reads this file.
 
 ## 📝 Notes
+
 > **Important:** Since this script uses checksums to detect updates, modifying the code (e.g., changing icons) will trigger a "Plugin Update Available" alert. If you customize the script, please go to Preferences → Disable Self-Update to prevent your changes from being overwritten.
 >
 > **Limitation:** Apple-native apps (e.g., iMovie) are often invisible to the mas CLI. While this plugin provides a workaround to monitor these "Ghost Apps," the actual update must be performed manually in the App Store.
