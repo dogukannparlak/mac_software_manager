@@ -143,7 +143,6 @@ run_mode_install() {
     echo "$timestamp|$app_method|$target_app|$app_local|$app_remote|$target_app|ok" >> "$HISTORY_FILE"
     trim_history_log
 
-    progress_write "done" "install-app" "$target_app" "" ""
     echo "✅ $target_app updated to $app_remote."
 
     if (( was_running )); then
@@ -154,6 +153,13 @@ run_mode_install() {
 
     echo "🗂️ Refreshing cached data..."
     collect_cache_data "apps"
+
+    # Written after the cache refresh above, not before it: a reader that
+    # treats "done" as "safe to re-check the pending-updates list now"
+    # (GuideApp does, to show a per-row Updated/Failed result) must never
+    # read that list while collect_cache_data is still mid-write - it would
+    # still show this app as pending and misreport a real success as failed.
+    progress_write "done" "install-app" "$target_app" "" ""
 
     echo "🔄 Refreshing SwiftBar..."
     open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
@@ -213,10 +219,14 @@ run_mode_single() {
         echo "📝 Added to history log ($status)."
     fi
 
-    progress_write "$( (( update_rc == 0 )) && print done || print failed )" "single" "$name" "" ""
-
-    # Menu data is cached, so it must be rebuilt before the refresh below
+    # Menu data is cached, so it must be rebuilt before the refresh below -
+    # and before the "done"/"failed" progress line below it, so a reader
+    # that treats "done" as "safe to re-check the outdated list now"
+    # (GuideApp does, to show a per-row Updated/Failed result) never reads a
+    # still-stale cache and reports a real success as a failure.
     collect_cache_data "all"
+
+    progress_write "$( (( update_rc == 0 )) && print done || print failed )" "single" "$name" "" ""
 
     echo "---------------------------"
     if (( update_rc == 0 )); then

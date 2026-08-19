@@ -764,14 +764,21 @@ if [[ "$1" == "run" ]]; then
     set -e
     set -o pipefail
 
-    # Two update runs at once fight over Homebrew's lock files and can corrupt
-    # the history log. Wait a short while for a run in progress, then give up
-    # instead of racing it. Held for the lifetime of this process.
-    if ! acquire_lock "update" 20; then
-        echo "⏳ Another update is already running."
-        echo "   Wait for it to finish, then start this one again."
-        sleep 4
-        exit 1
+    # A bulk run (all/system/plugin) touches every package in one pass and
+    # must never overlap another run of any kind, so it takes the exclusive
+    # lock: two at once fight over Homebrew's lock files and can corrupt the
+    # history log. single/install don't - GuideApp launches those with its
+    # own concurrency limit already enforced on the Swift side (Settings →
+    # General → "Aynı Anda Yapılabilecek Güncelleme Sayısı"), and taking the
+    # same exclusive lock here would just serialize them right back to one at
+    # a time, defeating that setting.
+    if [[ "$MODE" != "single" && "$MODE" != "install" ]]; then
+        if ! acquire_lock "update" 20; then
+            echo "⏳ Another update is already running."
+            echo "   Wait for it to finish, then start this one again."
+            sleep 4
+            exit 1
+        fi
     fi
 
     progress_write "running" "starting" "" "" ""
