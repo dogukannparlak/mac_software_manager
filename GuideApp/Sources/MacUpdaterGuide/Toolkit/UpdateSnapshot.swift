@@ -114,7 +114,15 @@ struct UpdateSnapshot: Sendable {
 
     /// `src|token|installed|current|pinned`
     private static func homebrewItems(ignoring ignored: IgnoreList) -> [UpdateItem] {
-        contents(of: "brew_outdated").compactMap { line in
+        homebrewItems(lines: contents(of: "brew_outdated"), ignoring: ignored)
+    }
+
+    /// Internal (not private) so UpdateSnapshotParsingTests can exercise the
+    /// parsing logic directly against in-memory lines, without going through
+    /// ToolkitPaths' real, non-injectable file locations - see the doc
+    /// comment on ProcessOutcome (ToolkitRunner.swift) for the same pattern.
+    static func homebrewItems(lines: [String], ignoring ignored: IgnoreList) -> [UpdateItem] {
+        lines.compactMap { line in
             let fields = line.components(separatedBy: "|")
             guard fields.count >= 5 else { return nil }
 
@@ -139,7 +147,12 @@ struct UpdateSnapshot: Sendable {
 
     /// Raw `mas outdated` output: `123456 App Name (1.0 -> 1.1)`
     private static func appStoreItems(ignoring ignored: IgnoreList) -> [UpdateItem] {
-        contents(of: "mas_outdated").compactMap { line in
+        appStoreItems(lines: contents(of: "mas_outdated"), ignoring: ignored)
+    }
+
+    /// Internal (not private) - see homebrewItems(lines:ignoring:) above.
+    static func appStoreItems(lines: [String], ignoring ignored: IgnoreList) -> [UpdateItem] {
+        lines.compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard let idEnd = trimmed.firstIndex(of: " ") else { return nil }
 
@@ -180,7 +193,12 @@ struct UpdateSnapshot: Sendable {
 
     /// `name|local|remote|appID` - Apple apps the mas CLI misses
     private static func manualItems(ignoring ignored: IgnoreList) -> [UpdateItem] {
-        contents(of: "manual_updates").compactMap { line in
+        manualItems(lines: contents(of: "manual_updates"), ignoring: ignored)
+    }
+
+    /// Internal (not private) - see homebrewItems(lines:ignoring:) above.
+    static func manualItems(lines: [String], ignoring ignored: IgnoreList) -> [UpdateItem] {
+        lines.compactMap { line in
             let fields = line.components(separatedBy: "|")
             guard fields.count >= 4 else { return nil }
             guard !ignored.contains(type: "mas", id: fields[3]) else { return nil }
@@ -198,7 +216,12 @@ struct UpdateSnapshot: Sendable {
 
     /// `method|name|local|remote|url|signature`
     private static func selfUpdatingItems(ignoring ignored: IgnoreList) -> [UpdateItem] {
-        contents(of: "app_updates").compactMap { line in
+        selfUpdatingItems(lines: contents(of: "app_updates"), ignoring: ignored)
+    }
+
+    /// Internal (not private) - see homebrewItems(lines:ignoring:) above.
+    static func selfUpdatingItems(lines: [String], ignoring ignored: IgnoreList) -> [UpdateItem] {
+        lines.compactMap { line in
             let fields = line.components(separatedBy: "|")
             guard fields.count >= 4 else { return nil }
 
@@ -223,11 +246,15 @@ struct IgnoreList: Sendable {
     private(set) var entries: [(type: String, id: String, name: String)] = []
 
     static func load() -> IgnoreList {
-        var list = IgnoreList()
-
         guard let text = try? String(contentsOf: ToolkitPaths.ignoredFile, encoding: .utf8) else {
-            return list
+            return IgnoreList()
         }
+        return parse(text: text)
+    }
+
+    /// Internal (not private) - see homebrewItems(lines:ignoring:) above.
+    static func parse(text: String) -> IgnoreList {
+        var list = IgnoreList()
 
         for rawLine in text.split(separator: "\n", omittingEmptySubsequences: true) {
             let fields = rawLine.components(separatedBy: "|")
