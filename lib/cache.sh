@@ -12,7 +12,7 @@ CACHE_TTL_WEBSITES=86400   # a homepage practically never changes; check once a 
 # Keys per tier (used by the refresh action and the staleness check)
 typeset -a CACHE_KEYS_UPDATES CACHE_KEYS_INSTALLED CACHE_KEYS_APPS CACHE_KEYS_WEBSITES
 CACHE_KEYS_UPDATES=(brew_outdated mas_outdated manual_updates)
-CACHE_KEYS_INSTALLED=(brew_pinned brew_casks brew_formulae mas_list brew_status)
+CACHE_KEYS_INSTALLED=(brew_pinned brew_casks brew_formulae brew_leaves brew_formulae_desc brew_casks_desc mas_list brew_status)
 CACHE_KEYS_APPS=(app_updates)
 CACHE_KEYS_WEBSITES=(cask_homepages github_homepages)
 
@@ -127,6 +127,18 @@ PROGRESS_FILE="$CACHE_DIR/progress"
 PROGRESS_FORMAT_VERSION="v1"
 
 progress_write() {
+    # GuideApp sets this for a headless single-item run launched from its own
+    # concurrency queue (Settings → General → "Aynı Anda Yapılabilecek
+    # Güncelleme Sayısı") - several of those can be running at once, all
+    # writing here, and none of them are what this shared file is for (the
+    # one thing the whole toolkit is doing right now, e.g. "Update
+    # Everything"). GuideApp already tracks each of those runs by its own
+    # `Process` handle and resolves success/failure by re-checking the
+    # outdated list, not by reading this file - so for that path, skip the
+    # write instead of leaving whichever one of them wrote last stuck here
+    # once it exits (nothing left polling it to ever clear it).
+    [[ -n "$GUIDEAPP_NO_SHARED_PROGRESS" ]] && return 0
+
     local state="$1" phase="$2" item="${3:-}" index="${4:-}" total="${5:-}"
     local tmp="$PROGRESS_FILE.$$"
     print -r -- "${PROGRESS_FORMAT_VERSION}|${state}|${phase}|${item}|${index}|${total}" > "$tmp" 2>/dev/null || return 0
@@ -197,10 +209,16 @@ collect_cache_data() {
     fi
 
     if [[ "$tier" == "installed" || "$tier" == "all" ]]; then
-        cache_refresh_entry "brew_pinned"   brew list --pinned
-        cache_refresh_entry "brew_casks"    brew list --cask --versions
-        cache_refresh_entry "brew_formulae" brew list --formula --versions
-        cache_refresh_entry "brew_status"   collect_brew_status
+        cache_refresh_entry "brew_pinned"        brew list --pinned
+        cache_refresh_entry "brew_casks"         brew list --cask --versions
+        cache_refresh_entry "brew_formulae"      brew list --formula --versions
+        # Homebrew's own leaf/dependency split - which formulae the user
+        # actually asked for vs. what got pulled in transitively. Drives the
+        # "Libraries & Dependencies" bucket in GuideApp's CLI Tools grouping.
+        cache_refresh_entry "brew_leaves"        brew leaves
+        cache_refresh_entry "brew_formulae_desc" brew_formulae_desc_collect
+        cache_refresh_entry "brew_casks_desc"    brew_casks_desc_collect
+        cache_refresh_entry "brew_status"        collect_brew_status
 
         if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
             cache_refresh_entry "mas_list" mas list

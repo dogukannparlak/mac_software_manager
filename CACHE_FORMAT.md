@@ -207,10 +207,13 @@ v1|Mac Software Manager|Update Complete|3 package(s) updated successfully.
 
 ## Explicitly out of scope
 
-- `brew_casks`, `brew_formulae`, `mas_list`, `brew_pinned`, `mas_outdated` -
-  raw `brew`/`mas` CLI output, not a format this project defines. Versioning
-  them would be meaningless; both sides already treat them defensively
-  (missing/empty cache → empty list, never a crash).
+- `brew_casks`, `brew_formulae`, `brew_leaves`, `brew_formulae_desc`,
+  `brew_casks_desc`, `mas_list`, `brew_pinned`, `mas_outdated` - raw
+  `brew`/`mas` CLI output, not a format this project defines. Versioning them
+  would be meaningless; both sides already treat them defensively
+  (missing/empty cache → empty list, never a crash). `brew_formulae_desc` and
+  `brew_casks_desc` are `brew desc`'s own `token: description` output, one
+  formula/cask per line.
 - `ignored_apps.conf`, `tracked_apps.conf`, `app_token_map.conf`,
   `update_history.log` - same dual-parser risk as the cache files above, but
   they live outside `cache/` (config/log files, not TTL-refreshed cache) and

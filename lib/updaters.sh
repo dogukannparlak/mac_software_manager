@@ -204,6 +204,27 @@ check_manual_app_version() {
     fi
 }
 
+# One-line descriptions for every installed formula, used by the GuideApp UI
+# to group the CLI Tools list into categories. 'brew desc' reads Homebrew's
+# own description index - offline, no network call, as long as that index
+# already exists (it is populated the same way 'brew outdated' data is: by a
+# plain 'brew update'). Output: "token: description", one per line.
+brew_formulae_desc_collect() {
+    local -a tokens
+    tokens=(${(f)"$(brew list --formula 2>/dev/null)"})
+    (( ${#tokens[@]} > 0 )) || return 0
+    brew desc "${tokens[@]}" 2>/dev/null
+}
+
+# Same as brew_formulae_desc_collect above, for installed casks - drives
+# category grouping for apps in the same "token: description" shape.
+brew_casks_desc_collect() {
+    local -a tokens
+    tokens=(${(f)"$(brew list --cask 2>/dev/null)"})
+    (( ${#tokens[@]} > 0 )) || return 0
+    brew desc --cask "${tokens[@]}" 2>/dev/null
+}
+
 # Ghost apps: Apple first-party titles the mas CLI regularly fails to report.
 # Each one costs an iTunes Lookup API round trip, which is exactly why this runs
 # in the background refresh and never in the render path.

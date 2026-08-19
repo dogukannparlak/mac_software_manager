@@ -134,7 +134,7 @@ load "test_helper"
     # nothing is stale - it must not abort a 'set -e' caller.
     run run_zsh_snippet '
         set -e
-        for key in brew_outdated mas_outdated manual_updates brew_pinned brew_casks brew_formulae mas_list brew_status app_updates cask_homepages github_homepages; do
+        for key in brew_outdated mas_outdated manual_updates brew_pinned brew_casks brew_formulae brew_leaves brew_formulae_desc brew_casks_desc mas_list brew_status app_updates cask_homepages github_homepages; do
             cache_put "$key" ""
         done
         stale="$(cache_stale_tiers)" || true
