@@ -16,6 +16,62 @@ final class ToolkitController {
     private(set) var scriptURL: URL?
     private(set) var lastMessage: String?
 
+    /// Outcome of a single-item "Update" button press, per `UpdateItem.id` -
+    /// the App Store-style state shown on that item's own row (queued, then a
+    /// spinner while running, then a transient "Updated"/"Update failed").
+    /// Separate from `progress`, which is the one shared *bulk* run ("Update
+    /// Everything", the Homebrew database check, the toolkit self-update) and
+    /// says nothing about any one row.
+    enum ItemUpdateStatus: Equatable, Sendable {
+        case queued
+        case updating
+        case succeeded
+        case failed
+    }
+    private(set) var itemStatuses: [String: ItemUpdateStatus] = [:]
+    /// Kept alongside `itemStatuses`: a successful update removes the item
+    /// from `snapshot.items` (it is no longer outdated), but its row still
+    /// needs the item's data to render while its "Updated" badge is showing.
+    private(set) var recentItemsByID: [String: UpdateItem] = [:]
+
+    /// Simulated 0...1 completion for a row's own progress bar, per
+    /// `UpdateItem.id`. Neither `brew` nor `mas` expose a real per-package
+    /// percentage the way a single download does, so this eases toward ~92%
+    /// over a plausible duration instead - a smooth, one-directional fill
+    /// with a number on it, rather than the bouncing indeterminate
+    /// animation `ProgressView()` draws with no `value` at all. It only
+    /// ever reaches 100% when the row actually resolves.
+    private(set) var itemFractions: [String: Double] = [:]
+    private var fractionTasks: [String: Task<Void, Never>] = [:]
+
+    /// One entry per currently-running headless single-item update, keyed by
+    /// `UpdateItem.id` - up to `preferences.maxConcurrentUpdates` at once.
+    /// Never used for terminal-mode runs (see `updateSingle`/`installApp`)
+    /// or for the bulk run (`bulkProcess`, below).
+    private var activeProcesses: [String: Process] = [:]
+    /// FIFO of item ids waiting for a free concurrency slot, plus what to
+    /// actually run for each once its turn comes - `drainQueue()` pops both
+    /// together. A plain array is fine at this scale (a handful of rows).
+    private var queuedItemIDs: [String] = []
+    private var queuedLaunchers: [String: () -> Void] = [:]
+
+    /// The item a just-launched *terminal-mode* single-item run belongs to.
+    /// Terminal mode stays single-flight (one visible window, watched
+    /// directly) rather than joining the concurrency queue above, so it still
+    /// needs the older "watch the shared progress file, resolve on quiet"
+    /// approach `startProgressWatch()` uses.
+    private var activeSingleItem: UpdateItem?
+    /// The bulk run's own `Process`, kept only so `cancelUpdate()` has
+    /// something to signal - never set for a terminal-mode run, where this
+    /// object is just the short-lived launcher that opened the terminal
+    /// window, not the actual work, and never set for a per-item run, which
+    /// tracks itself in `activeProcesses` instead.
+    private var bulkProcess: Process?
+    /// Set right before `cancelUpdate()` signals `bulkProcess`, so its
+    /// termination handler knows the exit was requested and skips reporting
+    /// it as a crash - overwriting the "Cancelled" state already written.
+    private var cancelledBulkRun = false
+
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
@@ -38,12 +94,52 @@ final class ToolkitController {
         progress = UpdateProgress.load()
     }
 
-    /// True while an update run is working, whether it was started from here
-    /// or straight from a terminal.
-    var isUpdating: Bool { progress?.isRunning == true }
+    /// True while the *bulk* run is working, whether it was started from here
+    /// or straight from a terminal, or while any concurrent single-item run
+    /// is active or queued. Gates the page-level actions (Update Everything,
+    /// Refresh Now, Check Homebrew Now) - those touch the same shared state
+    /// every in-flight run is using, bulk or not.
+    var isUpdating: Bool { progress?.isRunning == true || !activeProcesses.isEmpty || !queuedItemIDs.isEmpty }
 
-    /// Watches the progress file for as long as a run is in flight, so the menu
-    /// bar can name the package currently being installed.
+    /// True only for a headless bulk run - there is no process here to signal
+    /// for a terminal-mode run (the launcher that opened the terminal window
+    /// has already exited), and someone watching a terminal window can
+    /// already stop it there directly.
+    var canCancelCurrentRun: Bool { bulkProcess?.isRunning == true }
+
+    /// Stops the bulk run in progress. Sends SIGTERM to the script's direct
+    /// children first (brew/mas/curl - whatever it is actually waiting on)
+    /// and then to the script itself, since terminating just the zsh process
+    /// does not by itself stop a foreground child it launched.
+    func cancelUpdate() {
+        guard let process = bulkProcess, process.isRunning else { return }
+        cancelledBulkRun = true
+
+        let pkill = Process()
+        pkill.executableURL = URL(filePath: "/usr/bin/pkill")
+        pkill.arguments = ["-TERM", "-P", String(process.processIdentifier)]
+        try? pkill.run()
+        pkill.waitUntilExit()
+
+        process.terminate()
+
+        // We just killed it ourselves - no need to keep polling a progress
+        // file whose next write, if any, could only report the same thing.
+        progressTask?.cancel()
+        progressTask = nil
+
+        progress = UpdateProgress(state: .failed, phase: .cancelled, item: "", index: nil, total: nil)
+        if let active = activeSingleItem {
+            itemStatuses[active.id] = .failed
+            endFractionSimulation(for: active.id)
+            activeSingleItem = nil
+            scheduleStatusClear(for: active.id)
+        }
+    }
+
+    /// Watches the shared progress file for as long as a *bulk* (or
+    /// terminal-mode single-item) run is in flight, so the menu bar can name
+    /// the package currently being installed.
     private func startProgressWatch() {
         guard progressTask == nil else { return }
 
@@ -67,6 +163,11 @@ final class ToolkitController {
                     if quietTicks >= 4 {
                         await MainActor.run {
                             self.snapshot = UpdateSnapshot.load()
+                            self.resolveActiveSingleItem()
+                            // The bulk run holding up the concurrency queue
+                            // (see `startOrQueue`) just finished - anything
+                            // queued behind it can start now.
+                            self.drainQueue()
                             self.progressTask = nil
                         }
                         return
@@ -103,7 +204,7 @@ final class ToolkitController {
         }
     }
 
-    /// Runs an update.
+    /// Runs the bulk update ("Update Everything" / a toolkit component).
     ///
     /// Background by default: the same `run <scope>` the terminal path would
     /// execute, just without a terminal window - the in-app progress bar is
@@ -128,16 +229,24 @@ final class ToolkitController {
                 }
             }
         } else {
-            runDetached(script: script, arguments: ["run", scope])
+            startBulkProcess(script: script, arguments: ["run", scope])
             startProgressWatch()
         }
     }
 
-    func installApp(named name: String, dryRun: Bool) {
+    /// `trackingItem` is set only for a live, single-item "Update" press (never
+    /// for a dry run, never for the bulk toolkit-update path) - that is the
+    /// one case where a row's spinner/outcome should follow this particular run.
+    /// `forceTerminal` is for the menu bar's native "Bekleyen Güncellemeler"
+    /// flyout - it has no row of its own to show a spinner or result on, so
+    /// an update started from there always gets a terminal window instead of
+    /// running invisibly, whatever the general Settings toggle says.
+    func installApp(named name: String, dryRun: Bool, trackingItem: UpdateItem? = nil, forceTerminal: Bool = false) {
         guard let script = scriptURL else { return }
         let liveOrDry = dryRun ? "dry" : "live"
 
-        if preferences.runUpdatesInTerminal {
+        if preferences.runUpdatesInTerminal || forceTerminal {
+            if !dryRun, let trackingItem { beginTrackingSingleItem(trackingItem) }
             Task {
                 let outcome = await Self.run(script: script, arguments: ["install_app", name, liveOrDry])
                 await MainActor.run {
@@ -145,14 +254,20 @@ final class ToolkitController {
                     self.startProgressWatch()
                 }
             }
-        } else {
-            runDetached(script: script, arguments: ["run", "install", name, liveOrDry])
-            startProgressWatch()
+        } else if dryRun {
+            // Quick and read-only - always runs immediately, outside the
+            // concurrency queue, with no row to attribute an outcome to.
+            runFireAndForget(script: script, arguments: ["run", "install", name, liveOrDry])
+        } else if let trackingItem {
+            startOrQueue(trackingItem) { [weak self] in
+                self?.startSingleItemProcess(trackingItem, script: script, arguments: ["run", "install", name, liveOrDry])
+            }
         }
     }
 
-    /// Update a single package or App Store app.
-    func updateSingle(_ item: UpdateItem) {
+    /// Update a single package or App Store app. `forceTerminal` - see
+    /// `installApp` above - is set only by the menu bar's native flyout.
+    func updateSingle(_ item: UpdateItem, forceTerminal: Bool = false) {
         guard let script = scriptURL else { return }
 
         let kind: String
@@ -161,12 +276,15 @@ final class ToolkitController {
         case .formula: kind = "brew"; identifier = item.name
         case .cask: kind = "cask"; identifier = item.name
         case .appStore, .manual: kind = "mas"; identifier = item.id.replacingOccurrences(of: "mas:", with: "").replacingOccurrences(of: "manual:", with: "")
-        case .sparkle, .github: installApp(named: item.name, dryRun: false); return
+        case .sparkle, .github: installApp(named: item.name, dryRun: false, trackingItem: item, forceTerminal: forceTerminal); return
         }
 
         let details = [kind, identifier, item.name, item.currentVersion, item.newVersion]
 
-        if preferences.runUpdatesInTerminal {
+        if preferences.runUpdatesInTerminal || forceTerminal {
+            // One visible terminal window, watched directly - stays
+            // single-flight rather than joining the concurrency queue below.
+            beginTrackingSingleItem(item)
             Task {
                 let outcome = await Self.run(script: script, arguments: ["update_app"] + details)
                 await MainActor.run {
@@ -175,8 +293,9 @@ final class ToolkitController {
                 }
             }
         } else {
-            runDetached(script: script, arguments: ["run", "single"] + details)
-            startProgressWatch()
+            startOrQueue(item) { [weak self] in
+                self?.startSingleItemProcess(item, script: script, arguments: ["run", "single"] + details)
+            }
         }
     }
 
@@ -188,7 +307,7 @@ final class ToolkitController {
     /// would want to watch in a terminal.
     func checkHomebrewDatabase() {
         guard let script = scriptURL else { return }
-        runDetached(script: script, arguments: ["brew_update"])
+        startBulkProcess(script: script, arguments: ["brew_update"])
         startProgressWatch()
     }
 
@@ -283,33 +402,211 @@ final class ToolkitController {
         }
     }
 
-    /// Records a failed process invocation using the same state ProgressBanner
-    /// already renders for a failed update, so a crash is exactly as visible
-    /// as a script-reported failure - never a silent no-op.
+    /// Records a failed *bulk* process invocation using the same state
+    /// ProgressBanner already renders for a failed update, so a crash is
+    /// exactly as visible as a script-reported failure - never a silent no-op.
     private func reportFailure(_ outcome: ProcessOutcome) {
         lastMessage = outcome.summary
         progress = UpdateProgress(state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil)
+        // The process died outright - no need to wait for the progress watch
+        // to go quiet, the row can flip to "failed" immediately. Only
+        // relevant for a terminal-mode single-item run; the headless
+        // concurrent path resolves through `finishActiveItem` instead.
+        if let active = activeSingleItem {
+            itemStatuses[active.id] = .failed
+            endFractionSimulation(for: active.id)
+            activeSingleItem = nil
+            scheduleStatusClear(for: active.id)
+        }
+    }
+
+    // MARK: - Per-item status (headless concurrency queue)
+
+    /// Starts a single item's update now if a concurrency slot is free and no
+    /// bulk run is using the shared lock and cache, otherwise queues it -
+    /// `drainQueue()` starts it automatically once room opens up.
+    private func startOrQueue(_ item: UpdateItem, launch: @escaping () -> Void) {
+        // Already running or already waiting its turn - a second press (the
+        // row's own button is disabled once `rowStatus` is set, but the "..."
+        // menu's duplicate entry isn't always) must not double-launch it.
+        guard itemStatuses[item.id] != .updating, itemStatuses[item.id] != .queued else { return }
+
+        recentItemsByID[item.id] = item
+
+        guard progress?.isRunning != true, activeProcesses.count < preferences.maxConcurrentUpdates else {
+            itemStatuses[item.id] = .queued
+            queuedItemIDs.append(item.id)
+            queuedLaunchers[item.id] = launch
+            return
+        }
+
+        itemStatuses[item.id] = .updating
+        beginFractionSimulation(for: item.id)
+        launch()
+    }
+
+    /// Pops queued items into free concurrency slots, in the order they were
+    /// requested. Safe to call any time - a no-op if the queue is empty, a
+    /// bulk run is in progress, or every slot is already taken.
+    private func drainQueue() {
+        guard progress?.isRunning != true else { return }
+        while activeProcesses.count < preferences.maxConcurrentUpdates, let nextID = queuedItemIDs.first {
+            queuedItemIDs.removeFirst()
+            guard let launch = queuedLaunchers.removeValue(forKey: nextID) else { continue }
+            itemStatuses[nextID] = .updating
+            beginFractionSimulation(for: nextID)
+            launch()
+        }
+    }
+
+    private func startSingleItemProcess(_ item: UpdateItem, script: URL, arguments: [String]) {
+        activeProcesses[item.id] = startProcess(
+            script: script,
+            arguments: arguments,
+            // Several of these can run at once (see the concurrency queue
+            // above) - none of them should touch the shared progress file
+            // ProgressBanner reads for the bulk run. This run resolves its
+            // own outcome via `finishActiveItem`, not that file.
+            extraEnvironment: ["GUIDEAPP_NO_SHARED_PROGRESS": "1"]
+        ) { [weak self] _ in
+            self?.finishActiveItem(item)
+        }
+    }
+
+    /// Called once a concurrent single-item run's process has exited, one way
+    /// or another. Whether it actually updated is read straight from a fresh
+    /// snapshot - the same "is it still on the outdated list" check the shell
+    /// side already uses to decide success/failure, rather than trusting a
+    /// process exit code that `run single` always reports as 0.
+    private func finishActiveItem(_ item: UpdateItem) {
+        activeProcesses[item.id] = nil
+        snapshot = UpdateSnapshot.load()
+        let stillPending = snapshot.items.contains { $0.id == item.id }
+        itemStatuses[item.id] = stillPending ? .failed : .succeeded
+        endFractionSimulation(for: item.id)
+        scheduleStatusClear(for: item.id)
+        drainQueue()
+    }
+
+    private func beginTrackingSingleItem(_ item: UpdateItem) {
+        activeSingleItem = item
+        recentItemsByID[item.id] = item
+        itemStatuses[item.id] = .updating
+        beginFractionSimulation(for: item.id)
+    }
+
+    /// Called once a terminal-mode run's shared progress file has gone quiet.
+    /// See `finishActiveItem` for the headless-concurrent equivalent; both use
+    /// the same "still on the outdated list" verification.
+    private func resolveActiveSingleItem() {
+        guard let active = activeSingleItem else { return }
+        let stillPending = snapshot.items.contains { $0.id == active.id }
+        itemStatuses[active.id] = stillPending ? .failed : .succeeded
+        endFractionSimulation(for: active.id)
+        activeSingleItem = nil
+        scheduleStatusClear(for: active.id)
+    }
+
+    /// Starts (or restarts) the simulated fill for one row. `0` immediately,
+    /// then eased upward on a timer - see `itemFractions` for why this is
+    /// simulated rather than real.
+    private func beginFractionSimulation(for id: String) {
+        fractionTasks[id]?.cancel()
+        itemFractions[id] = 0
+        let start = Date()
+        fractionTasks[id] = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(200))
+                guard !Task.isCancelled else { return }
+                let elapsed = Date().timeIntervalSince(start)
+                // Approaches 92%, slowing down as it gets there - never
+                // claims "done" on its own; only `endFractionSimulation`
+                // (called once the row's real outcome is known) does that.
+                let fraction = 0.92 * (1 - exp(-elapsed / 6))
+                await MainActor.run { self?.itemFractions[id] = fraction }
+            }
+        }
+    }
+
+    private func endFractionSimulation(for id: String) {
+        fractionTasks[id]?.cancel()
+        fractionTasks[id] = nil
+        itemFractions[id] = nil
+    }
+
+    /// Clears a resolved row status a few seconds after it lands, the same
+    /// "flash the result, then go back to normal" behaviour the App Store
+    /// uses. Skipped if that id already moved on to a new run in the meantime.
+    private func scheduleStatusClear(for id: String, after seconds: Double = 3) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            await MainActor.run {
+                guard let self, self.itemStatuses[id] != .updating, self.itemStatuses[id] != .queued else { return }
+                self.itemStatuses[id] = nil
+                self.recentItemsByID[id] = nil
+            }
+        }
+    }
+
+    /// Starts the one shared bulk-run process and tracks it in `bulkProcess`
+    /// for `cancelUpdate()`, reporting a crash/non-zero exit through the same
+    /// path a script-reported failure uses - unless we just cancelled it
+    /// ourselves, in which case that state was already written.
+    private func startBulkProcess(script: URL, arguments: [String]) {
+        bulkProcess = startProcess(script: script, arguments: arguments) { [weak self] outcome in
+            guard let self else { return }
+            self.bulkProcess = nil
+            guard !self.cancelledBulkRun else {
+                self.cancelledBulkRun = false
+                return
+            }
+            if !outcome.succeeded { self.reportFailure(outcome) }
+        }
+    }
+
+    /// For actions with no row or bulk state to update on completion (a dry
+    /// run) - just report a crash if the process fails to launch or exits
+    /// non-zero, the same as `startBulkProcess` without anywhere to stash
+    /// the `Process` afterward.
+    private func runFireAndForget(script: URL, arguments: [String]) {
+        _ = startProcess(
+            script: script,
+            arguments: arguments,
+            extraEnvironment: ["GUIDEAPP_NO_SHARED_PROGRESS": "1"]
+        ) { [weak self] outcome in
+            if !outcome.succeeded { self?.reportFailure(outcome) }
+        }
     }
 
     /// Starts a process and returns immediately, without waiting for it to
-    /// exit. For the headless update path, where the process itself runs for
-    /// as long as the update takes - the progress file, not this call's
-    /// return, is what tells the caller when it is done.
+    /// exit - the process's own lifetime, not this call returning, is what
+    /// tells the caller when the run is done. `onExit` runs on the main actor
+    /// once it has terminated one way or another (including a launch failure,
+    /// reported through the same `ProcessOutcome` shape).
     ///
-    /// A termination handler still watches in the background: if the process
-    /// launch fails outright, or the process later exits non-zero / is killed,
-    /// that is surfaced through the same failure state 'run(script:arguments:)'
-    /// uses - otherwise a crash before the script ever wrote a progress line
-    /// would leave the UI with nothing to show at all.
-    private func runDetached(script: URL, arguments: [String]) {
+    /// The caller decides what "done" means for it - a shared bulk slot, a
+    /// per-item slot in `activeProcesses`, or nothing at all - this only
+    /// owns the `Process`/`Pipe` plumbing common to all three.
+    private func startProcess(
+        script: URL,
+        arguments: [String],
+        extraEnvironment: [String: String] = [:],
+        onExit: @escaping (ProcessOutcome) -> Void
+    ) -> Process? {
         let process = Process()
         process.executableURL = URL(filePath: "/bin/zsh")
         process.arguments = [script.path(percentEncoded: false)] + arguments
         process.standardOutput = FileHandle.nullDevice
+        if !extraEnvironment.isEmpty {
+            // Setting `environment` at all replaces the inherited one, not
+            // merges with it - has to start from the real one (PATH, HOME,
+            // ...) or the script cannot find `brew`/`mas`/etc.
+            process.environment = ProcessInfo.processInfo.environment.merging(extraEnvironment) { _, new in new }
+        }
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
 
-        process.terminationHandler = { [weak self] finished in
+        process.terminationHandler = { finished in
             let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
             let stderrText = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -318,16 +615,15 @@ final class ToolkitController {
                 reason: finished.terminationReason,
                 stderr: stderrText
             )
-            guard !outcome.succeeded else { return }
-            Task { @MainActor in
-                self?.reportFailure(outcome)
-            }
+            Task { @MainActor in onExit(outcome) }
         }
 
         do {
             try process.run()
+            return process
         } catch {
-            reportFailure(ProcessOutcome(exitCode: -1, reason: .uncaughtSignal, stderr: error.localizedDescription))
+            onExit(ProcessOutcome(exitCode: -1, reason: .uncaughtSignal, stderr: error.localizedDescription))
+            return nil
         }
     }
 

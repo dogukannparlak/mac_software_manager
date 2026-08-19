@@ -180,6 +180,7 @@ final class AppPreferences {
     private static let intervalKey = "com.macupdater.guide.refreshMinutes"
     private static let hideDockIconKey = "com.macupdater.guide.hideDockIcon"
     private static let runInTerminalKey = "com.macupdater.guide.runUpdatesInTerminal"
+    private static let maxConcurrentUpdatesKey = "com.macupdater.guide.maxConcurrentUpdates"
 
     /// How often the menu bar data is rebuilt, in minutes.
     var refreshMinutes: Int {
@@ -193,6 +194,17 @@ final class AppPreferences {
     var runUpdatesInTerminal: Bool {
         didSet { UserDefaults.standard.set(runUpdatesInTerminal, forKey: Self.runInTerminalKey) }
     }
+
+    /// How many single-item updates ("Update" pressed on one row) can run at
+    /// once in the background. Only applies to headless runs - a terminal
+    /// window is already one run someone is watching directly, so that path
+    /// stays single-flight the way it always has. Anything started past this
+    /// limit is queued and starts automatically as the next slot frees up.
+    var maxConcurrentUpdates: Int {
+        didSet { UserDefaults.standard.set(maxConcurrentUpdates, forKey: Self.maxConcurrentUpdatesKey) }
+    }
+
+    static let maxConcurrentUpdatesChoices = [1, 2, 3, 4]
 
     /// Live in the menu bar only: no Dock icon, no app menu.
     /// The menu bar panel keeps its own Quit and Settings entries, so nothing
@@ -215,6 +227,9 @@ final class AppPreferences {
 
         hideDockIcon = UserDefaults.standard.bool(forKey: Self.hideDockIconKey)
         runUpdatesInTerminal = UserDefaults.standard.bool(forKey: Self.runInTerminalKey)
+
+        let storedConcurrency = UserDefaults.standard.integer(forKey: Self.maxConcurrentUpdatesKey)
+        maxConcurrentUpdates = Self.maxConcurrentUpdatesChoices.contains(storedConcurrency) ? storedConcurrency : 2
     }
 
     static func intervalLabel(_ minutes: Int) -> Localized {

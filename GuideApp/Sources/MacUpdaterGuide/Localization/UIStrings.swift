@@ -18,6 +18,31 @@ enum UIStrings {
     )
 
     static let updateEverything = Localized("Update Everything", "Hepsini Güncelle")
+    /// Menu bar row that opens the native "Pending Updates" flyout menu -
+    /// "%d" is the pending count.
+    static let pendingUpdatesFormat = Localized("Pending Updates (%d)", "Bekleyen Güncellemeler (%d)")
+    /// Row at the bottom of that flyout - jumps to the full app window
+    /// (sidebar, Installed Apps, History, Settings, ...) for anyone who
+    /// wants more than the quick list.
+    static let openFullApp = Localized("Open Full App", "Tüm Uygulamayı Aç")
+    /// Cancel button on the progress banner, and its confirmation dialog -
+    /// only shown for a headless run, where there is a real process to stop.
+    static let cancelUpdate = Localized("Cancel", "İptal Et")
+    static let cancelUpdateConfirmTitle = Localized("Cancel this update?", "Bu güncelleme iptal edilsin mi?")
+    static let cancelUpdateConfirmMessage = Localized(
+        "Stopping now may leave a package partially installed. You can update it again afterward.",
+        "Şimdi durdurmak bir paketi yarım kurulmuş halde bırakabilir. Daha sonra tekrar güncelleyebilirsiniz."
+    )
+    static let cancelUpdateConfirmAction = Localized("Cancel Update", "Güncellemeyi İptal Et")
+    static let cancelUpdateKeepGoing = Localized("Keep Going", "Devam Et")
+
+    static let maxConcurrentUpdates = Localized("Simultaneous Updates", "Aynı Anda Yapılabilecek Güncelleme Sayısı")
+    static let maxConcurrentUpdatesHelp = Localized(
+        "How many background updates can run at once. Anything started beyond this is queued and starts automatically once a slot frees up.",
+        "Arka planda aynı anda kaç güncellemenin çalışabileceği. Bunun ötesinde başlatılanlar kuyruğa alınır ve bir yuva boşaldığında otomatik başlar."
+    )
+    /// Per-row status while a single-item update is waiting for a free slot.
+    static let queuedRowStatus = Localized("Queued", "Sırada")
     static let refreshNow = Localized("Refresh Now", "Şimdi Yenile")
     static let openGuide = Localized("Open Guide", "Rehberi Aç")
     static let settings = Localized("Settings…", "Ayarlar…")
@@ -127,6 +152,10 @@ extension UIStrings {
     static let updateThis = Localized("Update", "Güncelle")
     static let dryRun = Localized("Dry run (no changes)", "Kuru çalıştırma (değişiklik yok)")
     static let ignoreThis = Localized("Ignore this app", "Bu uygulamayı yoksay")
+    /// Per-row outcome, shown in place of the Update button once a single-item
+    /// run finishes - the App Store-style "Updated"/"Update failed" state.
+    static let updatedRowStatus = Localized("Updated", "Güncellendi")
+    static let updateFailedRowStatus = Localized("Update failed", "Güncelleme başarısız")
 }
 
 // MARK: - History, About, login item

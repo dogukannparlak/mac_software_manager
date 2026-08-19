@@ -32,6 +32,10 @@ struct UpdateProgress: Equatable, Sendable {
         /// Distinct from a stale "running" state: this means the process is
         /// definitely gone, not just quiet.
         case processError = "process-error"
+        /// Set only by `ToolkitController.cancelUpdate()`, never written to
+        /// the progress file - the user stopped this run on purpose, so it
+        /// gets its own, non-alarming label instead of "Update failed".
+        case cancelled
 
         var label: Localized {
             switch self {
@@ -47,6 +51,7 @@ struct UpdateProgress: Equatable, Sendable {
             case .complete: return Localized("Finished", "Bitti")
             case .unknown: return Localized("Working…", "Çalışıyor…")
             case .processError: return Localized("Update failed", "Güncelleme başarısız oldu")
+            case .cancelled: return Localized("Cancelled", "İptal edildi")
             }
         }
     }
