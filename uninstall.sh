@@ -70,9 +70,59 @@ else
     echo "Could not automatically determine SwiftBar plugin directory."
 fi
 
-# 2. Remove Data & Config
+# 2. Remove the GuideApp Application
 echo ""
-echo "Step 2: Local Data & Configuration"
+echo "Step 2: GuideApp Application"
+GUIDE_APP="/Applications/MacUpdaterGuide.app"
+GUIDE_BUNDLE_ID=""
+if [[ -d "$GUIDE_APP" ]]; then
+    # Read the bundle id from the app itself rather than hardcoding it, so this
+    # keeps working if the identifier ever changes.
+    GUIDE_BUNDLE_ID=$(defaults read "$GUIDE_APP/Contents/Info" CFBundleIdentifier 2>/dev/null || echo "")
+    if ask_confirmation "Delete $GUIDE_APP?"; then
+        rm -rf "$GUIDE_APP"
+        echo "Application removed."
+    fi
+else
+    echo "GuideApp not found in /Applications."
+fi
+
+# 3. Remove Login Item / Launch Agent
+echo ""
+echo "Step 3: GuideApp Login Item"
+FOUND_LOGIN_ITEM=0
+
+# Legacy-style LaunchAgents plist (GuideApp itself uses SMAppService, not a
+# LaunchAgent, but check defensively in case of older installs).
+while IFS= read -r plist; do
+    [[ -e "$plist" ]] || continue
+    FOUND_LOGIN_ITEM=1
+    if ask_confirmation "Remove launch agent $plist?"; then
+        launchctl unload "$plist" 2>/dev/null || true
+        rm -f "$plist"
+        echo "Launch agent removed."
+    fi
+done < <(find "$HOME/Library/LaunchAgents" -maxdepth 1 -iname "*macupdaterguide*" 2>/dev/null)
+
+# Legacy-style login item added via System Events (older mechanism).
+if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -qi "MacUpdaterGuide"; then
+    FOUND_LOGIN_ITEM=1
+    if ask_confirmation "Remove GuideApp from Login Items?"; then
+        osascript -e 'tell application "System Events" to delete every login item whose name is "MacUpdaterGuide"' 2>/dev/null || true
+        echo "Login item removed."
+    fi
+fi
+
+if [[ $FOUND_LOGIN_ITEM -eq 0 ]]; then
+    echo "GuideApp registers as a login item via SMAppService, which can only be turned off from within the app or System Settings."
+    if ask_confirmation "Open System Settings > Login Items now to disable it?"; then
+        open "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+    fi
+fi
+
+# 4. Remove Data & Config
+echo ""
+echo "Step 4: Local Data & Configuration"
 APP_DIR="$HOME/Library/Application Support/MacSoftwareUpdater"
 if [[ -d "$APP_DIR" ]]; then
     if ask_confirmation "Delete logs and configuration files in $APP_DIR?"; then
@@ -83,9 +133,20 @@ else
     echo "No local data directory found."
 fi
 
-# 3. Optional Dependencies
+# 5. Remove GuideApp Preferences (UserDefaults)
 echo ""
-echo "Step 3: Dependencies (Optional)"
+echo "Step 5: GuideApp Preferences"
+if [[ -n "$GUIDE_BUNDLE_ID" ]]; then
+    if ask_confirmation "Delete GuideApp preferences ($GUIDE_BUNDLE_ID)?"; then
+        defaults delete "$GUIDE_BUNDLE_ID" 2>/dev/null && echo "Preferences removed." || echo "No preferences found for $GUIDE_BUNDLE_ID."
+    fi
+else
+    echo "GuideApp not found, skipping preferences cleanup."
+fi
+
+# 6. Optional Dependencies
+echo ""
+echo "Step 6: Dependencies (Optional)"
 
 if command -v mas &> /dev/null; then
     if ask_confirmation "Uninstall 'mas' (App Store CLI)?"; then
