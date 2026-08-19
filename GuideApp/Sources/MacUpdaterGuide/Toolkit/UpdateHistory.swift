@@ -121,7 +121,8 @@ struct ConfigWarning: Identifiable, Hashable, Sendable {
 
         let knownKeys: Set<String> = [
             "PREFERRED_TERMINAL", "MAS_ENABLED", "UPDATE_BRANCH",
-            "AUTOSTART", "CLEANUP_ENABLED", "AUTO_INSTALL_APPS"
+            "AUTOSTART", "CLEANUP_ENABLED", "AUTO_INSTALL_APPS",
+            "CODEBERG_USERNAME"
         ]
 
         var warnings: [ConfigWarning] = []
