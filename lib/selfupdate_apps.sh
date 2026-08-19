@@ -371,7 +371,7 @@ collect_github_homepages() {
         [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
     done
 
-    for app_path in /Applications/*.app(N); do
+    for app_path in /Applications/*.app(N) /Applications/*/*.app(N); do
         app_name="${${app_path:t}%.app}"
 
         [[ "$app_path" == /Applications/Setapp/* ]] && continue
@@ -464,7 +464,7 @@ collect_app_updates() {
         [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
     done
 
-    for app_path in /Applications/*.app(N); do
+    for app_path in /Applications/*.app(N) /Applications/*/*.app(N); do
         app_name="${${app_path:t}%.app}"
         method=""
         feed=""
