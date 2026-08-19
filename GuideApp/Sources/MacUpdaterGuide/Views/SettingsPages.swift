@@ -109,6 +109,18 @@ struct GeneralSettingsPage: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+
+                    Divider()
+
+                    Picker(UIStrings.maxConcurrentUpdates[loc.language], selection: $preferences.maxConcurrentUpdates) {
+                        ForEach(AppPreferences.maxConcurrentUpdatesChoices, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    Text(UIStrings.maxConcurrentUpdatesHelp[loc.language])
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

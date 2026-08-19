@@ -1,14 +1,16 @@
 import SwiftUI
 
-/// Names what an update run is doing right now.
-///
-/// The run itself stays in the terminal where it can be watched and stopped;
-/// this just answers "which app is it on?" without switching windows.
+/// Names what an update run is doing right now, and - where the caller wires
+/// up `onCancel` - offers a way to stop it without switching to a terminal.
 struct ProgressBanner: View {
     @Environment(LocalizationStore.self) private var loc
 
     let progress: UpdateProgress
     var compact: Bool = false
+    /// Only passed where there is a real process to stop (the full Updates
+    /// page) - the menu bar's copy of this banner stays read-only, as
+    /// documented on `MenuBarView`.
+    var onCancel: (() -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
@@ -48,6 +50,16 @@ struct ProgressBanner: View {
             }
 
             Spacer(minLength: 0)
+
+            if progress.isRunning, let onCancel {
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(compact ? .body : .title3)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help(UIStrings.cancelUpdate[loc.language])
+            }
         }
         .padding(compact ? 10 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
