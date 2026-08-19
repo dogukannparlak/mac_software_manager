@@ -433,7 +433,10 @@ run_mode_system() {
             if [[ -n "$old_cask" && -n "$new_cask" ]]; then
                 echo "  Migrating: $old_cask → $new_cask"
                 brew uninstall --cask "$old_cask" 2>/dev/null || true
-                brew install --cask "$new_cask" 2>/dev/null || true
+                if ! install_err=$(brew install --cask "$new_cask" 2>&1); then
+                    echo "❌ Migration failed: $old_cask → $new_cask. Will retry on next run."
+                    echo "   $install_err"
+                fi
             fi
         done
         # Re-run upgrade to catch anything else
