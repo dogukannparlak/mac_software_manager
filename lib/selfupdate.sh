@@ -163,7 +163,7 @@ check_for_updates_manual() {
     if [[ "$http_code" == "304" ]]; then
         echo "✅ Status 304: No changes."
         rm -f "$PENDING_FLAG" "$temp_headers" "$temp_body"
-        osascript -e "display notification \"Plugin is up to date.\" with title \"Mac Software Manager\""
+        notify "Plugin is up to date."
         return 0
     fi
 
@@ -191,7 +191,7 @@ check_for_updates_manual() {
 
     if [[ "$source_verified" != "true" ]]; then
         echo "❌ Error: Update connection to GitHub and Codeberg failed."
-        osascript -e "display notification \"Update connection to Github and Codeberg failed.\" with title \"Mac Software Manager\""
+        notify "Update connection to Github and Codeberg failed."
         return 1
     fi
 
@@ -211,21 +211,21 @@ check_for_updates_manual() {
     if [[ "$local_hash" == "$remote_hash" ]]; then
         echo "ℹ️ Files are identical."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"You have the latest version (v$local_ver).\" with title \"Mac Software Manager\""
+        notify "You have the latest version (v$local_ver)."
 
     elif [[ "$local_ver" == "$remote_ver" ]]; then
         echo "ℹ️ Version matches, but hashes not. Ignoring. Verify local and remote version, probably cosmetical changes..."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"Up to date (v$local_ver).\" with title \"Mac Software Manager\""
+        notify "Up to date (v$local_ver)."
 
     elif is-at-least "$remote_ver" "$local_ver"; then
         echo "⚠️ Remote version (v$remote_ver) is OLDER than local (v$local_ver)."
         rm -f "$PENDING_FLAG"
-        osascript -e "display notification \"Server has older version (v$remote_ver).\" with title \"Mac Software Manager\" subtitle \"Keeping local v$local_ver.\""
+        notify "Server has older version (v$remote_ver)." "Keeping local v$local_ver."
 
     else
         echo "✅ Valid Update: v$remote_ver > v$local_ver"
         touch "$PENDING_FLAG"
-        osascript -e "display notification \"New version v$remote_ver available!\" with title \"Mac Software Manager\" subtitle \"Click 'Update All' to install.\""
+        notify "New version v$remote_ver available!" "Click 'Update All' to install."
     fi
 }

@@ -374,11 +374,11 @@ if [[ "$1" == "change_interval" ]]; then
 
     if [[ "$SCRIPT_FILE" != "$NEW_PATH" ]]; then
         mv "$SCRIPT_FILE" "$NEW_PATH" && chmod +x "$NEW_PATH"
-        osascript -e "display notification \"Update frequency changed to $SELECTION.\" with title \"Mac Software Manager\""
+        notify "Update frequency changed to $SELECTION."
         sleep 2
         open -g "swiftbar://refreshallplugins" || true
     else
-         osascript -e "display notification \"Frequency is already set to $SELECTION.\" with title \"Mac Software Manager\""
+         notify "Frequency is already set to $SELECTION."
     fi
     exit 0
 fi
@@ -411,7 +411,7 @@ if [[ "$1" == "toggle_autostart" ]]; then
         fi
     fi
 
-    osascript -e "display notification \"$MSG\" with title \"Mac Software Manager\""
+    notify "$MSG"
     open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
     exit 0
 fi
@@ -455,9 +455,9 @@ EOF
     fi
 
     if [[ "$SELECTION" == "$CURRENT" ]]; then
-        osascript -e "display notification \"Terminal is already set to $SELECTION.\" with title \"Mac Software Manager\""
+        notify "Terminal is already set to $SELECTION."
     else
-        osascript -e "display notification \"Terminal changed to $SELECTION.\" with title \"Mac Software Manager\""
+        notify "Terminal changed to $SELECTION."
     fi
 
     exit 0
@@ -487,7 +487,7 @@ if [[ "$1" == "change_branch" ]]; then
 
     # Check if change is actually needed
     if [[ "$NEW_BRANCH" == "$CURRENT" ]]; then
-        osascript -e "display notification \"Already on $SELECTION channel.\" with title \"Mac Software Manager\""
+        notify "Already on $SELECTION channel."
         exit 0
     fi
 
@@ -529,11 +529,11 @@ if [[ "$1" == "change_branch" ]]; then
         rm -f "$ETAG_FILE"
         spawn_cache_refresh "force"
 
-        osascript -e "display notification \"Switched to $SELECTION channel.\" with title \"Mac Software Manager\""
+        notify "Switched to $SELECTION channel."
         open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
     else
         echo "❌ Error: Could not install the $NEW_BRANCH version. Reverting config."
-        osascript -e "display notification \"Channel switch failed. Config reverted.\" with title \"Mac Software Manager\""
+        notify "Channel switch failed. Config reverted."
         sed -i '' "s/^UPDATE_BRANCH=.*/UPDATE_BRANCH=\"$CURRENT\"/" "$CONFIG_FILE"
     fi
     exit 0
@@ -704,7 +704,7 @@ if [[ "$1" == "about_dialog" ]]; then
         if [[ -n "$PROJECT_URL_CB" ]]; then
             open "$PROJECT_URL_CB"
         else
-            osascript -e 'display notification "No Codeberg mirror is configured for this install." with title "Mac Software Manager"'
+            notify "No Codeberg mirror is configured for this install."
         fi
     fi
     exit 0

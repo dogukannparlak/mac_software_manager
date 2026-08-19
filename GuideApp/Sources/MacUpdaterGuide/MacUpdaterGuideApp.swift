@@ -126,6 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
         }
+
+        NotificationBridge.shared.start()
     }
 
     /// Clicking the Dock icon with no window open should bring the guide back.

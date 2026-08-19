@@ -163,6 +163,48 @@ SomeApp|https://example.com
 - Writer: `collect_github_homepages()`, `update_system.1h.sh` (~line 1482).
 - Swift reader: `InstalledInventory.websiteMap()`, `InstalledApps.swift`.
 
+## Notification queue (`notifications/`)
+
+Not a cache - each file is a one-shot event, not TTL-refreshed state - but
+the same dual-parser risk as everything above, so it follows the same `vN|`
+convention rather than starting a new one. Lives at
+`$APP_DIR/notifications/` (a sibling of `cache/`, not inside it).
+
+The shell engine can run headless - cron, SwiftBar, a terminal - with no
+guarantee GuideApp is even running, so it cannot call into the app directly.
+Instead, whenever GuideApp is running (checked with `pgrep -x
+MacUpdaterGuide`) it drops one file per notification into this directory;
+GuideApp watches the directory and turns each into a native
+`UNUserNotificationCenter` alert, deleting the file once read. When GuideApp
+is not running, or the file cannot be written, the shell falls back to a
+plain `osascript display notification` (shows up labeled "Script Editor",
+no action button) instead of queuing anything.
+
+One file per notification, named `notify.<pid>.<random>` (the name carries
+no meaning - readers must not parse it, only iterate the directory).
+Written via a temp file + atomic rename into place, so the directory watcher
+never observes a partially-written file.
+
+```
+v1|title|subtitle|body
+```
+
+| # | Field | Values | Notes |
+|---|---|---|---|
+| 1 | version | `v1` | Bump on any incompatible change to the fields below |
+| 2 | title | any string, may be empty | always `Mac Software Manager` today |
+| 3 | subtitle | any string, may be empty | |
+| 4 | body | any string, may be empty | the notification's main text |
+
+Canonical example (used verbatim by both test suites):
+```
+v1|Mac Software Manager|Update Complete|3 package(s) updated successfully.
+```
+
+- Shell writer: `notify()` in `lib/utils.sh`.
+- Swift reader: `NotificationBridge` in
+  `GuideApp/Sources/MacUpdaterGuide/Toolkit/NotificationBridge.swift`.
+
 ## Explicitly out of scope
 
 - `brew_casks`, `brew_formulae`, `mas_list`, `brew_pinned`, `mas_outdated` -

@@ -300,7 +300,7 @@ run_mode_plugin() {
             for f in "${engine_files[@]}"; do rm -f "${engine_temp[$f]}"; done
             echo "❌ Plugin update aborted: not every engine file passed verification. The running version was left untouched."
             if [[ "$MODE" == "plugin" ]]; then
-                osascript -e "display notification \"Plugin update failed integrity check.\" with title \"Mac Software Manager\"" 2>/dev/null || true
+                notify "Plugin update failed integrity check."
                 sleep 2
                 exit 1
             fi
@@ -322,7 +322,7 @@ run_mode_system() {
 	echo "📦 Updating Homebrew Database..."
 	if ! brew_update_with_retry; then
 		echo "❌ Error: Homebrew update failed after multiple retries."
-		osascript -e 'display notification "Homebrew failed to refresh after several retries - the update did not run." with title "Mac Software Manager" subtitle "Update Failed"' 2>/dev/null || true
+		notify "Homebrew failed to refresh after several retries - the update did not run." "Update Failed"
 		exit 1
 	fi
 
@@ -550,13 +550,13 @@ run_mode_system() {
     integer count_updated=$(( count_brew_pending + count_mas_pending - count_failed ))
     if (( count_failed > 0 )); then
         echo "⚠️ Update finished with $count_failed failed item(s). See history for details."
-        osascript -e "display notification \"$count_failed item(s) failed to update. See History in the menu for details.\" with title \"Mac Software Manager\" subtitle \"Update Finished With Errors\"" 2>/dev/null || true
+        notify "$count_failed item(s) failed to update. See History in the menu for details." "Update Finished With Errors"
     elif (( count_updated > 0 )); then
         echo "✅ Update Complete!"
-        osascript -e "display notification \"$count_updated package(s) updated successfully.\" with title \"Mac Software Manager\" subtitle \"Update Complete\"" 2>/dev/null || true
+        notify "$count_updated package(s) updated successfully." "Update Complete"
     else
         echo "✅ Update Complete!"
-        osascript -e 'display notification "Everything was already up to date." with title "Mac Software Manager" subtitle "Update Complete"' 2>/dev/null || true
+        notify "Everything was already up to date." "Update Complete"
     fi
     echo "🔄 Refreshing SwiftBar..."
     open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true

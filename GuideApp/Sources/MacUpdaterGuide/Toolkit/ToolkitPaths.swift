@@ -18,6 +18,14 @@ enum ToolkitPaths {
         supportDirectory.appending(path: "cache", directoryHint: .isDirectory)
     }
 
+    /// Where the shell engine drops one-shot notification requests for
+    /// NotificationBridge to pick up. A sibling of cacheDirectory, not inside
+    /// it - these are events, not TTL-refreshed state. See CACHE_FORMAT.md
+    /// ("Notification queue").
+    static var notificationsDirectory: URL {
+        supportDirectory.appending(path: "notifications", directoryHint: .isDirectory)
+    }
+
     static var settingsFile: URL { supportDirectory.appending(path: "settings.conf") }
     static var ignoredFile: URL { supportDirectory.appending(path: "ignored_apps.conf") }
     static var trackedAppsFile: URL { supportDirectory.appending(path: "tracked_apps.conf") }

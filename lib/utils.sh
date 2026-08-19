@@ -32,6 +32,51 @@ escape_ere() {
 }
 
 # ------------------------------------------------------------------------------
+# NOTIFICATIONS
+# ------------------------------------------------------------------------------
+# GuideApp watches $APP_DIR/notifications for one-shot request files and turns
+# each into a native UNUserNotificationCenter alert (title "Mac Software
+# Manager", an "Open" action) - see CACHE_FORMAT.md ("Notification queue") for
+# the file format both sides agree on. That only works while GuideApp is
+# actually running to pick the file up, so a bare 'osascript display
+# notification' (shows up labeled "Script Editor", no action button) remains
+# the fallback whenever it is not, or whenever the handoff fails for any
+# other reason.
+NOTIFY_DIR="$APP_DIR/notifications"
+
+# Usage: notify <body> [subtitle]
+# Never aborts the caller: every fallible step here is guarded, so this is
+# safe to call under 'set -e'.
+notify() {
+    local title="Mac Software Manager"
+    local body="$1"
+    local subtitle="${2:-}"
+
+    # Pipe-delimited, one line per CACHE_FORMAT.md convention: strip anything
+    # that would break either rule.
+    body="${body//$'\n'/ }"; body="${body//|/}"
+    subtitle="${subtitle//$'\n'/ }"; subtitle="${subtitle//|/}"
+
+    if pgrep -x "MacUpdaterGuide" > /dev/null 2>&1; then
+        mkdir -p "$NOTIFY_DIR" 2>/dev/null || true
+        local final_file="$NOTIFY_DIR/notify.$$.$RANDOM"
+        local tmp_file="${final_file}.tmp"
+        if print -r -- "v1|$title|$subtitle|$body" > "$tmp_file" 2>/dev/null; then
+            if [[ -s "$tmp_file" ]] && mv "$tmp_file" "$final_file" 2>/dev/null; then
+                return 0
+            fi
+        fi
+        rm -f "$tmp_file" 2>/dev/null || true
+    fi
+
+    if [[ -n "$subtitle" ]]; then
+        osascript -e "display notification \"$(applescript_escape "$body")\" with title \"$(applescript_escape "$title")\" subtitle \"$(applescript_escape "$subtitle")\"" 2>/dev/null || true
+    else
+        osascript -e "display notification \"$(applescript_escape "$body")\" with title \"$(applescript_escape "$title")\"" 2>/dev/null || true
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # 3a1. PROCESS TIMEOUT
 # ------------------------------------------------------------------------------
 # Every curl call in this script has its own --connect-timeout/--max-time, but
