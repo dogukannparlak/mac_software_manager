@@ -56,11 +56,12 @@ EXPANDED_DIR="${PLUGIN_DIR/#\~/$HOME}"
 
 if [[ -d "$EXPANDED_DIR" ]]; then
     # Look for any version of the script (1h, 1d, etc.)
-    FILES=($EXPANDED_DIR/update_system.*.sh)
-    if [[ -e ${FILES[1]} ]]; then
+    FILES=()
+    while IFS= read -r -d '' f; do FILES+=("$f"); done < <(find "$EXPANDED_DIR" -maxdepth 1 -name 'update_system.*.sh' -print0)
+    if [[ ${#FILES[@]} -gt 0 ]]; then
         echo "Found plugin(s) in: $EXPANDED_DIR"
         if ask_confirmation "Delete update_system script from SwiftBar?"; then
-            rm -f $EXPANDED_DIR/update_system.*.sh
+            rm -f "${FILES[@]}"
             echo "Plugin removed."
         fi
     else
