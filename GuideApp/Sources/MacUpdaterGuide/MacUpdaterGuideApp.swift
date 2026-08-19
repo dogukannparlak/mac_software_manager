@@ -58,6 +58,7 @@ struct MacUpdaterGuideApp: App {
             }
         }
 
+
         // The menu bar item is created by this app - no plugin host involved.
         // Its content is a read-only status panel; anything configurable lives
         // in Settings, because changing preferences through nested menu bar
