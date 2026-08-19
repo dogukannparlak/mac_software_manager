@@ -432,7 +432,9 @@ run_mode_system() {
             new_cask=$(echo "$line" | sed -E "s/.*was renamed to ([^.]+).*/\1/")
             if [[ -n "$old_cask" && -n "$new_cask" ]]; then
                 echo "  Migrating: $old_cask → $new_cask"
-                brew uninstall --cask "$old_cask" 2>/dev/null || true
+                if ! uninstall_err=$(brew uninstall --cask "$old_cask" 2>&1); then
+                    echo "⚠️ Could not uninstall $old_cask before migrating: $uninstall_err"
+                fi
                 if ! install_err=$(brew install --cask "$new_cask" 2>&1); then
                     echo "❌ Migration failed: $old_cask → $new_cask. Will retry on next run."
                     echo "   $install_err"
