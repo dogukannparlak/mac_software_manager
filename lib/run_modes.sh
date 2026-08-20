@@ -196,20 +196,33 @@ run_mode_single() {
         fi
         ;;
     "mas")
-        # Use upgrade instead of install to force update for existing apps
-        if [[ "$MAS_ENABLED" == "1" ]]; then
-            if mas list | awk '{print $1}' | grep -q "^${id}$"; then
-                mas upgrade "$id" || update_rc=$?
-            else
-                mas install "$id" || update_rc=$?
-            fi
-            if (( update_rc == 0 )) && mas_is_outdated "$id"; then
-                echo "⚠️ $name is still reported as outdated after the upgrade."
-                update_rc=1
-            fi
-        else
+        if [[ "$MAS_ENABLED" != "1" ]]; then
             echo "❌ Error: App Store updates are disabled."
             exit 1
+        fi
+        # Every other mas call site in this project guards on this; without
+        # it, a machine with MAS_ENABLED=1 but no mas installed dies here on
+        # exit 127 with nothing said about why.
+        if ! command -v mas &> /dev/null; then
+            echo "❌ Error: 'mas' is not installed, so App Store apps cannot be updated."
+            echo "   Install it with: brew install mas"
+            exit 1
+        fi
+        # Use upgrade instead of install to force update for existing apps.
+        # mas_is_installed reads the whole list and matches in the shell: the
+        # old 'mas list | awk | grep -q' pipeline let grep exit at the first
+        # match, killing mas and awk with SIGPIPE, and 'run' runs under
+        # 'set -o pipefail' - so a FOUND app produced status 141, the
+        # condition read false, and 'mas install' ran on an app that was
+        # already installed.
+        if mas_is_installed "$id"; then
+            mas upgrade "$id" || update_rc=$?
+        else
+            mas install "$id" || update_rc=$?
+        fi
+        if (( update_rc == 0 )) && mas_is_outdated "$id"; then
+            echo "⚠️ $name is still reported as outdated after the upgrade."
+            update_rc=1
         fi
         ;;
     esac

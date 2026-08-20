@@ -77,15 +77,29 @@ brew_outdated_tokens() {
     done
 }
 
-# App Store IDs currently reported as outdated, one per line
-mas_outdated_ids() {
+# First field of every 'mas <subcommand>' line that starts with a numeric App
+# Store ID, one per line. Reads the whole output before matching on purpose:
+# piping mas into a short-circuiting reader (grep -q, head) kills it with
+# SIGPIPE, and under this script's 'set -o pipefail' that failure is
+# indistinguishable from "no match".
+mas_ids_from() {
     command -v mas &> /dev/null || return 0
     local line trimmed
-    for line in "${(@f)$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null || true)}"; do
+    for line in "${(@f)$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas "$1" 2>/dev/null || true)}"; do
         trimmed="${line#"${line%%[![:space:]]*}"}"
         [[ "$trimmed" =~ ^[0-9]+ ]] || continue
         print -r -- "${trimmed%% *}"
     done
+}
+
+# App Store IDs currently reported as outdated, one per line
+mas_outdated_ids() {
+    mas_ids_from outdated
+}
+
+# App Store IDs currently installed, one per line
+mas_installed_ids() {
+    mas_ids_from list
 }
 
 # Exact-match lookups (no regex: brew tokens contain '+', '.' and '@')
@@ -100,6 +114,14 @@ brew_is_outdated() {
 mas_is_outdated() {
     local target="$1" app_id
     for app_id in "${(@f)$(mas_outdated_ids)}"; do
+        [[ "$app_id" == "$target" ]] && return 0
+    done
+    return 1
+}
+
+mas_is_installed() {
+    local target="$1" app_id
+    for app_id in "${(@f)$(mas_installed_ids)}"; do
         [[ "$app_id" == "$target" ]] && return 0
     done
     return 1

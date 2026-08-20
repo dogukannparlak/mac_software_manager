@@ -146,3 +146,107 @@ load "test_helper"
     assert_contains "PROGRESS: v1|done|single|MyFakeName||" "$output"
     [ "$status" -eq 0 ]
 }
+
+# --- 'single' mode, App Store apps ---
+#
+# Reported on a real machine: clicking Update on an already-installed App
+# Store app ran 'mas install' instead of 'mas upgrade'. The install/upgrade
+# choice was made by 'mas list | awk | grep -q "^$id$"', and 'run' executes
+# under 'set -o pipefail' (update_system.1h.sh section 5): grep -q exits at
+# the FIRST match, mas and awk then die of SIGPIPE, and pipefail reports the
+# pipeline as 141 - so finding the app made the condition read false.
+
+@test "run_mode_single upgrades an installed App Store app even when 'mas list' is long" {
+    # The list has to be bigger than the pipe buffer for SIGPIPE to land, so
+    # this stub prints the target first and then ~20k filler lines - exactly
+    # the shape (a real 'mas list') that made the old pipeline misfire.
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=0
+        mas() {
+            case "$1" in
+                list)
+                    echo "497799835  Xcode  (14.2)"
+                    repeat 20000; do echo "9000001  Filler App  (1.0)"; done
+                    ;;
+                outdated) ;;
+                *) echo "STUB mas $*" ;;
+            esac
+            return 0
+        }
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -o pipefail
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+        echo "HISTORY: $(cat "$HISTORY_FILE")"
+    '
+    assert_contains "STUB mas upgrade 497799835" "$output"
+    refute_contains "STUB mas install" "$output"
+    assert_contains "|497799835|ok" "$output"
+}
+
+@test "run_mode_single still installs an App Store app that is not in 'mas list'" {
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=0
+        mas() {
+            case "$1" in
+                list) echo "111111111  Some Other App  (1.0)" ;;
+                outdated) ;;
+                *) echo "STUB mas $*" ;;
+            esac
+            return 0
+        }
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -o pipefail
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+    '
+    assert_contains "STUB mas install 497799835" "$output"
+    refute_contains "STUB mas upgrade" "$output"
+}
+
+@test "run_mode_single reports a missing 'mas' instead of dying with exit 127" {
+    # Every other mas call site pairs MAS_ENABLED with 'command -v mas';
+    # run_mode_single did not, so MAS_ENABLED=1 without mas installed ran a
+    # command that does not exist.
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        PATH=/usr/bin:/bin
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+        echo "RC: $?"
+    '
+    assert_contains "is not installed" "$output"
+    assert_contains "RC: 1" "$output"
+    refute_contains "RC: 127" "$output"
+}
+
+@test "run_mode_single still refuses App Store updates when MAS_ENABLED is 0" {
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=0
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+        echo "RC: $?"
+    '
+    assert_contains "App Store updates are disabled" "$output"
+    assert_contains "RC: 1" "$output"
+}
