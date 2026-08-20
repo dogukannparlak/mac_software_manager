@@ -42,6 +42,12 @@ struct UpdateProgress: Equatable, Sendable {
         /// the progress file - the user stopped this run on purpose, so it
         /// gets its own, non-alarming label instead of "Update failed".
         case cancelled
+        /// Set only by `ToolkitController`'s progress watch, never written to
+        /// the progress file: the run was asked for, but nothing of it ever
+        /// reached `cache/progress` within `ProgressWatch.startupTimeout`.
+        /// Distinct from `.processError` - there is no exit status here,
+        /// nothing was ever seen to start.
+        case notStarted = "not-started"
 
         var label: Localized {
             switch self {
@@ -60,6 +66,8 @@ struct UpdateProgress: Equatable, Sendable {
             case .unknown: return Localized("Working…", "Çalışıyor…")
             case .processError: return Localized("Update failed", "Güncelleme başarısız oldu")
             case .cancelled: return Localized("Cancelled", "İptal edildi")
+            case .notStarted:
+                return Localized("Update did not start", "Güncelleme başlamadı")
             }
         }
     }
@@ -69,6 +77,14 @@ struct UpdateProgress: Equatable, Sendable {
     var item: String
     var index: Int?
     var total: Int?
+    /// When the line this was read from was last written, straight off the
+    /// file's modification date. `ProgressWatch` needs it to tell an entry
+    /// *this* run just wrote from one an earlier run left behind - reading a
+    /// leftover "done|complete" as the current run's result is how a run that
+    /// had not even started yet ended up reported as finished. Entries built
+    /// in memory (cancelled, process-error) have no file behind them and keep
+    /// the `.distantPast` default, which no freshness check can pass.
+    var modified: Date = .distantPast
 
     /// The only format version this build understands. See CACHE_FORMAT.md -
     /// the shell writer (`PROGRESS_FORMAT_VERSION` in update_system.1h.sh)
@@ -154,7 +170,8 @@ struct UpdateProgress: Equatable, Sendable {
             phase: Phase(rawValue: fields[2]) ?? .unknown,
             item: fields.count > 3 ? fields[3] : "",
             index: fields.count > 4 ? Int(fields[4]) : nil,
-            total: fields.count > 5 ? Int(fields[5]) : nil
+            total: fields.count > 5 ? Int(fields[5]) : nil,
+            modified: modified
         )
 
         if progress.state == .running, now.timeIntervalSince(modified) > staleAfter {

@@ -75,6 +75,10 @@ final class ToolkitController {
     private var refreshTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
+    /// When the current progress watch began, or `nil` when none is running.
+    /// Anything written to the shared progress file before this belongs to an
+    /// earlier run - see `ProgressWatch` and `UpdateProgress.modified`.
+    private var watchStartedAt: Date?
 
     let preferences: AppPreferences
 
@@ -91,7 +95,14 @@ final class ToolkitController {
     /// Re-reads the cache. Cheap: no processes, no network.
     func reload() {
         snapshot = UpdateSnapshot.load()
-        progress = UpdateProgress.load()
+
+        let latest = UpdateProgress.load()
+        // A run being watched owns `progress` (see `startProgressWatch`): an
+        // entry older than that watch is an earlier run's, and letting a
+        // refresh that happens to land mid-startup put it back on the banner
+        // would undo exactly what the watch is there to prevent.
+        if let started = watchStartedAt, (latest?.modified ?? .distantPast) < started { return }
+        progress = latest
     }
 
     /// True while the *bulk* run is working, whether it was started from here
@@ -125,8 +136,7 @@ final class ToolkitController {
 
         // We just killed it ourselves - no need to keep polling a progress
         // file whose next write, if any, could only report the same thing.
-        progressTask?.cancel()
-        progressTask = nil
+        stopProgressWatch()
 
         progress = UpdateProgress(state: .failed, phase: .cancelled, item: "", index: nil, total: nil)
         if let active = activeSingleItem {
@@ -140,41 +150,79 @@ final class ToolkitController {
     /// Watches the shared progress file for as long as a *bulk* (or
     /// terminal-mode single-item) run is in flight, so the menu bar can name
     /// the package currently being installed.
+    ///
+    /// Two-phased, per `ProgressWatch`: the run is given until
+    /// `ProgressWatch.startupTimeout` to write its first line (a terminal
+    /// window has to open, `acquire_lock` can block for 20 seconds), and only
+    /// after it has been seen does silence mean the run is over.
     private func startProgressWatch() {
         guard progressTask == nil else { return }
 
-        progressTask = Task { [weak self] in
-            var quietTicks = 0
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(700))
-                guard let self else { return }
+        let startedAt = Date()
+        watchStartedAt = startedAt
 
-                let latest = await MainActor.run { () -> UpdateProgress? in
-                    self.progress = UpdateProgress.load()
-                    return self.progress
+        progressTask = Task { [weak self] in
+            var watch = ProgressWatch(startedAt: startedAt)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: ProgressWatch.pollInterval)
+                guard !Task.isCancelled, let self else { return }
+
+                let latest = UpdateProgress.load()
+                let step = watch.step(latest: latest, now: Date())
+
+                await MainActor.run {
+                    switch step {
+                    case .awaitingStart:
+                        // Nothing of this run's on disk yet: say "starting"
+                        // rather than show whatever an earlier run left there.
+                        self.progress = Self.startingUp
+                    case .observed, .finished:
+                        self.progress = latest
+                    case .neverStarted:
+                        self.progress = UpdateProgress(
+                            state: .failed, phase: .notStarted, item: "", index: nil, total: nil
+                        )
+                    }
                 }
 
-                if latest?.isRunning == true {
-                    quietTicks = 0
-                } else {
-                    quietTicks += 1
-                    // Give the run a moment to finish writing, then reload the
-                    // cache once so the new versions show up.
-                    if quietTicks >= 4 {
-                        await MainActor.run {
-                            self.snapshot = UpdateSnapshot.load()
-                            self.resolveActiveSingleItem()
-                            // The bulk run holding up the concurrency queue
-                            // (see `startOrQueue`) just finished - anything
-                            // queued behind it can start now.
-                            self.drainQueue()
-                            self.progressTask = nil
-                        }
-                        return
-                    }
+                switch step {
+                case .awaitingStart, .observed:
+                    continue
+                case .finished, .neverStarted:
+                    await MainActor.run { self.finishProgressWatch() }
+                    return
                 }
             }
         }
+    }
+
+    /// What the banner shows between "the run was asked for" and "the run
+    /// wrote its first line" - see `ProgressWatch`'s startup phase.
+    private static let startingUp = UpdateProgress(
+        state: .running, phase: .starting, item: "", index: nil, total: nil
+    )
+
+    /// The watch has seen this run through to its end (or to its failure to
+    /// start): re-read what it produced and release everything waiting on it.
+    /// By now the run has had `quietTicksToFinish` polls to finish writing, so
+    /// the cache it leaves behind is the one to show.
+    private func finishProgressWatch() {
+        snapshot = UpdateSnapshot.load()
+        resolveActiveSingleItem()
+        // The bulk run holding up the concurrency queue (see `startOrQueue`)
+        // just finished - anything queued behind it can start now.
+        drainQueue()
+        progressTask = nil
+        watchStartedAt = nil
+    }
+
+    /// Drops the watch without resolving anything through it - for the paths
+    /// that already know the run's outcome (a cancel, a dead process) and have
+    /// written it themselves.
+    private func stopProgressWatch() {
+        progressTask?.cancel()
+        progressTask = nil
+        watchStartedAt = nil
     }
 
     func relocateScript() {
@@ -224,7 +272,11 @@ final class ToolkitController {
             Task {
                 let outcome = await Self.run(script: script, arguments: ["launch_update", scope])
                 await MainActor.run {
-                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    // Only watch a run that was actually launched: a launcher
+                    // that failed opened no terminal, so nothing is ever going
+                    // to write to the progress file and the watch would only
+                    // sit out its startup window overwriting the real error.
+                    guard outcome.succeeded else { return self.reportFailure(outcome) }
                     self.startProgressWatch()
                 }
             }
@@ -250,7 +302,9 @@ final class ToolkitController {
             Task {
                 let outcome = await Self.run(script: script, arguments: ["install_app", name, liveOrDry])
                 await MainActor.run {
-                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    // See `launchUpdate`: nothing to watch if the launcher
+                    // itself failed.
+                    guard outcome.succeeded else { return self.reportFailure(outcome) }
                     self.startProgressWatch()
                 }
             }
@@ -288,7 +342,9 @@ final class ToolkitController {
             Task {
                 let outcome = await Self.run(script: script, arguments: ["update_app"] + details)
                 await MainActor.run {
-                    if !outcome.succeeded { self.reportFailure(outcome) }
+                    // See `launchUpdate`: nothing to watch if the launcher
+                    // itself failed.
+                    guard outcome.succeeded else { return self.reportFailure(outcome) }
                     self.startProgressWatch()
                 }
             }
@@ -405,9 +461,45 @@ final class ToolkitController {
     /// Records a failed *bulk* process invocation using the same state
     /// ProgressBanner already renders for a failed update, so a crash is
     /// exactly as visible as a script-reported failure - never a silent no-op.
-    private func reportFailure(_ outcome: ProcessOutcome) {
+    ///
+    /// `endedTheWatchedRun` marks the one caller whose process *is* the run
+    /// the progress watch is following: the watch is now waiting on something
+    /// that can never write again, so it gets stopped here and its
+    /// end-of-run work done in its place. Every other caller (a dry run, a
+    /// launcher that never opened its terminal) must leave a watch that
+    /// belongs to some other run running - its next poll puts the real state
+    /// back on the banner by itself.
+    private func reportFailure(_ outcome: ProcessOutcome, endedTheWatchedRun: Bool = false) {
         lastMessage = outcome.summary
-        progress = UpdateProgress(state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil)
+        let processError = UpdateProgress(
+            state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil
+        )
+
+        if endedTheWatchedRun {
+            // The script may already have recorded a more precise ending than
+            // "the process exited non-zero" ("3 of 8 failed", say). Prefer it -
+            // but only when this run wrote it: an older entry describes some
+            // earlier run and must never be shown as this one's outcome.
+            let ownEnding = watchStartedAt.flatMap { started -> UpdateProgress? in
+                guard let latest = UpdateProgress.load(),
+                      latest.state == .failed,
+                      latest.modified >= started else { return nil }
+                return latest
+            }
+
+            // Nothing more can reach the progress file now, so the watch must
+            // not go on spending its startup window overwriting this failure.
+            stopProgressWatch()
+            progress = ownEnding ?? processError
+            // Whatever the run managed to do before dying still counts, and
+            // the queue the watch would have drained on its way out is no
+            // longer waiting on anything.
+            snapshot = UpdateSnapshot.load()
+            drainQueue()
+        } else {
+            progress = processError
+        }
+
         // The process died outright - no need to wait for the progress watch
         // to go quiet, the row can flip to "failed" immediately. Only
         // relevant for a terminal-mode single-item run; the headless
@@ -560,7 +652,7 @@ final class ToolkitController {
                 self.cancelledBulkRun = false
                 return
             }
-            if !outcome.succeeded { self.reportFailure(outcome) }
+            if !outcome.succeeded { self.reportFailure(outcome, endedTheWatchedRun: true) }
         }
     }
 

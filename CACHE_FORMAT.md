@@ -40,7 +40,7 @@ v1|state|phase|item|index|total
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | state | `running` \| `done` \| `failed` | |
-| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error`, written only by the Swift side when a process crash/non-zero-exit is caught, never by the shell |
+| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
 | 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
