@@ -25,19 +25,19 @@ load "test_helper"
 @test "app_cask_candidates lowercases and hyphenates a spaced name" {
     run run_zsh_fn app_cask_candidates "Sublime Text"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"sublime-text"* ]]
+    assert_contains "sublime-text" "$output"
 }
 
 @test "app_cask_candidates splits camelCase into kebab-case" {
     run run_zsh_fn app_cask_candidates "AltTab"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"alt-tab"* ]]
+    assert_contains "alt-tab" "$output"
 }
 
 @test "app_cask_candidates offers a dot-less variant" {
     run run_zsh_fn app_cask_candidates "draw.io"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"drawio"* ]]
+    assert_contains "drawio" "$output"
 }
 
 @test "app_cask_candidates never emits duplicate lines" {

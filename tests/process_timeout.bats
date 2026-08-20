@@ -37,8 +37,8 @@ load "test_helper"
         echo "rc=$rc elapsed_ok=$([[ $elapsed -le 5 ]] && echo yes || echo no)"
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == rc=*" elapsed_ok=yes" ]]
-    [[ "$output" != "rc=0"* ]]
+    assert_matches 'rc=* elapsed_ok=yes' "$output"
+    refute_matches 'rc=0*' "$output"
 }
 
 @test "run_with_timeout does not kill a command that finishes in time" {

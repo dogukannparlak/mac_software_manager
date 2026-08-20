@@ -33,6 +33,6 @@ extract_uninstall_step1() {
     "
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No update_system scripts found in $EMPTY_PLUGIN_DIR"* ]]
-    [[ "$output" != *"no matches found"* ]]
+    assert_contains "No update_system scripts found in $EMPTY_PLUGIN_DIR" "$output"
+    refute_contains "no matches found" "$output"
 }

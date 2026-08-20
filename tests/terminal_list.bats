@@ -24,7 +24,7 @@ load "test_helper"
 @test "detect_installed_terminals always includes Terminal" {
     run run_zsh_fn detect_installed_terminals
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Terminal"* ]]
+    assert_contains "Terminal" "$output"
 }
 
 @test "detect_installed_terminals only reports terminals with a matching /Applications bundle" {
@@ -68,7 +68,7 @@ load "test_helper"
         echo "count=${#available_terminals[@]}"
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == count=* ]]
+    assert_matches 'count=*' "$output"
 }
 
 @test "detect_installed_terminals never reports an unsupported name" {

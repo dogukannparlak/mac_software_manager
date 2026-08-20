@@ -15,10 +15,10 @@ CANONICAL_LINE="v1|Mac Software Manager|Update Complete|3 package(s) updated suc
         notify "Hello there." "A Subtitle"
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == *"STUB osascript -e display notification"* ]]
-    [[ "$output" == *"Hello there."* ]]
-    [[ "$output" == *"A Subtitle"* ]]
-    [[ "$output" == *"Mac Software Manager"* ]]
+    assert_contains "STUB osascript -e display notification" "$output"
+    assert_contains "Hello there." "$output"
+    assert_contains "A Subtitle" "$output"
+    assert_contains "Mac Software Manager" "$output"
 }
 
 @test "notify omits the subtitle clause from the osascript fallback when none is given" {
@@ -28,7 +28,7 @@ CANONICAL_LINE="v1|Mac Software Manager|Update Complete|3 package(s) updated suc
         notify "Just a plain message."
     '
     [ "$status" -eq 0 ]
-    [[ "$output" != *"subtitle"* ]]
+    refute_contains "subtitle" "$output"
 }
 
 @test "notify writes a request file for GuideApp instead of calling osascript when GuideApp is running" {
@@ -39,7 +39,7 @@ CANONICAL_LINE="v1|Mac Software Manager|Update Complete|3 package(s) updated suc
         cat "$NOTIFY_DIR"/notify.* 2>/dev/null
     '
     [ "$status" -eq 0 ]
-    [[ "$output" != *"STUB osascript"* ]]
+    refute_contains "STUB osascript" "$output"
     [ "$output" = "$CANONICAL_LINE" ]
 }
 
@@ -87,8 +87,8 @@ CANONICAL_LINE="v1|Mac Software Manager|Update Complete|3 package(s) updated suc
         exit $rc
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == *"STUB osascript"* ]]
-    [[ "$output" == *"Could not queue this one."* ]]
+    assert_contains "STUB osascript" "$output"
+    assert_contains "Could not queue this one." "$output"
 }
 
 @test "notify survives under set -e when the request directory cannot be created" {
@@ -106,5 +106,5 @@ CANONICAL_LINE="v1|Mac Software Manager|Update Complete|3 package(s) updated suc
         exit $rc
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == *"STUB osascript"* ]]
+    assert_contains "STUB osascript" "$output"
 }

@@ -24,7 +24,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [[ "$output" == "${PROGRESS_FORMAT_VERSION:-v1}|"* ]]
+    assert_matches "${PROGRESS_FORMAT_VERSION:-v1}|*" "$output"
 }
 
 @test "PROGRESS_FORMAT_VERSION matches the version this suite pins to" {

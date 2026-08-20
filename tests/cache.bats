@@ -110,10 +110,10 @@ load "test_helper"
 @test "cache_stale_tiers reports every tier when the cache is empty" {
     run run_zsh_snippet 'cache_stale_tiers'
     [ "$status" -eq 0 ]
-    [[ "$output" == *"updates"* ]]
-    [[ "$output" == *"installed"* ]]
-    [[ "$output" == *"apps"* ]]
-    [[ "$output" == *"websites"* ]]
+    assert_contains "updates" "$output"
+    assert_contains "installed" "$output"
+    assert_contains "apps" "$output"
+    assert_contains "websites" "$output"
 }
 
 @test "cache_stale_tiers omits a tier whose keys are all fresh" {
@@ -124,8 +124,8 @@ load "test_helper"
         cache_stale_tiers
     '
     [ "$status" -eq 0 ]
-    [[ "$output" != *"updates"* ]]
-    [[ "$output" == *"installed"* ]]
+    refute_contains "updates" "$output"
+    assert_contains "installed" "$output"
 }
 
 @test "cache_stale_tiers reports nothing (and exits 0) once every tier is fresh" {

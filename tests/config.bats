@@ -138,5 +138,5 @@ load "test_helper"
     [ "$status" -eq 0 ]
     [ "$output" = "1" ]
     run run_zsh_snippet 'echo "${CONFIG_WARNINGS[1]}"'
-    [[ "$output" == *"Codeberg"* ]]
+    assert_contains "Codeberg" "$output"
 }

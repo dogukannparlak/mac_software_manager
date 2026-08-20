@@ -88,7 +88,7 @@ load "test_helper"
     run run_zsh_fn truncate_ver "2026.1.3.8-quail3-extra-long"
     [ "$status" -eq 0 ]
     [ "${#output}" -eq 10 ]
-    [[ "$output" == *".." ]]
+    assert_matches '*..' "$output"
 }
 
 @test "truncate_ver honours a custom limit argument" {

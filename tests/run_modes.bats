@@ -17,9 +17,9 @@ load "test_helper"
         run_mode_install "$@"
     '
     [ "$status" -eq 1 ]
-    [[ "$output" == *"Preparing update for myapp"* ]]
-    [[ "$output" == *"No pending update recorded for myapp"* ]]
-    [[ "$output" != *"No application specified"* ]]
+    assert_contains "Preparing update for myapp" "$output"
+    assert_contains "No pending update recorded for myapp" "$output"
+    refute_contains "No application specified" "$output"
 }
 
 @test "run_mode_install regression: calling it bare loses \$3 (target_app)" {
@@ -31,7 +31,7 @@ load "test_helper"
         run_mode_install
     '
     [ "$status" -eq 1 ]
-    [[ "$output" == *"No application specified"* ]]
+    assert_contains "No application specified" "$output"
 }
 
 @test "run_mode_single correctly reads type/id/name from \$3-\$5 when called with \"\$@\"" {
@@ -46,8 +46,8 @@ load "test_helper"
         set -- run single brew my-fake-token MyFakeName 1.0 2.0
         run_mode_single "$@"
     '
-    [[ "$output" == *"Updating MyFakeName (1.0 -> 2.0)"* ]]
-    [[ "$output" == *"STUB brew upgrade my-fake-token"* ]]
+    assert_contains "Updating MyFakeName (1.0 -> 2.0)" "$output"
+    assert_contains "STUB brew upgrade my-fake-token" "$output"
 }
 
 @test "run_mode_single regression: calling it bare loses \$3-\$5 (type/id/name)" {
@@ -62,8 +62,8 @@ load "test_helper"
     # With no arguments, $3/$4 are empty: type is empty (matches neither
     # "brew|cask" nor "mas" in the case), so update_rc stays 0 and the stub
     # brew() is never even called - name falls back to the empty id.
-    [[ "$output" != *"STUB brew"* ]]
-    [[ "$output" == *"Updating  (? -> ?)"* ]]
+    refute_contains "STUB brew" "$output"
+    assert_contains "Updating  (? -> ?)" "$output"
 }
 
 @test "run_mode_single reaches the history log and a final progress state on success" {
@@ -85,9 +85,9 @@ load "test_helper"
         echo "HISTORY: $(cat "$HISTORY_FILE")"
         echo "PROGRESS: $(cat "$PROGRESS_FILE")"
     '
-    [[ "$output" == *"Added to history log (ok)"* ]]
-    [[ "$output" == *"HISTORY: "*"|brew|MyFakeName|1.0|2.0|my-fake-token|ok"* ]]
-    [[ "$output" == *"PROGRESS: v1|done|single|MyFakeName||"* ]]
+    assert_contains "Added to history log (ok)" "$output"
+    assert_matches '*HISTORY: *|brew|MyFakeName|1.0|2.0|my-fake-token|ok*' "$output"
+    assert_contains "PROGRESS: v1|done|single|MyFakeName||" "$output"
 }
 
 @test "run_mode_single logs a failed upgrade as failed" {
@@ -104,9 +104,9 @@ load "test_helper"
         echo "HISTORY: $(cat "$HISTORY_FILE")"
         echo "PROGRESS: $(cat "$PROGRESS_FILE")"
     '
-    [[ "$output" == *"Added to history log (fail)"* ]]
-    [[ "$output" == *"|my-fake-token|fail"* ]]
-    [[ "$output" == *"PROGRESS: v1|failed|single|MyFakeName||"* ]]
+    assert_contains "Added to history log (fail)" "$output"
+    assert_contains "|my-fake-token|fail" "$output"
+    assert_contains "PROGRESS: v1|failed|single|MyFakeName||" "$output"
 }
 
 @test "run_mode_single still reports 'done' when a cache entry cannot be refreshed" {
