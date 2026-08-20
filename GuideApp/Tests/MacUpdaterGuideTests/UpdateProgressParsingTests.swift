@@ -54,9 +54,23 @@ final class UpdateProgressParsingTests: XCTestCase {
         XCTAssertNil(UpdateProgress.parse(raw: "", modified: Date()))
     }
 
-    func testUnknownStateFallsBackToDone() {
-        let progress = UpdateProgress.parse(raw: "v1|bogus-state|complete", modified: Date())
-        XCTAssertEqual(progress?.state, .done)
+    func testUnknownStateFailsToParse() {
+        // Not `.done`: an unreadable state must never come back as a
+        // successful update.
+        XCTAssertNil(UpdateProgress.parse(raw: "v1|bogus-state|complete", modified: Date()))
+    }
+
+    /// The gap the version marker alone does not cover: a newer toolkit that
+    /// keeps writing v1 lines and adds a state token this build has never
+    /// heard of. The version check passes, so the state field is the only
+    /// thing standing between that line and a green tick on a run whose
+    /// outcome is unknown.
+    func testNewStateTokenWithinV1FailsToParse() {
+        XCTAssertNil(UpdateProgress.parse(raw: "v1|paused|brew-upgrade|awscli|3|8", modified: Date()))
+    }
+
+    func testEmptyStateFieldFailsToParse() {
+        XCTAssertNil(UpdateProgress.parse(raw: "v1||complete", modified: Date()))
     }
 
     func testUnknownPhaseFallsBackToUnknown() {

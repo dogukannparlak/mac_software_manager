@@ -39,7 +39,7 @@ v1|state|phase|item|index|total
 | # | Field | Values | Notes |
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
-| 2 | state | `running` \| `done` \| `failed` | |
+| 2 | state | `running` \| `done` \| `failed` | Closed set: the Swift reader rejects the whole line on any other token rather than guessing an outcome, so adding a state is an incompatible change - bump the version |
 | 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
@@ -105,7 +105,13 @@ v1|running|brew-upgrade|awscli|3|8
   `GuideApp/Sources/MacUpdaterGuide/Toolkit/UpdateProgress.swift`. A missing
   or unrecognized version returns `nil` (the same "no usable data" outcome as
   any other malformed line), never a guessed state - `nil` is treated by
-  every caller as "nothing to show," not "success."
+  every caller as "nothing to show," not "success." An unrecognized **state**
+  (field 2) returns `nil` for the same reason: the version marker only catches
+  a writer that changed the layout, so a v1 line carrying a state token the
+  app does not know - a newer toolkit adding one without a bump - would
+  otherwise be read as a finished, successful run. An unrecognized *phase* is
+  the one field that does fall back (`unknown`), because a phase is only a
+  label to print, not a verdict on the run.
 
 ## Unversioned formats (documented, no marker yet)
 

@@ -233,14 +233,27 @@ struct UpdateProgress: Equatable, Sendable {
     /// fall through to `State(rawValue: fields[0]) ?? .done`, silently
     /// reporting an unreadable line as a *successful* update; failing closed
     /// here is the whole point of the marker.
+    ///
+    /// An unrecognized *state* (fields[1]) returns `nil` for the same reason.
+    /// The version marker only catches a writer that changed the format; a
+    /// newer toolkit that keeps v1 and adds a state token would still land
+    /// on `State(rawValue:)`, and defaulting that to `.done` would put a
+    /// green tick on a run whose outcome this build cannot read.
     static func parse(raw: String, modified: Date, now: Date = Date()) -> UpdateProgress? {
         let fields = raw
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .components(separatedBy: "|")
         guard fields.count >= 3, fields[0] == formatVersion else { return nil }
 
+        // No fallback here, unlike `phase` below: a phase this build does not
+        // know is only a label it cannot print, while an unreadable state is
+        // the difference between "finished" and "failed". Ignoring the line
+        // leaves the run unreported; guessing at it reports a result nothing
+        // on disk actually claimed.
+        guard let state = State(rawValue: fields[1]) else { return nil }
+
         var progress = UpdateProgress(
-            state: State(rawValue: fields[1]) ?? .done,
+            state: state,
             phase: Phase(rawValue: fields[2]) ?? .unknown,
             item: fields.count > 3 ? fields[3] : "",
             index: fields.count > 4 ? Int(fields[4]) : nil,
