@@ -194,3 +194,48 @@ load "test_helper"
     refute_contains "LEAKED" "$output"
     [ "$status" -eq 1 ]
 }
+
+@test "collect_cache_data runs 'mas outdated' under the query timeout" {
+    # 'mas' has no timeout of its own and talks to a backend that can hang
+    # (see run_with_timeout, lib/utils.sh). Every other mas call site in the
+    # project wraps its query; this one did not, and a hang here hung the
+    # whole refresh - including the headless single-item runs GuideApp
+    # spawns, which then showed a spinner nothing could stop.
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR/bin"
+        printf "#!/bin/sh\nexit 0\n" > "$CACHE_DIR/bin/mas"
+        chmod +x "$CACHE_DIR/bin/mas"
+        PATH="$CACHE_DIR/bin:$PATH"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=7
+
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $*"
+            cache_put "$1" ""
+        }
+
+        collect_cache_data "updates"
+    '
+    assert_contains "ENTRY: mas_outdated run_with_timeout 7 mas outdated" "$output"
+}
+
+@test "collect_cache_data runs 'mas list' under the query timeout" {
+    # The installed tier's own unguarded 'mas' call - same hang, same fix as
+    # the 'mas outdated' one above.
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR/bin"
+        printf "#!/bin/sh\nexit 0\n" > "$CACHE_DIR/bin/mas"
+        chmod +x "$CACHE_DIR/bin/mas"
+        PATH="$CACHE_DIR/bin:$PATH"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=7
+
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $*"
+            cache_put "$1" ""
+        }
+
+        collect_cache_data "installed"
+    '
+    assert_contains "ENTRY: mas_list run_with_timeout 7 mas list" "$output"
+}

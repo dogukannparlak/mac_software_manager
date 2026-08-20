@@ -215,10 +215,21 @@ run_mode_single() {
         # 'set -o pipefail' - so a FOUND app produced status 141, the
         # condition read false, and 'mas install' ran on an app that was
         # already installed.
+        # Both branches download the app itself, so both get the upgrade
+        # limit - a hang guard, never a pace limit (MAS_UPGRADE_TIMEOUT,
+        # lib/utils.sh). This is the path GuideApp's headless single-item
+        # runs take, and an unguarded 'mas' here is what left one of them
+        # running with no end in sight.
         if mas_is_installed "$id"; then
-            mas upgrade "$id" || update_rc=$?
+            run_with_timeout "$MAS_UPGRADE_TIMEOUT" mas upgrade "$id" || update_rc=$?
         else
-            mas install "$id" || update_rc=$?
+            run_with_timeout "$MAS_UPGRADE_TIMEOUT" mas install "$id" || update_rc=$?
+        fi
+        # Said out loud, the way the bulk path says it: without this the run
+        # just lands in the history as a plain failure, with nothing to
+        # separate "we ran out of patience" from "the App Store said no".
+        if (( update_rc == TIMEOUT_EXIT_STATUS )); then
+            echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: updating $name was killed mid-download."
         fi
         if (( update_rc == 0 )) && mas_is_outdated "$id"; then
             echo "⚠️ $name is still reported as outdated after the upgrade."

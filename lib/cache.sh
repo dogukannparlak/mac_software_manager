@@ -390,7 +390,14 @@ collect_cache_data() {
 
     if [[ "$tier" == "updates" || "$tier" == "all" ]]; then
         if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
-            cache_refresh_entry "mas_outdated" mas outdated
+            # Wrapped like every other 'mas' query in this project: 'mas' has
+            # no timeout of its own, and a hung App Store backend here hangs
+            # the whole refresh - including the headless single-item runs
+            # GuideApp spawns, which then sit on a spinner until someone
+            # cancels them (ToolkitController.cancelItemUpdate). A timeout
+            # returns non-zero, which cache_refresh_entry already handles by
+            # keeping - and re-stamping - the previous entry.
+            cache_refresh_entry "mas_outdated" run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated
         else
             cache_put "mas_outdated" ""
         fi
@@ -413,7 +420,10 @@ collect_cache_data() {
         cache_refresh_entry "brew_status"        collect_brew_status
 
         if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
-            cache_refresh_entry "mas_list" mas list
+            # Same hang guard as the 'mas outdated' query above: metadata
+            # only, so it gets the query limit, and a timeout leaves the
+            # previous entry in place rather than an empty installed list.
+            cache_refresh_entry "mas_list" run_with_timeout "$MAS_QUERY_TIMEOUT" mas list
         else
             cache_put "mas_list" ""
         fi

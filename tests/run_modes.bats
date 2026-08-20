@@ -250,3 +250,32 @@ load "test_helper"
     assert_contains "App Store updates are disabled" "$output"
     assert_contains "RC: 1" "$output"
 }
+
+@test "run_mode_single kills a hanging 'mas upgrade' instead of running forever" {
+    # 'mas' has no timeout of its own, and this is the path GuideApp's
+    # headless single-item runs take - an unguarded call here left the app
+    # showing a spinner for a run that was never going to end.
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=0
+        MAS_UPGRADE_TIMEOUT=1
+        mas() {
+            case "$1" in
+                list) echo "497799835  Xcode  (14.1)" ;;
+                outdated) ;;
+                *) sleep 30 ;;
+            esac
+            return 0
+        }
+        collect_cache_data() { :; }
+        open() { :; }
+
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+        echo "HISTORY: $(cat "$HISTORY_FILE")"
+    '
+    assert_contains "Timed out after 1s" "$output"
+    assert_contains "|497799835|fail" "$output"
+}
+
