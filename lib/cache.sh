@@ -121,7 +121,8 @@ spawn_cache_refresh() {
 #             change so a stale reader fails closed instead of misparsing
 #   state   = running | done | failed
 #   phase   = a stable token the reader translates (brew-update, brew-upgrade,
-#             mas-upgrade, verify, cleanup, install-app, refresh)
+#             mas-upgrade, verify, cleanup, install-app, refresh, complete,
+#             complete-with-failures)
 #   item    = package or application currently being worked on, may be empty
 PROGRESS_FILE="$CACHE_DIR/progress"
 PROGRESS_FORMAT_VERSION="v1"
@@ -143,6 +144,25 @@ progress_write() {
     local tmp="$PROGRESS_FILE.$$"
     print -r -- "${PROGRESS_FORMAT_VERSION}|${state}|${phase}|${item}|${index}|${total}" > "$tmp" 2>/dev/null || return 0
     mv -f "$tmp" "$PROGRESS_FILE" 2>/dev/null || rm -f "$tmp"
+}
+
+# The final entry for a run that made it all the way to the end. Getting to
+# the end is not the same as succeeding: a run where five packages are still
+# outdated afterwards finished, but it failed for those five, and writing
+# "done|complete" for it puts a green tick and "Finished" on the banner (see
+# ProgressBanner.swift, which picks its icon and tint off `state` alone).
+#
+# So the state follows the verified failure count, and the counts ride along
+# in index/total - failed and attempted - instead of a message in `item`:
+# the reader words it, so it can be worded in the user's language.
+progress_write_completion() {
+    integer failed="${1:-0}" attempted="${2:-0}"
+
+    if (( failed > 0 )); then
+        progress_write "failed" "complete-with-failures" "" "$failed" "$attempted"
+    else
+        progress_write "done" "complete" "" "" ""
+    fi
 }
 
 # Runs on exit so a run that stops early - a failed integrity check, Ctrl-C,

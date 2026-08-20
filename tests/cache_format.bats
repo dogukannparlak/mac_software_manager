@@ -37,6 +37,48 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
     [ "$output" = "v1" ]
 }
 
+@test "progress_write_completion records a clean run as done|complete" {
+    run run_zsh_snippet '
+        progress_write_completion 0 8
+        cat "$PROGRESS_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1|done|complete|||" ]
+}
+
+@test "progress_write_completion records a run with failed items as failed, not done" {
+    # The bug this guards: the full update run wrote done|complete
+    # unconditionally, so a run where 5 packages were still outdated
+    # afterwards showed a green tick and "Bitti" in the app.
+    run run_zsh_snippet '
+        progress_write_completion 5 12
+        cat "$PROGRESS_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1|failed|complete-with-failures||5|12" ]
+}
+
+@test "progress_write_completion defaults to a clean completion when called with no counts" {
+    run run_zsh_snippet '
+        progress_write_completion
+        cat "$PROGRESS_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1|done|complete|||" ]
+}
+
+@test "progress_finalize leaves a completion with failures alone" {
+    # The run exits 0 even when individual items failed, so the EXIT trap
+    # must not overwrite the failure entry the run just wrote.
+    run run_zsh_snippet '
+        progress_write_completion 5 12
+        progress_finalize 0
+        cat "$PROGRESS_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1|failed|complete-with-failures||5|12" ]
+}
+
 @test "progress_finalize recognises its own versioned output and promotes running to done" {
     run run_zsh_snippet '
         progress_write "running" "brew-upgrade" "awscli" "3" "8"

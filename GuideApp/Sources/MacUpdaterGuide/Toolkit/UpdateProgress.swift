@@ -26,6 +26,12 @@ struct UpdateProgress: Equatable, Sendable {
         case installApp = "install-app"
         case single
         case complete
+        /// The run reached the end, but the verify pass found items that
+        /// were still outdated - written by `progress_write_completion()`
+        /// with `index` = how many failed and `total` = how many were
+        /// attempted. Separate from `.complete` because `state` alone
+        /// ("failed") would otherwise be paired with the label "Finished".
+        case completeWithFailures = "complete-with-failures"
         case unknown
         /// The toolkit process itself exited non-zero or was killed - caught on
         /// the Swift side (ToolkitController), not written by the shell script.
@@ -49,6 +55,8 @@ struct UpdateProgress: Equatable, Sendable {
             case .installApp: return Localized("Installing", "Kuruluyor")
             case .single: return Localized("Updating", "Güncelleniyor")
             case .complete: return Localized("Finished", "Bitti")
+            case .completeWithFailures:
+                return Localized("Finished with errors", "Hatalarla bitti")
             case .unknown: return Localized("Working…", "Çalışıyor…")
             case .processError: return Localized("Update failed", "Güncelleme başarısız oldu")
             case .cancelled: return Localized("Cancelled", "İptal edildi")
@@ -78,8 +86,20 @@ struct UpdateProgress: Equatable, Sendable {
         phase.label[language]
     }
 
-    /// "awscli (3 of 8)"
+    /// "awscli (3 of 8)", or "3 of 8 failed" once a run has finished badly.
     func detail(for language: AppLanguage) -> String? {
+        // A finished-with-failures entry carries counts, not a package name:
+        // index is the failure count, total the number of items attempted.
+        // Running them through the generic "(3 of 8)" wording below would
+        // read as progress through a batch, so this phase words its own.
+        if phase == .completeWithFailures, let failed = index, failed > 0 {
+            if let total, total > 0 {
+                let format = Localized("%d of %d failed", "%d / %d başarısız")[language]
+                return String(format: format, failed, total)
+            }
+            return String(format: UIStrings.historyFailedFormat[language], failed)
+        }
+
         var parts: [String] = []
         if !item.isEmpty { parts.append(item) }
 

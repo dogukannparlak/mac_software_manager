@@ -576,7 +576,9 @@ run_mode_system() {
     echo "🗂️ Refreshing cached data..."
     collect_cache_data "all"
 
-    progress_write "done" "complete" "" "" ""
+    # Not unconditionally "done": count_failed items were still outdated when
+    # the verify pass re-checked them, and a green tick for that is a lie.
+    progress_write_completion "$count_failed" "$(( count_brew_pending + count_mas_pending ))"
 
     echo "---------------------------"
     integer count_updated=$(( count_brew_pending + count_mas_pending - count_failed ))

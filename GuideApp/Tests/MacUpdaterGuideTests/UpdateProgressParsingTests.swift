@@ -101,6 +101,30 @@ final class UpdateProgressParsingTests: XCTestCase {
         XCTAssertEqual(progress?.state, .done)
     }
 
+    func testCompletionWithFailuresParsesItsCounts() {
+        // What run_mode_system writes through progress_write_completion when
+        // the verify pass found items still outdated: index = how many
+        // failed, total = how many were attempted.
+        let progress = UpdateProgress.parse(raw: "v1|failed|complete-with-failures||5|12", modified: Date())
+        XCTAssertEqual(progress?.state, .failed)
+        XCTAssertEqual(progress?.phase, .completeWithFailures)
+        XCTAssertEqual(progress?.index, 5)
+        XCTAssertEqual(progress?.total, 12)
+    }
+
+    func testCompletionWithFailuresDetailNamesTheFailureCount() {
+        // "5 of 12" alone would read as progress through a batch - the point
+        // of this phase is that the banner says what those numbers mean.
+        let progress = UpdateProgress.parse(raw: "v1|failed|complete-with-failures||5|12", modified: Date())
+        XCTAssertEqual(progress?.title(for: .english), "Finished with errors")
+        XCTAssertEqual(progress?.detail(for: .english), "5 of 12 failed")
+    }
+
+    func testCompletionWithFailuresDetailFallsBackToTheCountAloneWithoutATotal() {
+        let progress = UpdateProgress.parse(raw: "v1|failed|complete-with-failures||5|", modified: Date())
+        XCTAssertEqual(progress?.detail(for: .english), "5 failed")
+    }
+
     func testProcessErrorPhaseRoundTripsFromToolkitRunnersFailureState() {
         // ToolkitController writes exactly this shape (state=failed,
         // phase=process-error) when a process crashes/exits non-zero -

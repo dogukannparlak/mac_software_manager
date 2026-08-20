@@ -40,16 +40,23 @@ v1|state|phase|item|index|total
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | state | `running` \| `done` \| `failed` | |
-| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error`, written only by the Swift side when a process crash/non-zero-exit is caught, never by the shell |
+| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error`, written only by the Swift side when a process crash/non-zero-exit is caught, never by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
-| 5 | index | integer or empty | 1-based position in the current batch |
-| 6 | total | integer or empty | size of the current batch |
+| 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
+| 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
 
 Canonical example (used verbatim by both test suites):
 ```
 v1|running|brew-upgrade|awscli|3|8
 ```
 
+- A run that reaches the end writes its last entry through
+  `progress_write_completion()` (`lib/cache.sh`), not `progress_write()`
+  directly: reaching the end is not the same as succeeding, so a verified
+  failure count above zero writes `failed|complete-with-failures` with the
+  failed/attempted counts in `index`/`total` (the reader words them, so the
+  wording can be localized) instead of `done|complete` - which paired a green
+  tick and "Finished" with a run where packages were still outdated.
 - Shell writer: `progress_write()` in `lib/cache.sh`; reader/self-check:
   `progress_finalize()` in the same file. It runs from the `run` dispatcher's
   EXIT trap so an unfinished "running" entry never leaves the UI showing a
