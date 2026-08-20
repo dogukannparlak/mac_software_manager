@@ -158,6 +158,46 @@ extension UIStrings {
     static let updateFailedRowStatus = Localized("Update failed", "Güncelleme başarısız")
 }
 
+// MARK: - Failed actions
+
+/// Copy for `ToolkitController.ActionFailure` - the actions that have no
+/// progress banner and no row of their own to fail on, and so used to fail
+/// with nothing said at all. The headline is the app's own wording and is
+/// translated; the detail underneath is whatever brew/mas/the script printed
+/// and is shown exactly as it came.
+extension UIStrings {
+    static let actionFailedRefresh = Localized(
+        "Could not refresh the update list",
+        "Güncelleme listesi yenilenemedi"
+    )
+    static let actionFailedHomebrewCheck = Localized(
+        "Could not check Homebrew",
+        "Homebrew kontrol edilemedi"
+    )
+    static let actionFailedStartRun = Localized(
+        "Could not start the update",
+        "Güncelleme başlatılamadı"
+    )
+    /// "%@" is the package or application name.
+    static let actionFailedUpdateItemFormat = Localized("Could not update %@", "%@ güncellenemedi")
+    static let actionFailedHideItemFormat = Localized("Could not ignore %@", "%@ yoksayılamadı")
+    static let actionFailedUnhideItemFormat = Localized(
+        "Could not stop ignoring %@",
+        "%@ için yoksayma kaldırılamadı"
+    )
+    static let actionFailedToolkitUpdateCheck = Localized(
+        "Could not check for toolkit updates",
+        "Araç güncellemesi denetlenemedi"
+    )
+    /// Stands in for the detail line when the run ended without printing
+    /// anything and without a bad exit status - see `Reason.noOutput`.
+    static let actionFailedNoReason = Localized(
+        "The toolkit gave no reason. The package is still listed as outdated.",
+        "Araç bir neden bildirmedi. Paket hâlâ güncel değil olarak listeleniyor."
+    )
+    static let dismissFailure = Localized("Dismiss", "Kapat")
+}
+
 // MARK: - History, About, login item
 
 extension UIStrings {

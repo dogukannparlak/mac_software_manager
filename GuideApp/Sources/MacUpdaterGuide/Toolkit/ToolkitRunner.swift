@@ -14,7 +14,96 @@ final class ToolkitController {
     private(set) var progress: UpdateProgress?
     private(set) var isRefreshing = false
     private(set) var scriptURL: URL?
-    private(set) var lastMessage: String?
+
+    /// The last thing the user asked for that failed with nothing else on
+    /// screen to say so - rendered by `FailureBanner` until dismissed, and
+    /// replaced by any later failure.
+    ///
+    /// This replaces a `lastMessage: String?` that six paths wrote to and no
+    /// view ever read: a refresh that could not run, an ignore that did not
+    /// take, a toolkit check that failed - all of them silent. One of the six
+    /// wrote the raw token "toolkit-missing", which had no translation
+    /// anywhere, which is proof enough that nothing was reading it.
+    ///
+    /// A bulk run does not report here: it has the progress banner, and
+    /// `reportFailure` already writes its failure into that.
+    private(set) var lastFailure: ActionFailure?
+
+    /// A failed action in a shape the UI can render: what was being done,
+    /// which is the app's own wording and therefore translated, and why it
+    /// failed, which is whatever brew/mas/the script printed and therefore
+    /// is not.
+    struct ActionFailure: Identifiable, Equatable, Sendable {
+
+        enum Action: Equatable, Sendable {
+            case refresh
+            case homebrewCheck
+            /// A bulk run (or a terminal window) that could not be started.
+            case startRun
+            case updateItem
+            case hideItem
+            case unhideItem
+            case toolkitUpdateCheck
+        }
+
+        /// `toolkitMissing` is the one reason the app works out for itself,
+        /// so it is the one reason that can be worded in the user's language.
+        enum Reason: Equatable, Sendable {
+            case toolkitMissing
+            case output(String)
+            /// The run ended without a word and without a bad exit status,
+            /// and the item is still outdated - `run single` reports success
+            /// either way, so there is genuinely nothing to quote.
+            case noOutput
+
+            /// What a finished process leaves to show: what it printed, or
+            /// its exit status when it printed nothing.
+            static func from(_ outcome: ProcessOutcome) -> Reason {
+                if outcome.succeeded, outcome.stderr.isEmpty { return .noOutput }
+                return .output(outcome.summary)
+            }
+
+            func text(for language: AppLanguage) -> String {
+                switch self {
+                case .toolkitMissing: return UIStrings.toolkitNotFoundDetail[language]
+                case .output(let text): return text
+                case .noOutput: return UIStrings.actionFailedNoReason[language]
+                }
+            }
+        }
+
+        let id = UUID()
+        let action: Action
+        /// The package or app this was about, where it was about one.
+        let subject: String?
+        let reason: Reason
+
+        /// "Could not refresh the update list" / "Rectangle güncellenemedi"
+        func title(for language: AppLanguage) -> String {
+            switch action {
+            case .refresh: return UIStrings.actionFailedRefresh[language]
+            case .homebrewCheck: return UIStrings.actionFailedHomebrewCheck[language]
+            case .startRun: return UIStrings.actionFailedStartRun[language]
+            case .updateItem: return named(UIStrings.actionFailedUpdateItemFormat, language)
+            case .hideItem: return named(UIStrings.actionFailedHideItemFormat, language)
+            case .unhideItem: return named(UIStrings.actionFailedUnhideItemFormat, language)
+            case .toolkitUpdateCheck: return UIStrings.actionFailedToolkitUpdateCheck[language]
+            }
+        }
+
+        func detail(for language: AppLanguage) -> String {
+            reason.text(for: language)
+        }
+
+        /// The subject-carrying titles all read "<verb> %@" - with no subject
+        /// to name (which no caller should produce, but a format string with
+        /// nothing to fill it in is not worth crashing over) the generic
+        /// "could not start" wording is the honest fallback.
+        private func named(_ format: Localized, _ language: AppLanguage) -> String {
+            guard let subject else { return UIStrings.actionFailedStartRun[language] }
+            return String(format: format[language], subject)
+        }
+    }
 
     /// Outcome of a single-item "Update" button press, per `UpdateItem.id` -
     /// the App Store-style state shown on that item's own row (queued, then a
@@ -29,6 +118,15 @@ final class ToolkitController {
         case failed
     }
     private(set) var itemStatuses: [String: ItemUpdateStatus] = [:]
+    /// Why a row's own update failed, per `UpdateItem.id`, for as long as its
+    /// failed badge is up.
+    ///
+    /// `run single` exits 0 whether or not the package actually updated -
+    /// success is decided by re-reading the outdated list (`finishActiveItem`)
+    /// - so the process outcome used to be dropped on the floor with `_ in`.
+    /// That left the row saying "Güncelleme başarısız" with the stderr that
+    /// explains it discarded, and no way for anyone to find out why.
+    private(set) var itemFailureReasons: [String: ActionFailure.Reason] = [:]
     /// Kept alongside `itemStatuses`: a successful update removes the item
     /// from `snapshot.items` (it is no longer outdated), but its row still
     /// needs the item's data to render while its "Updated" badge is showing.
@@ -258,10 +356,7 @@ final class ToolkitController {
     /// Rebuilds the cache by running the script, then re-reads it.
     func refresh(force: Bool = true) {
         guard !isRefreshing else { return }
-        guard let script = scriptURL else {
-            lastMessage = "toolkit-missing"
-            return
-        }
+        guard let script = scriptURL else { return report(.refresh, .toolkitMissing) }
 
         isRefreshing = true
         refreshTask?.cancel()
@@ -269,7 +364,7 @@ final class ToolkitController {
             let outcome = await Self.run(script: script, arguments: ["refresh_cache", force ? "force" : "auto"])
             await MainActor.run {
                 guard let self else { return }
-                if !outcome.succeeded { self.lastMessage = outcome.summary }
+                if !outcome.succeeded { self.report(.refresh, .from(outcome)) }
                 self.isRefreshing = false
                 self.reload()
             }
@@ -290,7 +385,7 @@ final class ToolkitController {
     /// multi-minute update - awaiting its exit before starting the progress
     /// watch would mean the watch starts after the run has already finished.
     func launchUpdate(scope: String = "all") {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else { return report(.startRun, .toolkitMissing) }
 
         if preferences.runUpdatesInTerminal {
             Task {
@@ -318,7 +413,9 @@ final class ToolkitController {
     /// an update started from there always gets a terminal window instead of
     /// running invisibly, whatever the general Settings toggle says.
     func installApp(named name: String, dryRun: Bool, trackingItem: UpdateItem? = nil, forceTerminal: Bool = false) {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else {
+            return report(.updateItem, subject: name, .toolkitMissing)
+        }
         let liveOrDry = dryRun ? "dry" : "live"
 
         if preferences.runUpdatesInTerminal || forceTerminal {
@@ -346,7 +443,9 @@ final class ToolkitController {
     /// Update a single package or App Store app. `forceTerminal` - see
     /// `installApp` above - is set only by the menu bar's native flyout.
     func updateSingle(_ item: UpdateItem, forceTerminal: Bool = false) {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else {
+            return report(.updateItem, subject: item.name, .toolkitMissing)
+        }
 
         let kind: String
         let identifier: String
@@ -386,29 +485,33 @@ final class ToolkitController {
     /// "Refresh Now" on the Updates page, not a multi-package run someone
     /// would want to watch in a terminal.
     func checkHomebrewDatabase() {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else { return report(.homebrewCheck, .toolkitMissing) }
         startBulkProcess(script: script, arguments: ["brew_update"])
         startProgressWatch()
     }
 
     /// Hide something from the update list.
     func ignore(type: String, id: String, name: String) {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else {
+            return report(.hideItem, subject: name, .toolkitMissing)
+        }
         Task {
             let outcome = await Self.run(script: script, arguments: ["ignore_app", type, id, name])
             await MainActor.run {
-                if !outcome.succeeded { self.lastMessage = outcome.summary }
+                if !outcome.succeeded { self.report(.hideItem, subject: name, .from(outcome)) }
                 self.reload()
             }
         }
     }
 
     func unignore(type: String, id: String, name: String) {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else {
+            return report(.unhideItem, subject: name, .toolkitMissing)
+        }
         Task {
             let outcome = await Self.run(script: script, arguments: ["unignore_app", type, id, name])
             await MainActor.run {
-                if !outcome.succeeded { self.lastMessage = outcome.summary }
+                if !outcome.succeeded { self.report(.unhideItem, subject: name, .from(outcome)) }
                 self.reload()
             }
         }
@@ -416,13 +519,28 @@ final class ToolkitController {
 
     /// Ask the toolkit whether a newer version of itself is available.
     func checkToolkitUpdate() {
-        guard let script = scriptURL else { return }
+        guard let script = scriptURL else { return report(.toolkitUpdateCheck, .toolkitMissing) }
         Task {
             let outcome = await Self.run(script: script, arguments: ["check_updates"])
             if !outcome.succeeded {
-                await MainActor.run { self.lastMessage = outcome.summary }
+                await MainActor.run { self.report(.toolkitUpdateCheck, .from(outcome)) }
             }
         }
+    }
+
+    /// Records a failure for the UI to show. One funnel, so no path can go
+    /// back to failing silently - and so "the toolkit is missing" is a
+    /// translated sentence rather than a raw token nothing renders.
+    private func report(_ action: ActionFailure.Action,
+                        subject: String? = nil,
+                        _ reason: ActionFailure.Reason) {
+        lastFailure = ActionFailure(action: action, subject: subject, reason: reason)
+    }
+
+    /// Drops the failure the banner is showing - the banner's own dismiss
+    /// button, and nothing else: a failure stays up until it is read.
+    func dismissFailure() {
+        lastFailure = nil
     }
 
     var toolkitUpdatePending: Bool {
@@ -494,7 +612,9 @@ final class ToolkitController {
     /// belongs to some other run running - its next poll puts the real state
     /// back on the banner by itself.
     private func reportFailure(_ outcome: ProcessOutcome, endedTheWatchedRun: Bool = false) {
-        lastMessage = outcome.summary
+        // Deliberately not routed through `report`/`lastFailure`: this writes
+        // the failure into `progress` below, which ProgressBanner already
+        // renders. Doing both would put the same error on screen twice.
         let processError = UpdateProgress(
             state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil
         )
@@ -632,8 +752,8 @@ final class ToolkitController {
             // ProgressBanner reads for the bulk run. This run resolves its
             // own outcome via `finishActiveItem`, not that file.
             extraEnvironment: ["GUIDEAPP_NO_SHARED_PROGRESS": "1"]
-        ) { [weak self] _ in
-            self?.finishActiveItem(item)
+        ) { [weak self] outcome in
+            self?.finishActiveItem(item, outcome: outcome)
         }
     }
 
@@ -642,11 +762,28 @@ final class ToolkitController {
     /// snapshot - the same "is it still on the outdated list" check the shell
     /// side already uses to decide success/failure, rather than trusting a
     /// process exit code that `run single` always reports as 0.
-    private func finishActiveItem(_ item: UpdateItem) {
+    ///
+    /// That exit code being useless is exactly why `outcome` still has to
+    /// come in here: it carries the run's stderr, which is the only account
+    /// of *why* the package did not update. It used to be discarded at the
+    /// call site, so the row said "failed" and the reason went nowhere.
+    private func finishActiveItem(_ item: UpdateItem, outcome: ProcessOutcome) {
         activeProcesses[item.id] = nil
         snapshot = UpdateSnapshot.load()
         let stillPending = snapshot.items.contains { $0.id == item.id }
         itemStatuses[item.id] = stillPending ? .failed : .succeeded
+
+        if stillPending {
+            let reason = ActionFailure.Reason.from(outcome)
+            // Both surfaces, because they answer different questions: the row
+            // says which package failed and is gone with the badge, the
+            // banner keeps the reason on screen until it has been read.
+            itemFailureReasons[item.id] = reason
+            report(.updateItem, subject: item.name, reason)
+        } else {
+            itemFailureReasons[item.id] = nil
+        }
+
         endFractionSimulation(for: item.id)
         scheduleStatusClear(for: item.id)
         drainQueue()
@@ -701,12 +838,20 @@ final class ToolkitController {
     /// Clears a resolved row status a few seconds after it lands, the same
     /// "flash the result, then go back to normal" behaviour the App Store
     /// uses. Skipped if that id already moved on to a new run in the meantime.
-    private func scheduleStatusClear(for id: String, after seconds: Double = 3) {
+    ///
+    /// A failure gets longer than a success: "Updated" is a confirmation and
+    /// is read at a glance, while a failed row is carrying the only per-row
+    /// explanation there is (`itemFailureReasons`, rendered under the row)
+    /// and needs long enough to actually be read. The banner keeps that
+    /// reason afterwards either way.
+    private func scheduleStatusClear(for id: String) {
+        let seconds: Double = itemStatuses[id] == .failed ? 8 : 3
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             await MainActor.run {
                 guard let self, self.itemStatuses[id] != .updating, self.itemStatuses[id] != .queued else { return }
                 self.itemStatuses[id] = nil
+                self.itemFailureReasons[id] = nil
                 self.recentItemsByID[id] = nil
             }
         }

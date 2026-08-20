@@ -25,6 +25,15 @@ struct MenuBarView: View {
                     .padding(.bottom, 10)
             }
 
+            // Refreshing and updating both start from here, so their failures
+            // have to be readable from here too - the window may never be
+            // opened at all.
+            if let failure = toolkit.lastFailure {
+                FailureBanner(failure: failure, onDismiss: { toolkit.dismissFailure() }, compact: true)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
+
             Divider()
 
             if !toolkit.isToolkitInstalled {

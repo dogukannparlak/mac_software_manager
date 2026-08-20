@@ -23,7 +23,18 @@ struct ContentView: View {
             sidebar
                 .navigationSplitViewColumnWidth(min: 236, ideal: 252, max: 320)
         } detail: {
-            detail
+            VStack(spacing: 0) {
+                // Above whichever page is showing, because the actions that
+                // produce one of these - a refresh, an ignore, a toolkit
+                // check - are started from several of them and from the menu
+                // bar, and none of them has anywhere else to report.
+                if let failure = toolkit.lastFailure {
+                    FailureBanner(failure: failure) { toolkit.dismissFailure() }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                }
+                detail
+            }
         }
         .navigationSplitViewStyle(.balanced)
         .toolbar {

@@ -358,6 +358,12 @@ private struct UpdateDetailRow: View {
         toolkit.itemStatuses[item.id]
     }
 
+    /// Why this row's own update failed - stderr from that run, kept for as
+    /// long as the failed badge is up (`ToolkitController.itemFailureReasons`).
+    private var failureReason: String? {
+        toolkit.itemFailureReasons[item.id]?.text(for: loc.language)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
@@ -438,6 +444,20 @@ private struct UpdateDetailRow: View {
                 }
                 .padding(.leading, 42)
             }
+
+            // What went wrong, under the row it went wrong on. The badge
+            // above only says "failed"; this is the sentence brew or mas
+            // actually printed, which used to be thrown away with the
+            // process outcome it arrived in.
+            if rowStatus == .failed, let failureReason {
+                Text(failureReason)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 42)
+            }
         }
         .padding(.vertical, 6)
     }
@@ -463,6 +483,7 @@ private struct UpdateDetailRow: View {
             Label(UIStrings.updateFailedRowStatus[loc.language], systemImage: "exclamationmark.triangle.fill")
                 .font(.callout.weight(.medium))
                 .foregroundStyle(.orange)
+                .help(failureReason ?? UIStrings.updateFailedRowStatus[loc.language])
         case nil:
             Button(UIStrings.updateThis[loc.language]) {
                 toolkit.updateSingle(item)

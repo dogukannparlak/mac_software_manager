@@ -39,6 +39,62 @@ struct Card<Content: View>: View {
     }
 }
 
+/// The one place an action that failed with nothing else on screen to show it
+/// gets said out loud - see `ToolkitController.lastFailure`.
+///
+/// Shaped like `ProgressBanner` on purpose: the two are the same kind of
+/// message about the same kind of work, and appear in the same places. The
+/// detail line is selectable, because the useful thing to do with a line of
+/// brew output is paste it somewhere.
+struct FailureBanner: View {
+    @Environment(LocalizationStore.self) private var loc
+
+    let failure: ToolkitController.ActionFailure
+    let onDismiss: () -> Void
+    var compact: Bool = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(compact ? .body : .title3)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(failure.title(for: loc.language))
+                    .font(compact ? .callout.weight(.medium) : .body.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(failure.detail(for: loc.language))
+                    .font(compact ? .caption : .callout)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(compact ? 3 : 8)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(compact ? .body : .title3)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help(UIStrings.dismissFailure[loc.language])
+        }
+        .padding(compact ? 10 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.orange.opacity(0.10))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.22), lineWidth: 0.5)
+        }
+    }
+}
+
 /// A single bullet, aligned so wrapped lines stay indented under the text.
 struct BulletRow: View {
     let text: String
