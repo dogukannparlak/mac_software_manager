@@ -174,6 +174,13 @@ run_mode_install() {
 }
 
 # --- SINGLE APP UPDATE ---
+# Everything that explains a failure goes to stderr, everything else to
+# stdout. That split is what GuideApp reads: a headless single-item run has
+# its stdout nulled and its stderr kept (ToolkitController.startProcess), and
+# that stderr is the only thing the failed row has to show for a reason. On
+# stdout these lines were written and thrown away, so a row that said
+# "Güncelleme başarısız" could not say why. Terminal mode is unaffected - the
+# window shows both streams either way.
 run_mode_single() {
     type="$3"  # brew, cask, or mas
     id="$4"    # package name or app ID
@@ -191,21 +198,21 @@ run_mode_single() {
         brew upgrade "$id" || update_rc=$?
         # Exit code alone is not proof: verify the package left the outdated list
         if (( update_rc == 0 )) && brew_is_outdated "$id"; then
-            echo "⚠️ $id is still reported as outdated after the upgrade."
+            echo "⚠️ $id is still reported as outdated after the upgrade." >&2
             update_rc=1
         fi
         ;;
     "mas")
         if [[ "$MAS_ENABLED" != "1" ]]; then
-            echo "❌ Error: App Store updates are disabled."
+            echo "❌ Error: App Store updates are disabled." >&2
             exit 1
         fi
         # Every other mas call site in this project guards on this; without
         # it, a machine with MAS_ENABLED=1 but no mas installed dies here on
         # exit 127 with nothing said about why.
         if ! command -v mas &> /dev/null; then
-            echo "❌ Error: 'mas' is not installed, so App Store apps cannot be updated."
-            echo "   Install it with: brew install mas"
+            echo "❌ Error: 'mas' is not installed, so App Store apps cannot be updated." >&2
+            echo "   Install it with: brew install mas" >&2
             exit 1
         fi
         # Use upgrade instead of install to force update for existing apps.
@@ -229,10 +236,10 @@ run_mode_single() {
         # just lands in the history as a plain failure, with nothing to
         # separate "we ran out of patience" from "the App Store said no".
         if (( update_rc == TIMEOUT_EXIT_STATUS )); then
-            echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: updating $name was killed mid-download."
+            echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: updating $name was killed mid-download." >&2
         fi
         if (( update_rc == 0 )) && mas_is_outdated "$id"; then
-            echo "⚠️ $name is still reported as outdated after the upgrade."
+            echo "⚠️ $name is still reported as outdated after the upgrade." >&2
             update_rc=1
         fi
         ;;
@@ -266,7 +273,7 @@ run_mode_single() {
     if (( update_rc == 0 )); then
         echo "✅ Update Complete!"
     else
-        echo "❌ Update FAILED for $name (exit $update_rc). Logged as failed."
+        echo "❌ Update FAILED for $name (exit $update_rc). Logged as failed." >&2
     fi
     echo "🔄 Refreshing SwiftBar..."
     open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true

@@ -1,5 +1,9 @@
 load "test_helper"
 
+# `run --separate-stderr` (used by the stderr-split tests at the bottom of
+# this file) is a bats 1.5+ flag; without this line bats warns and ignores it.
+bats_require_minimum_version 1.5.0
+
 # Regression coverage for the exact risk flagged when the ~530-line 'run'
 # dispatch block (update_system.1h.sh, formerly one giant `if`) was split into
 # lib/run_modes.sh functions: a zsh function gets its OWN positional
@@ -279,3 +283,48 @@ load "test_helper"
     assert_contains "|497799835|fail" "$output"
 }
 
+@test "run_mode_single writes its failure reason to stderr, not stdout" {
+    # GuideApp nulls a headless run's stdout and keeps its stderr
+    # (ToolkitController.startProcess), and that stderr is the only account a
+    # failed row has of why it failed. On stdout these lines went nowhere.
+    run --separate-stderr run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=0
+        MAS_UPGRADE_TIMEOUT=1
+        mas() {
+            case "$1" in
+                list) echo "497799835  Xcode  (14.1)" ;;
+                outdated) ;;
+                *) sleep 30 ;;
+            esac
+            return 0
+        }
+        collect_cache_data() { :; }
+        open() { :; }
+
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+    '
+    assert_contains "Timed out after 1s" "$stderr"
+    assert_contains "Update FAILED for Xcode" "$stderr"
+    refute_contains "Timed out after 1s" "$output"
+    refute_contains "Update FAILED for Xcode" "$output"
+    # The narration itself stays on stdout - this is a split, not a move.
+    assert_contains "Updating Xcode" "$output"
+}
+
+@test "run_mode_single reports a disabled or missing 'mas' on stderr" {
+    run --separate-stderr run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=0
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single mas 497799835 Xcode 14.1 14.2
+        ( run_mode_single "$@" )
+    '
+    assert_contains "App Store updates are disabled" "$stderr"
+    refute_contains "App Store updates are disabled" "$output"
+}
