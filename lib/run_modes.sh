@@ -88,7 +88,13 @@ run_mode_install() {
     fi
 
     workdir="$(mktemp -d "${TMPDIR:-/tmp}/msu_install.XXXXXX")" || exit 1
-    trap 'rm -rf "$workdir"; progress_finalize' EXIT
+    # Cleanup only - progress_finalize deliberately is NOT called here. In zsh
+    # an EXIT trap set inside a function is local to that function, and on
+    # `exit N` from within the function it runs with $? == 0, not N: finalizing
+    # here would stamp "done" on every early `exit 1` below. The dispatcher's
+    # trap (update_system.1h.sh, `run` section) is restored the moment this one
+    # has run and does see the real status, so it owns the finalize.
+    trap 'rm -rf "$workdir"' EXIT
 
     archive_name="${app_url:t}"
     archive_path="$workdir/${archive_name}"
@@ -208,15 +214,19 @@ run_mode_single() {
         ;;
     esac
 
-    # Log the real outcome to history
+    # Log the real outcome to history.
+    # NOT named 'status': that is a read-only special parameter in zsh (a
+    # synonym for $?), and assigning to it is a fatal error that killed this
+    # function right here - before the history entry, the cache rebuild and
+    # the final progress line below ever ran.
     timestamp=$(date +%s)
-    status="ok"
-    (( update_rc == 0 )) || status="fail"
+    entry_status="ok"
+    (( update_rc == 0 )) || entry_status="fail"
 
     # Format: timestamp|source|name|old_ver|new_ver|id|status
-    if echo "$timestamp|$type|$name|$old_ver|$new_ver|$id|$status" >> "$HISTORY_FILE"; then
+    if echo "$timestamp|$type|$name|$old_ver|$new_ver|$id|$entry_status" >> "$HISTORY_FILE"; then
         trim_history_log
-        echo "📝 Added to history log ($status)."
+        echo "📝 Added to history log ($entry_status)."
     fi
 
     # Menu data is cached, so it must be rebuilt before the refresh below -
@@ -279,9 +289,11 @@ run_mode_plugin() {
             download_verified "$f" "${engine_temp[$f]}" "$want_header" || engine_ok=0
         done
 
+        # Cleanup only, for the same reason as run_mode_install above: this
+        # trap is function-local, so it cannot see the status an `exit 1`
+        # below is exiting with. The dispatcher's trap finalizes.
         trap '
             for f in "${engine_files[@]}"; do rm -f "${engine_temp[$f]}"; done
-            progress_finalize
         ' EXIT
 
         if (( engine_ok )); then

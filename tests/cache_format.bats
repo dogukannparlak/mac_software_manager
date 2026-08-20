@@ -47,6 +47,32 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
     [ "$output" = "v1|done|complete|||" ]
 }
 
+@test "progress_finalize records a non-zero exit status as failed, not done" {
+    # The bug this guards: every early "exit 1" used to reach progress_finalize
+    # and be written out as done|complete - a green tick for a failed run.
+    run run_zsh_snippet '
+        progress_write "running" "brew-upgrade" "awscli" "3" "8"
+        progress_finalize 1
+        cat "$PROGRESS_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1|failed|brew-upgrade|awscli|3|8" ]
+}
+
+@test "progress_finalize propagates the exit status a real EXIT trap catches" {
+    # zsh only reports the exiting status to a trap that reads $? as its very
+    # first command, so this exercises the wiring, not just the function.
+    run run_zsh_snippet '
+        (
+            trap "progress_finalize \$?" EXIT
+            progress_write "running" "install-app" "Rectangle" "" ""
+            exit 1
+        )
+        cat "$PROGRESS_FILE"
+    '
+    [ "$output" = "v1|failed|install-app|Rectangle||" ]
+}
+
 @test "progress_finalize does nothing to a state that is already done" {
     run run_zsh_snippet '
         progress_write "done" "complete" "" "" ""

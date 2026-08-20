@@ -65,3 +65,46 @@ load "test_helper"
     [[ "$output" != *"STUB brew"* ]]
     [[ "$output" == *"Updating  (? -> ?)"* ]]
 }
+
+@test "run_mode_single reaches the history log and a final progress state on success" {
+    # Everything below the 'brew upgrade' call used to be unreachable: the
+    # history line was built with a variable named 'status', which is a
+    # read-only special parameter in zsh, so the assignment was a fatal error
+    # that killed the function on the spot - no history entry, no cache
+    # rebuild, and progress left stuck on "running" forever.
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 0; }
+        brew_is_outdated() { return 1; }   # upgraded, no longer outdated
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "HISTORY: $(cat "$HISTORY_FILE")"
+        echo "PROGRESS: $(cat "$PROGRESS_FILE")"
+    '
+    [[ "$output" == *"Added to history log (ok)"* ]]
+    [[ "$output" == *"HISTORY: "*"|brew|MyFakeName|1.0|2.0|my-fake-token|ok"* ]]
+    [[ "$output" == *"PROGRESS: v1|done|single|MyFakeName||"* ]]
+}
+
+@test "run_mode_single logs a failed upgrade as failed" {
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 1; }
+        brew_is_outdated() { return 0; }
+        collect_cache_data() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "HISTORY: $(cat "$HISTORY_FILE")"
+        echo "PROGRESS: $(cat "$PROGRESS_FILE")"
+    '
+    [[ "$output" == *"Added to history log (fail)"* ]]
+    [[ "$output" == *"|my-fake-token|fail"* ]]
+    [[ "$output" == *"PROGRESS: v1|failed|single|MyFakeName||"* ]]
+}

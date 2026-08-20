@@ -50,10 +50,17 @@ Canonical example (used verbatim by both test suites):
 v1|running|brew-upgrade|awscli|3|8
 ```
 
-- Shell writer: `progress_write()` in `update_system.1h.sh` (~line 474);
-  reader/self-check: `progress_finalize()` (~line 483, runs on EXIT and
-  promotes an unfinished "running" entry to "done" so the UI never shows a
-  run as stuck forever).
+- Shell writer: `progress_write()` in `lib/cache.sh`; reader/self-check:
+  `progress_finalize()` in the same file. It runs from the `run` dispatcher's
+  EXIT trap so an unfinished "running" entry never leaves the UI showing a
+  run as stuck forever, and it takes the exit status that trap caught: `0`
+  resolves the entry to `done|complete`, anything else to `failed` with the
+  recorded phase/item/index/total left in place, so the UI can name the step
+  the run died on. Traps must read `$?` as their first command
+  (`trap 'progress_finalize $?' EXIT`) - and note that a zsh EXIT trap set
+  *inside a function* is function-local and reports `$?` as `0` on `exit N`,
+  so only the top-level dispatcher trap may finalize; the function-local
+  traps in `lib/run_modes.sh` do cleanup only.
 - Swift reader: `UpdateProgress.parse(raw:modified:now:)` in
   `GuideApp/Sources/MacUpdaterGuide/Toolkit/UpdateProgress.swift`. A missing
   or unrecognized version returns `nil` (the same "no usable data" outcome as

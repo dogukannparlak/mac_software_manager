@@ -147,7 +147,29 @@ progress_write() {
 
 # Runs on exit so a run that stops early - a failed integrity check, Ctrl-C,
 # "nothing to do" - never leaves a reader believing work is still in progress.
+#
+# Takes the exit status the EXIT trap caught. "Stopped early" is not the same
+# as "finished": an `exit 1` used to land here as an unconditional
+# "done|complete", i.e. a green tick and "Bitti" for a run that actually
+# failed. So the caller has to say which it was:
+#
+#     trap 'progress_finalize $?' EXIT
+#
+# $? must be read as the *first* thing the trap does - anything before it
+# (an `rm -f`, an `echo`) overwrites the status being reported. A trap that
+# also has cleanup to do therefore captures it into a variable first:
+#
+#     trap 'rc=$?; rm -rf "$workdir"; progress_finalize $rc' EXIT
+#
+# Called with no argument it assumes success, so a bare `progress_finalize`
+# still means what it always did.
+#
+# On failure only the state flips: the recorded phase/item/index/total are
+# kept, so a reader can say where the run stopped ("Updating Homebrew
+# packages - awscli (3 of 8)") instead of only that it stopped.
 progress_finalize() {
+    local exit_rc="${1:-0}"
+
     [[ -f "$PROGRESS_FILE" ]] || return 0
     local recorded
     recorded=$(<"$PROGRESS_FILE") 2>/dev/null || return 0
@@ -160,7 +182,13 @@ progress_finalize() {
     (( ${#fields[@]} >= 2 )) || return 0
     [[ "${fields[1]}" == "$PROGRESS_FORMAT_VERSION" ]] || return 0
 
-    [[ "${fields[2]}" == "running" ]] && progress_write "done" "complete" "" "" ""
+    [[ "${fields[2]}" == "running" ]] || return 0
+
+    if [[ "$exit_rc" == "0" ]]; then
+        progress_write "done" "complete" "" "" ""
+    else
+        progress_write "failed" "${fields[3]:-}" "${fields[4]:-}" "${fields[5]:-}" "${fields[6]:-}"
+    fi
     return 0
 }
 

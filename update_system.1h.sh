@@ -515,7 +515,9 @@ if [[ "$1" == "change_branch" ]]; then
 
     # Force Download and Overwrite
     TEMP_TARGET="$(mktemp "${TMPDIR:-/tmp}/update_system.branch_switch.XXXXXX")"
-    trap 'rm -f "$TEMP_TARGET"; progress_finalize' EXIT
+    # $? has to be read before the cleanup runs, or the status reported is
+    # rm's, not the one this is exiting with. See progress_finalize.
+    trap 'switch_rc=$?; rm -f "$TEMP_TARGET"; progress_finalize $switch_rc' EXIT
 
     echo "⬇️ Downloading version from $NEW_BRANCH..."
 
@@ -738,7 +740,7 @@ if [[ "$1" == "brew_update" ]]; then
     fi
 
     progress_write "running" "brew-update" "" "" ""
-    trap 'progress_finalize' EXIT
+    trap 'progress_finalize $?' EXIT
 
     echo "📦 Checking Homebrew for updates..."
     if ! brew_update_with_retry; then
@@ -782,7 +784,7 @@ if [[ "$1" == "run" ]]; then
     fi
 
     progress_write "running" "starting" "" "" ""
-    trap 'progress_finalize' EXIT
+    trap 'progress_finalize $?' EXIT
 
     # Each mode is a function in lib/run_modes.sh. install/single read the
     # script's own positional parameters ($3 onward), so they MUST be called
