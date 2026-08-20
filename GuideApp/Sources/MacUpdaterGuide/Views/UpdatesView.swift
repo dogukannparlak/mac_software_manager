@@ -351,6 +351,10 @@ private struct UpdateDetailRow: View {
 
     let item: UpdateItem
 
+    /// Up while this row's own cancel button is waiting on its confirmation -
+    /// separate from the page-level one, which cancels the bulk run.
+    @State private var showCancelConfirmation = false
+
     /// This row's own outcome, independent of whatever else the toolkit is
     /// doing - set only by pressing this row's own Update button, never by a
     /// bulk "Update Everything" run passing through this package.
@@ -460,6 +464,18 @@ private struct UpdateDetailRow: View {
             }
         }
         .padding(.vertical, 6)
+        .confirmationDialog(
+            UIStrings.cancelUpdateConfirmTitle[loc.language],
+            isPresented: $showCancelConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(UIStrings.cancelUpdateConfirmAction[loc.language], role: .destructive) {
+                toolkit.cancelItemUpdate(item.id)
+            }
+            Button(UIStrings.cancelUpdateKeepGoing[loc.language], role: .cancel) { }
+        } message: {
+            Text(UIStrings.cancelUpdateConfirmMessage[loc.language])
+        }
     }
 
     /// Update button while idle; a spinner while this row's own run is in
@@ -468,13 +484,19 @@ private struct UpdateDetailRow: View {
     private var updateControl: some View {
         switch rowStatus {
         case .queued:
-            Label(UIStrings.queuedRowStatus[loc.language], systemImage: "clock")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Label(UIStrings.queuedRowStatus[loc.language], systemImage: "clock")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
+                cancelRowButton
+            }
         case .updating:
-            ProgressView()
-                .controlSize(.small)
-                .frame(minWidth: 60)
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(minWidth: 60)
+                cancelRowButton
+            }
         case .succeeded:
             Label(UIStrings.updatedRowStatus[loc.language], systemImage: "checkmark.circle.fill")
                 .font(.callout.weight(.medium))
@@ -490,6 +512,31 @@ private struct UpdateDetailRow: View {
             }
             .buttonStyle(.bordered)
             .disabled(blocksNewLaunch)
+        }
+    }
+
+    /// Stops this row's own run, so a single-item update that hangs is not a
+    /// spinner the user can only get rid of by quitting the app. Only shown
+    /// where there is genuinely something to stop (`canCancelItem`): a
+    /// terminal-mode run is stopped in its own window, not from here.
+    @ViewBuilder
+    private var cancelRowButton: some View {
+        if toolkit.canCancelItem(item.id) {
+            Button {
+                // Nothing has been started for a queued row yet, so there is
+                // nothing to warn about - only a run already in flight can
+                // leave a package half-installed.
+                if rowStatus == .queued {
+                    toolkit.cancelItemUpdate(item.id)
+                } else {
+                    showCancelConfirmation = true
+                }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(UIStrings.cancelUpdate[loc.language])
         }
     }
 

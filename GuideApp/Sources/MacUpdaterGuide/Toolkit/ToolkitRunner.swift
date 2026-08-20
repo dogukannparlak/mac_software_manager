@@ -147,6 +147,16 @@ final class ToolkitController {
     /// Never used for terminal-mode runs (see `updateSingle`/`installApp`)
     /// or for the bulk run (`bulkProcess`, below).
     private var activeProcesses: [String: Process] = [:]
+    /// Which run currently owns each row, so a per-item process that has been
+    /// cancelled - or superseded by the user pressing Update again on the
+    /// same row - can be told apart from the one that row is actually
+    /// waiting on. A row's token is cleared the moment its run stops being
+    /// the current one, and `finishActiveItem` refuses to touch a row whose
+    /// token has moved on: that is what lets `cancelItemUpdate` tear a row
+    /// down immediately instead of hoping a process that may be ignoring
+    /// SIGTERM gets around to exiting.
+    private var itemRunTokens: [String: Int] = [:]
+    private var nextItemRunToken = 0
     /// FIFO of item ids waiting for a free concurrency slot, plus what to
     /// actually run for each once its turn comes - `drainQueue()` pops both
     /// together. A plain array is fine at this scale (a handful of rows).
@@ -236,14 +246,60 @@ final class ToolkitController {
     /// already stop it there directly.
     var canCancelCurrentRun: Bool { bulkProcess?.isRunning == true }
 
-    /// Stops the bulk run in progress. Sends SIGTERM to the script's direct
-    /// children first (brew/mas/curl - whatever it is actually waiting on)
-    /// and then to the script itself, since terminating just the zsh process
-    /// does not by itself stop a foreground child it launched.
-    func cancelUpdate() {
-        guard let process = bulkProcess, process.isRunning else { return }
-        cancelledBulkRun = true
+    /// True while this row's own run is something the app can actually stop:
+    /// a headless per-item process of ours, or an item still waiting its turn
+    /// in the concurrency queue. False for a terminal-mode single-item run,
+    /// for the same reason `canCancelCurrentRun` is - the launcher has
+    /// already exited and the window is the user's to close.
+    func canCancelItem(_ id: String) -> Bool {
+        activeProcesses[id]?.isRunning == true || queuedItemIDs.contains(id)
+    }
 
+    /// Stops one row's own update: a queued item never starts, a running one
+    /// is signalled exactly the way `cancelUpdate` signals the bulk run.
+    ///
+    /// Cancelling used to reach `bulkProcess` and nothing else, so a
+    /// single-item run that hung - `mas` has no timeout of its own, and one
+    /// of its call sites was missing the wrapper the rest use - left a
+    /// spinner nothing in the app could ever clear, with quitting the app as
+    /// the only way out.
+    ///
+    /// The row goes straight back to its idle "Update" button rather than to
+    /// a failed badge: the user asked for this, so there is no failure to
+    /// report and no reason to keep on screen. All of that teardown happens
+    /// here and now, not in the termination handler, because a process that
+    /// ignores SIGTERM must not be able to hold the row a second time -
+    /// `itemRunTokens` is what makes that handler, whenever it does arrive, a
+    /// no-op rather than a second opinion on a row the user may since have
+    /// restarted.
+    func cancelItemUpdate(_ id: String) {
+        let wasQueued = queuedItemIDs.contains(id)
+        queuedItemIDs.removeAll { $0 == id }
+        queuedLaunchers[id] = nil
+
+        if let process = activeProcesses.removeValue(forKey: id) {
+            itemRunTokens[id] = nil
+            if process.isRunning { terminateWithChildren(process) }
+        } else if !wasQueued {
+            // Neither running here nor queued - a terminal-mode run, or one
+            // that resolved between the button being drawn and pressed.
+            return
+        }
+
+        itemStatuses[id] = nil
+        itemFailureReasons[id] = nil
+        recentItemsByID[id] = nil
+        endFractionSimulation(for: id)
+        // A slot just freed up (or the queue just got shorter): let whatever
+        // is still waiting move, and stop the queue poll if nothing is.
+        drainQueue()
+    }
+
+    /// SIGTERM to a script's direct children first (brew/mas/curl - whatever
+    /// it is actually waiting on) and then to the script itself, since
+    /// terminating just the zsh process does not by itself stop a foreground
+    /// child it launched. Shared by the bulk cancel and the per-row one.
+    private func terminateWithChildren(_ process: Process) {
         let pkill = Process()
         pkill.executableURL = URL(filePath: "/usr/bin/pkill")
         pkill.arguments = ["-TERM", "-P", String(process.processIdentifier)]
@@ -251,6 +307,15 @@ final class ToolkitController {
         pkill.waitUntilExit()
 
         process.terminate()
+    }
+
+    /// Stops the bulk run in progress - `terminateWithChildren` for how, and
+    /// `cancelItemUpdate` for the single-row equivalent.
+    func cancelUpdate() {
+        guard let process = bulkProcess, process.isRunning else { return }
+        cancelledBulkRun = true
+
+        terminateWithChildren(process)
 
         // We just killed it ourselves - no need to keep polling a progress
         // file whose next write, if any, could only report the same thing.
@@ -764,6 +829,9 @@ final class ToolkitController {
     }
 
     private func startSingleItemProcess(_ item: UpdateItem, script: URL, arguments: [String]) {
+        nextItemRunToken += 1
+        let token = nextItemRunToken
+        itemRunTokens[item.id] = token
         activeProcesses[item.id] = startProcess(
             script: script,
             arguments: arguments,
@@ -773,7 +841,7 @@ final class ToolkitController {
             // own outcome via `finishActiveItem`, not that file.
             extraEnvironment: ["GUIDEAPP_NO_SHARED_PROGRESS": "1"]
         ) { [weak self] outcome in
-            self?.finishActiveItem(item, outcome: outcome)
+            self?.finishActiveItem(item, token: token, outcome: outcome)
         }
     }
 
@@ -787,7 +855,15 @@ final class ToolkitController {
     /// come in here: it carries the run's stderr, which is the only account
     /// of *why* the package did not update. It used to be discarded at the
     /// call site, so the row said "failed" and the reason went nowhere.
-    private func finishActiveItem(_ item: UpdateItem, outcome: ProcessOutcome) {
+    private func finishActiveItem(_ item: UpdateItem, token: Int, outcome: ProcessOutcome) {
+        // Cancelled, or already superseded by a later run on the same row:
+        // this process is reporting on something nobody is waiting for any
+        // more, and the row's state is not its to write. Without the check, a
+        // cancelled run's eventual exit would put a "failed" badge (and a
+        // banner) on a row the user had already sent back to idle, or worse,
+        // clear the slot of the run that replaced it.
+        guard itemRunTokens[item.id] == token else { return }
+        itemRunTokens[item.id] = nil
         activeProcesses[item.id] = nil
         snapshot = UpdateSnapshot.load()
         let stillPending = snapshot.items.contains { $0.id == item.id }
