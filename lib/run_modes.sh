@@ -265,7 +265,15 @@ run_mode_single() {
     # that treats "done" as "safe to re-check the outdated list now"
     # (GuideApp does, to show a per-row Updated/Failed result) never reads a
     # still-stale cache and reports a real success as a failure.
-    collect_cache_data "all"
+    #
+    # Scoped to this item's own entries, not the whole cache: everything
+    # between the upgrade finishing and the "done" line below is time the row
+    # spends on "Güncelleniyor" with the work already done, and a full
+    # collect_cache_data spent most of it re-fetching things one package
+    # cannot have changed - homepages included. See collect_cache_for_item
+    # (lib/cache.sh) for what it does refresh, and why it holds the "cache"
+    # lock while it writes.
+    collect_cache_for_item "$type" "$id"
 
     progress_write "$( (( update_rc == 0 )) && print done || print failed )" "single" "$name" "" ""
 

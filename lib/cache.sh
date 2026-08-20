@@ -16,6 +16,12 @@ CACHE_KEYS_INSTALLED=(brew_pinned brew_casks brew_formulae brew_leaves brew_form
 CACHE_KEYS_APPS=(app_updates)
 CACHE_KEYS_WEBSITES=(cask_homepages github_homepages)
 
+# How long a targeted post-update refresh (collect_cache_for_item) waits for
+# the "cache" lock before giving up on it. Generous enough to sit out another
+# single-item run's refresh or a background tier refresh, short enough that a
+# lock nobody ever releases cannot pin an update row on "Güncelleniyor".
+CACHE_LOCK_WAIT=${CACHE_LOCK_WAIT:-60}
+
 # Modification time of a cache entry in epoch seconds (0 when missing)
 cache_mtime() {
     local -a st
@@ -443,4 +449,93 @@ collect_cache_data() {
     fi
 
     return 0
+}
+
+# Refresh only what a single finished update can have changed, for one item.
+#
+# The alternative is collect_cache_data "all", which is what the single-item
+# run mode used to call, and it costs seconds no matter how small the upgrade
+# was: 'brew desc' over every installed formula and cask, a rescan of every
+# self-updating app, and the websites tier - whose entries carry a 24h TTL
+# (CACHE_TTL_WEBSITES) precisely because a homepage does not change. Measured
+# in whole seconds on a machine with mas absent - 4.6s against a warm cache,
+# ~19s when the app scan and homepage fetches have to go to the network - and
+# worse again with mas installed. All of it lands AFTER the package is already
+# upgraded and BEFORE the "done" progress line, and GuideApp only resolves the
+# row when the process exits (ToolkitRunner.finishActiveItem) - so a 3-second
+# 'brew upgrade jq' sat on "Güncelleniyor" for 7+ seconds.
+#
+# So: refresh the entries that decide whether this row is still pending, plus
+# the installed list that shows its new version. Every other entry keeps its
+# own TTL and is picked up by the next background refresh, which is exactly
+# what those TTLs are for.
+#
+# Serialized on the "cache" lock, which the whole-cache refresh action already
+# takes (update_system.1h.sh, "refresh_cache"). GuideApp runs up to
+# preferences.maxConcurrentUpdates single-item updates at once (default 2,
+# ToolkitSettings), and two unsynchronized writers race: run B can compute
+# brew_outdated while run A's upgrade is still in flight, so it still sees A's
+# package as outdated, and it writes that over the fresh entry A just wrote -
+# after which A re-reads the list and reports its own success as a failure.
+# The wait is bounded (CACHE_LOCK_WAIT); refreshing anyway on a timeout beats
+# the alternative, which is announcing "done" over a cache that still lists
+# this very item as pending.
+#
+# Best-effort like collect_cache_data, and for the same reason: callers run
+# under 'set -e', where one unreachable brew command would otherwise abort the
+# run before its history entry and final progress line ever got written.
+collect_cache_for_item() {
+    setopt local_options no_err_exit
+    local item_type="$1"
+    local item_id="$2"
+
+    acquire_lock "cache" "$CACHE_LOCK_WAIT"
+
+    case "$item_type" in
+        "brew"|"cask")
+            # The list GuideApp re-reads to decide Updated vs. Failed...
+            cache_refresh_entry "brew_outdated" brew_outdated_normalized
+            # ...and the installed list the row's version is read from. Only
+            # the one of the two this item lives in: a cask upgrade cannot
+            # change the formula list, or the other way round.
+            if [[ "$item_type" == "cask" ]]; then
+                cache_refresh_entry "brew_casks" brew list --cask --versions
+            else
+                cache_refresh_entry "brew_formulae" brew list --formula --versions
+            fi
+            ;;
+        "mas")
+            if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
+                # Same hang guard as every other 'mas' query in this project.
+                cache_refresh_entry "mas_outdated" run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated
+            else
+                cache_put "mas_outdated" ""
+            fi
+
+            # A ghost app - an Apple title 'mas outdated' never reports - is
+            # pending because manual_updates says so, and GuideApp gives it
+            # the same type "mas" as any other App Store row
+            # (ToolkitRunner.updateSingle). Leaving that entry alone would
+            # keep the row on the pending list and turn a real success into a
+            # "Failed". Rebuilt only when this id is actually one of them,
+            # since every ghost app costs an iTunes Lookup round trip.
+            if cache_lists_manual_update "$item_id"; then
+                cache_refresh_entry "manual_updates" collect_manual_updates "$(cache_get "mas_outdated")"
+            fi
+            ;;
+    esac
+
+    release_lock "cache"
+    return 0
+}
+
+# Is this App Store id currently listed in the manual_updates entry?
+# Line format: name|local_version|remote_version|app_id
+cache_lists_manual_update() {
+    local wanted="$1" line
+    [[ -n "$wanted" ]] || return 1
+    for line in ${(f)"$(cache_get "manual_updates")"}; do
+        [[ "${line##*|}" == "$wanted" ]] && return 0
+    done
+    return 1
 }

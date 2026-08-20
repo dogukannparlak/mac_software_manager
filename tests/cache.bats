@@ -239,3 +239,173 @@ load "test_helper"
     '
     assert_contains "ENTRY: mas_list run_with_timeout 7 mas list" "$output"
 }
+
+# collect_cache_for_item: the post-update refresh a single-item run does.
+#
+# It used to be collect_cache_data "all", which re-fetched the whole cache -
+# including the websites tier, whose 24h TTL exists precisely because those
+# entries do not change - while GuideApp's row sat on "Güncelleniyor" waiting
+# for the process to exit (ToolkitRunner.finishActiveItem).
+
+@test "collect_cache_for_item refreshes only the brew entries a formula can change" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $*"
+            cache_put "$1" "stub"
+        }
+
+        collect_cache_for_item "brew" "jq"
+    '
+    assert_contains "ENTRY: brew_outdated brew_outdated_normalized" "$output"
+    assert_contains "ENTRY: brew_formulae brew list --formula --versions" "$output"
+    # The cask list cannot have changed, and the expensive tiers are left to
+    # their own TTLs: no descriptions, no app scan, no homepage lookups.
+    refute_contains "brew_casks" "$output"
+    refute_contains "_desc" "$output"
+    refute_contains "app_updates" "$output"
+    refute_contains "homepages" "$output"
+}
+
+@test "collect_cache_for_item refreshes the cask list, not the formula list, for a cask" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $*"
+            cache_put "$1" "stub"
+        }
+
+        collect_cache_for_item "cask" "firefox"
+    '
+    assert_contains "ENTRY: brew_outdated brew_outdated_normalized" "$output"
+    assert_contains "ENTRY: brew_casks brew list --cask --versions" "$output"
+    refute_contains "brew_formulae" "$output"
+    refute_contains "homepages" "$output"
+}
+
+@test "collect_cache_for_item refreshes 'mas outdated' under the query timeout" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR/bin"
+        printf "#!/bin/sh\nexit 0\n" > "$CACHE_DIR/bin/mas"
+        chmod +x "$CACHE_DIR/bin/mas"
+        PATH="$CACHE_DIR/bin:$PATH"
+        MAS_ENABLED=1
+        MAS_QUERY_TIMEOUT=7
+
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $*"
+            cache_put "$1" ""
+        }
+
+        collect_cache_for_item "mas" "497799835"
+    '
+    assert_contains "ENTRY: mas_outdated run_with_timeout 7 mas outdated" "$output"
+    # Nothing here touches Homebrew, and an App Store app is not a ghost app
+    # unless manual_updates says so - no iTunes Lookup round trips.
+    refute_contains "brew_" "$output"
+    refute_contains "manual_updates" "$output"
+}
+
+@test "collect_cache_for_item rebuilds manual_updates for a ghost app" {
+    # Apple titles 'mas outdated' never reports are pending because
+    # manual_updates says so, and GuideApp sends them through as type "mas"
+    # like any other App Store row (ToolkitRunner.updateSingle). Leaving that
+    # entry stale keeps the row on the pending list, which finishActiveItem
+    # reads back as a failed update.
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        MAS_ENABLED=1
+        cache_put "manual_updates" "Xcode|14.2|15.0|497799835"
+
+        cache_refresh_entry() {
+            print -r -- "ENTRY: $1"
+            cache_put "$1" ""
+        }
+
+        collect_cache_for_item "mas" "497799835"
+    '
+    assert_contains "ENTRY: manual_updates" "$output"
+}
+
+@test "collect_cache_for_item survives a failing entry and leaks no errexit" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cache_refresh_entry() {
+            [[ "$1" == "brew_outdated" ]] && return 1
+            cache_put "$1" "stub"
+        }
+
+        set -e
+        set -o pipefail
+        collect_cache_for_item "brew" "jq"
+        echo "SURVIVED rc=$?"
+        echo "FORMULAE: $(cache_get brew_formulae)"
+
+        false
+        echo "LEAKED"
+    '
+    # The entry after the failing one still runs, and the caller keeps its
+    # errexit - it needs both to reach its own final progress line.
+    assert_contains "SURVIVED rc=0" "$output"
+    assert_contains "FORMULAE: stub" "$output"
+    refute_contains "LEAKED" "$output"
+    [ "$status" -eq 1 ]
+}
+
+@test "collect_cache_for_item holds the cache lock while it writes, and releases it after" {
+    # Two single-item runs can be in flight at once (GuideApp's
+    # maxConcurrentUpdates, default 2). Without the lock, the second one can
+    # compute brew_outdated while the first one's upgrade is still running
+    # and write that stale list over the fresh entry - after which the first
+    # run re-reads it and reports its own success as a failure.
+    #
+    # flock is advisory per-process, so "another run" has to be a real
+    # subprocess trying for the same lock file.
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        other_run_can_lock() {
+            [[ -f "$LOCK_DIR/cache.lock" ]] || { print -r -- "NOLOCKFILE"; return }
+            zsh -c "zmodload zsh/system && zsystem flock -t 0 \"$LOCK_DIR/cache.lock\" && echo FREE || echo BUSY" 2>/dev/null
+        }
+
+        cache_refresh_entry() {
+            [[ "$1" == "brew_outdated" ]] && print -r -- "DURING: $(other_run_can_lock)"
+            cache_put "$1" "stub"
+        }
+
+        collect_cache_for_item "brew" "jq"
+        print -r -- "AFTER: $(other_run_can_lock)"
+    '
+    assert_contains "DURING: BUSY" "$output"
+    assert_contains "AFTER: FREE" "$output"
+}
+
+@test "collect_cache_for_item refreshes anyway when the cache lock never frees up" {
+    # A lock nobody releases must not pin the row on "Güncelleniyor" forever:
+    # the wait is bounded by CACHE_LOCK_WAIT, and refreshing without the lock
+    # beats announcing "done" over a cache that still lists this item.
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR" "$LOCK_DIR"
+        CACHE_LOCK_WAIT=1
+        cache_refresh_entry() { cache_put "$1" "stub" }
+
+        # A subprocess that takes the lock and sits on it past the wait.
+        : > "$LOCK_DIR/cache.lock"
+        zsh -c "zmodload zsh/system && zsystem flock \"$LOCK_DIR/cache.lock\" && sleep 10" &
+        holder=$!
+        # Give it a moment to actually hold the lock before we try.
+        while zsh -c "zmodload zsh/system && zsystem flock -t 0 \"$LOCK_DIR/cache.lock\"" 2>/dev/null; do
+            sleep 0.1
+        done
+
+        started=$EPOCHSECONDS
+        collect_cache_for_item "brew" "jq"
+        print -r -- "OUTDATED: $(cache_get brew_outdated)"
+        print -r -- "WAITED: $(( EPOCHSECONDS - started ))"
+        kill $holder 2>/dev/null
+    '
+    # It gave up on the lock and wrote anyway, without waiting out the
+    # holder's full 10 seconds.
+    assert_contains "OUTDATED: stub" "$output"
+    [ "${output##*WAITED: }" -lt 5 ]
+}

@@ -162,6 +162,29 @@ acquire_lock() {
     return 0
 }
 
+# Hand a lock back before the process exits. acquire_lock's descriptor
+# normally lives as long as the process, which is the right default for a
+# whole-run lock - but a caller that only needs to serialize one short step
+# (collect_cache_for_item, lib/cache.sh) would otherwise keep every other
+# waiter blocked through its own trailing work: the final progress line, the
+# SwiftBar refresh, the closing sleep.
+# Quiet no-op when there is nothing to release - the degraded no-zsystem
+# path, an acquire that failed or timed out, a second release of the same
+# lock - so callers never have to guard the call.
+release_lock() {
+    local name="$1"
+    local fd_var="LOCK_FD_${name:gs/-/_}"
+
+    (( $+builtins[zsystem] )) || return 0
+
+    local fd="${(P)fd_var}"
+    [[ -n "$fd" ]] || return 0
+
+    zsystem flock -u "$fd" 2>/dev/null || true
+    unset "$fd_var"
+    return 0
+}
+
 # Truncate version string to a given limit (default 10) for menu readability
 truncate_ver() {
     local ver="$1"
