@@ -388,6 +388,7 @@ final class ToolkitController {
         guard let script = scriptURL else { return report(.startRun, .toolkitMissing) }
 
         if preferences.runUpdatesInTerminal {
+            let startedAt = Date()
             Task {
                 let outcome = await Self.run(script: script, arguments: ["launch_update", scope])
                 await MainActor.run {
@@ -395,7 +396,9 @@ final class ToolkitController {
                     // that failed opened no terminal, so nothing is ever going
                     // to write to the progress file and the watch would only
                     // sit out its startup window overwriting the real error.
-                    guard outcome.succeeded else { return self.reportFailure(outcome) }
+                    guard outcome.succeeded else {
+                        return self.reportFailure(outcome, startedAt: startedAt)
+                    }
                     self.startProgressWatch()
                 }
             }
@@ -420,12 +423,15 @@ final class ToolkitController {
 
         if preferences.runUpdatesInTerminal || forceTerminal {
             if !dryRun, let trackingItem { beginTrackingSingleItem(trackingItem) }
+            let startedAt = Date()
             Task {
                 let outcome = await Self.run(script: script, arguments: ["install_app", name, liveOrDry])
                 await MainActor.run {
                     // See `launchUpdate`: nothing to watch if the launcher
                     // itself failed.
-                    guard outcome.succeeded else { return self.reportFailure(outcome) }
+                    guard outcome.succeeded else {
+                        return self.reportFailure(outcome, startedAt: startedAt)
+                    }
                     self.startProgressWatch()
                 }
             }
@@ -462,12 +468,15 @@ final class ToolkitController {
             // One visible terminal window, watched directly - stays
             // single-flight rather than joining the concurrency queue below.
             beginTrackingSingleItem(item)
+            let startedAt = Date()
             Task {
                 let outcome = await Self.run(script: script, arguments: ["update_app"] + details)
                 await MainActor.run {
                     // See `launchUpdate`: nothing to watch if the launcher
                     // itself failed.
-                    guard outcome.succeeded else { return self.reportFailure(outcome) }
+                    guard outcome.succeeded else {
+                        return self.reportFailure(outcome, startedAt: startedAt)
+                    }
                     self.startProgressWatch()
                 }
             }
@@ -611,7 +620,14 @@ final class ToolkitController {
     /// launcher that never opened its terminal) must leave a watch that
     /// belongs to some other run running - its next poll puts the real state
     /// back on the banner by itself.
-    private func reportFailure(_ outcome: ProcessOutcome, endedTheWatchedRun: Bool = false) {
+    ///
+    /// `startedAt` is when this process was launched, and is what makes an
+    /// entry in the progress file attributable to it. The launcher paths pass
+    /// it because they have no progress watch of their own to date an entry
+    /// against; `endedTheWatchedRun` uses the watch's own start instead.
+    private func reportFailure(_ outcome: ProcessOutcome,
+                               startedAt: Date? = nil,
+                               endedTheWatchedRun: Bool = false) {
         // Deliberately not routed through `report`/`lastFailure`: this writes
         // the failure into `progress` below, which ProgressBanner already
         // renders. Doing both would put the same error on screen twice.
@@ -619,18 +635,22 @@ final class ToolkitController {
             state: .failed, phase: .processError, item: outcome.summary, index: nil, total: nil
         )
 
-        if endedTheWatchedRun {
-            // The script may already have recorded a more precise ending than
-            // "the process exited non-zero" ("3 of 8 failed", say). Prefer it -
-            // but only when this run wrote it: an older entry describes some
-            // earlier run and must never be shown as this one's outcome.
-            let ownEnding = watchStartedAt.flatMap { started -> UpdateProgress? in
-                guard let latest = UpdateProgress.load(),
-                      latest.state == .failed,
-                      latest.modified >= started else { return nil }
-                return latest
-            }
+        // The script may already have recorded a more precise ending than "the
+        // process exited non-zero" - "3 of 8 failed", or a launcher naming the
+        // Automation permission macOS refused. Prefer it, because the shell
+        // writes a phase this app can word in the user's language while
+        // `outcome.summary` is raw shell English. But only when *this* run
+        // wrote it: an older entry describes some earlier run and must never
+        // be shown as this one's outcome.
+        let recordedSince = endedTheWatchedRun ? watchStartedAt : startedAt
+        let ownEnding = recordedSince.flatMap { started -> UpdateProgress? in
+            guard let latest = UpdateProgress.load(),
+                  latest.state == .failed,
+                  latest.modified >= started else { return nil }
+            return latest
+        }
 
+        if endedTheWatchedRun {
             // Nothing more can reach the progress file now, so the watch must
             // not go on spending its startup window overwriting this failure -
             // and neither may a later re-read of the entry it left behind.
@@ -643,7 +663,7 @@ final class ToolkitController {
             snapshot = UpdateSnapshot.load()
             drainQueue()
         } else {
-            progress = processError
+            progress = ownEnding ?? processError
         }
 
         // The process died outright - no need to wait for the progress watch

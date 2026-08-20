@@ -40,7 +40,7 @@ v1|state|phase|item|index|total
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | state | `running` \| `done` \| `failed` | |
-| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
+| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
 | 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
@@ -77,6 +77,19 @@ v1|running|brew-upgrade|awscli|3|8
   dead run is caught within the short one whatever phase it died in. This is
   not cosmetic: GuideApp also holds its per-item update queue behind any
   entry that says `running` (`ToolkitController.startOrQueue`).
+- The last two phases are written by a *launcher*, not by a run: the three
+  menu actions that start a run in the user's terminal (`install_app`,
+  `update_app`, `launch_update`) go through `launch_in_terminal_or_report()`
+  (`lib/utils.sh`), and when no terminal opens there is no run to write
+  anything ever again. `terminal-permission` is the case with a fix - macOS
+  refused the Apple event for want of Automation permission (osascript error
+  `-1743`), which an ad-hoc-signed GuideApp loses on every rebuild - and
+  `launch-failed` is everything else; `item` carries the terminal app's name
+  in both, and the reader supplies the wording. These are the only entries
+  written by something that does not own the file, so they go through
+  `progress_write_failure()`, which declines to overwrite a `running` entry
+  that the heartbeat has stamped within the last three intervals - a launch
+  that failed must not report some *other*, live run as dead.
 - Shell writer: `progress_write()` in `lib/cache.sh`; reader/self-check:
   `progress_finalize()` in the same file. It runs from the `run` dispatcher's
   EXIT trap so an unfinished "running" entry never leaves the UI showing a

@@ -32,6 +32,17 @@ struct UpdateProgress: Equatable, Sendable {
         /// attempted. Separate from `.complete` because `state` alone
         /// ("failed") would otherwise be paired with the label "Finished".
         case completeWithFailures = "complete-with-failures"
+        /// The terminal the run was supposed to happen in never opened, so
+        /// there is no run - written by `launch_in_terminal_or_report()`
+        /// (lib/utils.sh) with `item` = the terminal app it tried.
+        case launchFailed = "launch-failed"
+        /// Same, for the one cause of it that the user can fix: macOS refused
+        /// the Apple event because this app has no Automation permission for
+        /// that terminal (osascript error -1743). Separate from
+        /// `.launchFailed` because it is the only launch failure that comes
+        /// with an instruction, and the instruction has to be localized -
+        /// see `detail(for:)`.
+        case terminalPermission = "terminal-permission"
         case unknown
         /// The toolkit process itself exited non-zero or was killed - caught on
         /// the Swift side (ToolkitController), not written by the shell script.
@@ -63,6 +74,10 @@ struct UpdateProgress: Equatable, Sendable {
             case .complete: return Localized("Finished", "Bitti")
             case .completeWithFailures:
                 return Localized("Finished with errors", "Hatalarla bitti")
+            case .launchFailed:
+                return Localized("Could not open the terminal", "Terminal açılamadı")
+            case .terminalPermission:
+                return Localized("Terminal permission needed", "Terminal izni gerekli")
             case .unknown: return Localized("Working…", "Çalışıyor…")
             case .processError: return Localized("Update failed", "Güncelleme başarısız oldu")
             case .cancelled: return Localized("Cancelled", "İptal edildi")
@@ -85,7 +100,8 @@ struct UpdateProgress: Equatable, Sendable {
             case .unknown:
                 return true
             case .starting, .brewUpdate, .analyze, .cleanup, .verify,
-                 .complete, .completeWithFailures, .processError, .cancelled, .notStarted:
+                 .complete, .completeWithFailures, .launchFailed,
+                 .terminalPermission, .processError, .cancelled, .notStarted:
                 return false
             }
         }
@@ -160,6 +176,18 @@ struct UpdateProgress: Equatable, Sendable {
                 return String(format: format, failed, total)
             }
             return String(format: UIStrings.historyFailedFormat[language], failed)
+        }
+
+        // The one phase whose detail is an instruction rather than a name.
+        // `item` is the terminal app macOS refused to drive; what the user
+        // needs is where to grant it, in their own language - which is why
+        // the shell writes the app name and leaves the wording here.
+        if phase == .terminalPermission {
+            let format = Localized(
+                "Allow %@ under System Settings > Privacy & Security > Automation",
+                "%@ için Sistem Ayarları > Gizlilik ve Güvenlik > Otomasyon'dan izin verin"
+            )[language]
+            return String(format: format, item.isEmpty ? "Terminal" : item)
         }
 
         var parts: [String] = []

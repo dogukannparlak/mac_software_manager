@@ -181,6 +181,53 @@ final class UpdateProgressParsingTests: XCTestCase {
         XCTAssertEqual(progress?.detail(for: .english), "5 failed")
     }
 
+    // The exact lines launch_in_terminal_or_report (lib/utils.sh) writes when
+    // the terminal a run was supposed to happen in never opened - asserted
+    // verbatim here and in tests/launch_in_terminal.bats, so a change to
+    // either side that the other does not match breaks a test.
+    func testTerminalPermissionPhaseParses() {
+        let progress = UpdateProgress.parse(raw: "v1|failed|terminal-permission|Terminal||", modified: Date())
+        XCTAssertEqual(progress?.state, .failed)
+        XCTAssertEqual(progress?.phase, .terminalPermission)
+        XCTAssertEqual(progress?.item, "Terminal")
+    }
+
+    func testTerminalPermissionDetailNamesWhereToGrantIt() {
+        // The whole reason this phase exists rather than a raw stderr quote:
+        // the one launch failure with a fix has to say what the fix is, in the
+        // reader's language. The shell writes only the app name.
+        let progress = UpdateProgress.parse(raw: "v1|failed|terminal-permission|iTerm2||", modified: Date())
+        XCTAssertEqual(progress?.title(for: .english), "Terminal permission needed")
+        XCTAssertEqual(
+            progress?.detail(for: .english),
+            "Allow iTerm2 under System Settings > Privacy & Security > Automation"
+        )
+        XCTAssertEqual(progress?.title(for: .turkish), "Terminal izni gerekli")
+        XCTAssertEqual(
+            progress?.detail(for: .turkish),
+            "iTerm2 için Sistem Ayarları > Gizlilik ve Güvenlik > Otomasyon'dan izin verin"
+        )
+    }
+
+    func testLaunchFailedPhaseParsesAndNamesTheTerminal() {
+        let progress = UpdateProgress.parse(raw: "v1|failed|launch-failed|Ghostty||", modified: Date())
+        XCTAssertEqual(progress?.state, .failed)
+        XCTAssertEqual(progress?.phase, .launchFailed)
+        XCTAssertEqual(progress?.title(for: .english), "Could not open the terminal")
+        XCTAssertEqual(progress?.detail(for: .english), "Ghostty")
+    }
+
+    // A launch failure is not a phase that waits on a download - a reader must
+    // not hold a run open for 2h15m over an entry saying nothing ever started.
+    func testLaunchPhasesGetTheQuickStalenessWindow() {
+        let now = Date()
+        let quiet = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
+        for phase in ["launch-failed", "terminal-permission"] {
+            let progress = UpdateProgress.parse(raw: "v1|running|\(phase)", modified: quiet, now: now)
+            XCTAssertEqual(progress?.state, .failed, "\(phase) should not get the long window")
+        }
+    }
+
     func testProcessErrorPhaseRoundTripsFromToolkitRunnersFailureState() {
         // ToolkitController writes exactly this shape (state=failed,
         // phase=process-error) when a process crashes/exits non-zero -

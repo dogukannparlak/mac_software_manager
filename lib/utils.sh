@@ -223,20 +223,83 @@ clean_mas_name() {
     echo "$1" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+//' | sed -E 's/[[:space:]]*\([^)]+\)$//' | xargs
 }
 
-# Launch update script in the configured terminal app
+# What launch_in_terminal returns. The distinction matters: only one of these
+# has a fix the user can act on, and it is the one that keeps happening -
+# GuideApp is ad-hoc signed (CODE_SIGN_IDENTITY = "-"), so every rebuild
+# changes the code signature macOS keyed the Automation grant to and the
+# permission is revoked without a word. See launch_error_is_permission_denied.
+LAUNCH_TERMINAL_OK=0
+LAUNCH_TERMINAL_FAILED=1
+LAUNCH_TERMINAL_DENIED=3
+
+# Whatever the last launch attempt wrote on stderr, kept verbatim so the
+# caller can classify it (and quote it) after the fact.
+typeset -g LAUNCH_TERMINAL_ERROR=""
+
+# Runs one launch command, keeping what it wrote on stderr *and* recording it
+# in LAUNCH_TERMINAL_ERROR. Passing it through matters as much as capturing
+# it: GuideApp reads this process's stderr and shows it verbatim when the
+# process exits non-zero (ProcessOutcome.summary), so swallowing osascript's
+# own words here would cost the one line that says what macOS actually
+# refused.
+launch_capture() {
+    local rc=0
+    LAUNCH_TERMINAL_ERROR=$( { "$@" 2>&1 1>&3 3>&-; } 3>&1 ) || rc=$?
+    [[ -n "$LAUNCH_TERMINAL_ERROR" ]] && print -r -- "$LAUNCH_TERMINAL_ERROR" >&2
+    return $rc
+}
+
+# Did macOS refuse the Apple event because this app has no Automation
+# permission, rather than the launch failing for some ordinary reason?
+#
+# osascript reports it as error -1743 ("Not authorized to send Apple events
+# to <app>"), which is the one launch failure with a concrete fix - the user
+# has to re-grant the permission under System Settings - so it must not be
+# reported with the same shrug as "iTerm is not installed". The numeric code
+# is matched first because it is the part macOS does not localize; the text
+# is a fallback for wordings that arrive without it.
+launch_error_is_permission_denied() {
+    local message="${1:-$LAUNCH_TERMINAL_ERROR}"
+    [[ "$message" == *"-1743"* ]] && return 0
+    [[ "${message:l}" == *"not authorized to send apple events"* ]] && return 0
+    return 1
+}
+
+# Ask Terminal.app to run the command. Also the fallback every other branch
+# below uses when the terminal the user picked turns out not to be installed.
+launch_via_terminal_app() {
+    local cmd="$1"
+    launch_capture osascript <<EOF
+tell application "Terminal"
+    run
+    do script "$cmd"
+    activate
+end tell
+EOF
+}
+
+# Launch update script in the configured terminal app.
+#
+# Returns LAUNCH_TERMINAL_OK only when the terminal was actually asked to run
+# the command. Callers must check: for every path that goes through here the
+# real work happens in that window, so a launcher that reports success it did
+# not have leaves the caller watching for a run that will never start.
 launch_in_terminal() {
     local script_path="$1"
     shift
     local args=("${@:-all}")
     local terminal="${PREFERRED_TERMINAL:-Terminal}"
+    local rc=0
 
     local cmd="${(qq)script_path} run ${(@qq)args}"
+
+    LAUNCH_TERMINAL_ERROR=""
 
     case "$terminal" in
         "iTerm2")
             # iTerm2 using AppleScript
             if [[ -d "/Applications/iTerm.app" ]]; then
-                osascript <<EOF
+                launch_capture osascript <<EOF || rc=$?
 tell application "iTerm"
     if not application "iTerm" is running then
         launch
@@ -246,74 +309,103 @@ tell application "iTerm"
 end tell
 EOF
             else
-                osascript <<EOF
-tell application "Terminal"
-    run
-    do script "$cmd"
-    activate
-end tell
-EOF
+                launch_via_terminal_app "$cmd" || rc=$?
             fi
             ;;
         "Warp")
             # Warp terminal
             if [[ -d "/Applications/Warp.app" ]]; then
-                # Force focus first
-                osascript -e 'tell application "Warp" to activate'
+                # Force focus first. Best-effort on purpose: 'open' below
+                # needs no Automation permission, so a refused 'activate'
+                # means the window opens without coming to the front - not a
+                # failed launch, and reporting it as one would send the user
+                # after a permission this branch does not need.
+                osascript -e 'tell application "Warp" to activate' 2>/dev/null || true
                 # Warp accepts args naturally, but constructing a clean command string is safer
-                open -a Warp "$script_path" --args run "${args[@]}"
-                osascript -e 'tell application "Warp" to activate'
+                launch_capture open -a Warp "$script_path" --args run "${args[@]}" || rc=$?
+                osascript -e 'tell application "Warp" to activate' 2>/dev/null || true
             else
-                osascript <<EOF
-tell application "Terminal"
-    run
-    do script "$cmd"
-    activate
-end tell
-EOF
+                launch_via_terminal_app "$cmd" || rc=$?
             fi
             ;;
         "Alacritty")
             # Alacritty terminal
             if [[ -d "/Applications/Alacritty.app" ]]; then
-                # Force focus first
-                osascript -e 'tell application "Alacritty" to activate'
-                open -a Alacritty --args -e zsh -c "$cmd; exec zsh"
-                osascript -e 'tell application "Alacritty" to activate'
+                # Force focus first - best-effort, see the Warp branch above
+                osascript -e 'tell application "Alacritty" to activate' 2>/dev/null || true
+                launch_capture open -a Alacritty --args -e zsh -c "$cmd; exec zsh" || rc=$?
+                osascript -e 'tell application "Alacritty" to activate' 2>/dev/null || true
             else
 			    # Fallback to Terminal
-                osascript <<EOF
-tell application "Terminal"
-    run
-    do script "$cmd"
-    activate
-end tell
-EOF
+                launch_via_terminal_app "$cmd" || rc=$?
             fi
             ;;
         "Ghostty")
             # Ghostty terminal
             if [[ -d "/Applications/Ghostty.app" ]]; then
-                open -na Ghostty --args -e zsh -c "$cmd; exec zsh"
+                launch_capture open -na Ghostty --args -e zsh -c "$cmd; exec zsh" || rc=$?
             else
 			    # Fallback to Terminal
-                osascript <<EOF
-tell application "Terminal"
-    run
-    do script "$cmd"
-    activate
-end tell
-EOF
+                launch_via_terminal_app "$cmd" || rc=$?
             fi
             ;;
         *)
-            osascript <<EOF
-tell application "Terminal"
-    run
-    do script "$cmd"
-    activate
-end tell
-EOF
+            launch_via_terminal_app "$cmd" || rc=$?
             ;;
     esac
+
+    if (( rc == 0 )); then
+        LAUNCH_TERMINAL_ERROR=""
+        return $LAUNCH_TERMINAL_OK
+    fi
+
+    launch_error_is_permission_denied && return $LAUNCH_TERMINAL_DENIED
+    return $LAUNCH_TERMINAL_FAILED
+}
+
+# Launch a run in the user's terminal and, when no terminal opened, say so
+# everywhere a caller can hear it.
+#
+# The three menu actions that start a run this way (install_app, update_app,
+# launch_update) each used to end with '|| true; exit 0', so a launcher that
+# never opened a window still exited 0 and GuideApp went on to watch for a run
+# that did not exist. Getting the status right is only half of it - the status
+# alone says "something failed", and the failure that actually happens here
+# has a specific fix - so the reason goes out on three channels at once:
+#
+#   - stderr, which GuideApp quotes verbatim for a non-zero exit
+#     (ProcessOutcome.summary) and which is all a terminal user ever sees
+#   - the progress file, so the banner names the problem in the user's own
+#     language instead of quoting shell English (see CACHE_FORMAT.md)
+#   - a notification, the only one of the three that carries the full
+#     instruction untruncated, and the only one left when the run was started
+#     from the SwiftBar menu rather than GuideApp
+#
+# Arguments are passed straight to launch_in_terminal, and its status is
+# returned unchanged. The recorded phase names the failure rather than the
+# action that hit it: which menu item was pressed is not what the user has to
+# do something about.
+launch_in_terminal_or_report() {
+    local rc=0
+    launch_in_terminal "$@" || rc=$?
+    (( rc == 0 )) && return 0
+
+    local terminal="${PREFERRED_TERMINAL:-Terminal}"
+    local reason detail
+
+    if (( rc == LAUNCH_TERMINAL_DENIED )); then
+        reason="macOS blocked Mac Software Manager from controlling $terminal."
+        detail="Allow it under System Settings > Privacy & Security > Automation, then try again."
+        progress_write_failure "terminal-permission" "$terminal"
+    else
+        reason="Could not open $terminal to run the update."
+        detail="${LAUNCH_TERMINAL_ERROR:-The terminal did not start.}"
+        progress_write_failure "launch-failed" "$terminal"
+    fi
+
+    print -u2 -r -- "❌ $reason"
+    print -u2 -r -- "   $detail"
+    notify "$reason $detail"
+
+    return $rc
 }

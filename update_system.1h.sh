@@ -543,16 +543,23 @@ fi
 
 # Install a self-updating app (Sparkle / GitHub) in the user's terminal.
 # param2 = app name, param3 = "dry" for a dry run
+#
+# The exit status is the launcher's, not a flat 0: the install itself happens
+# in the window this opens, so a caller told "0" by a launcher that opened
+# nothing goes on to watch for a run that will never write a line. See
+# launch_in_terminal_or_report.
 if [[ "$1" == "install_app" ]]; then
     load_config_safely
-    launch_in_terminal "$SCRIPT_FILE" "install" "$2" "${3:-live}" || true
+    launch_in_terminal_or_report "$SCRIPT_FILE" "install" "$2" "${3:-live}" || exit 1
     exit 0
 fi
 
-# Update Single App (launches in user's configured terminal via launch_in_terminal)
+# Update Single App (launches in user's configured terminal via
+# launch_in_terminal_or_report - which, unlike a bare launch, reports a
+# terminal that never opened instead of exiting 0 over it)
 if [[ "$1" == "update_app" ]]; then
     load_config_safely
-    launch_in_terminal "$SCRIPT_FILE" "single" "$2" "$3" "$4" "$5" "$6" || true
+    launch_in_terminal_or_report "$SCRIPT_FILE" "single" "$2" "$3" "$4" "$5" "$6" || exit 1
     exit 0
 fi
 
@@ -716,7 +723,7 @@ fi
 if [[ "$1" == "launch_update" ]]; then
     # Force reload config to ensure latest terminal choice is used
     load_config_safely
-    launch_in_terminal "$SCRIPT_FILE" "$2" || true
+    launch_in_terminal_or_report "$SCRIPT_FILE" "$2" || exit 1
     exit 0
 fi
 

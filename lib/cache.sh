@@ -238,6 +238,41 @@ progress_write() {
     fi
 }
 
+# Is some other run using the progress file right now?
+#
+# Only the run that owns the file may write its ending there. A failure that
+# belongs to no run at all - a menu action whose terminal never opened - is
+# the one case that can arrive while another run is genuinely in flight, and
+# writing "failed" over that run's "running" entry would report a live update
+# as dead: the banner flips to an error and GuideApp's per-item queue, which
+# is held behind any entry that says "running", drains on top of it.
+#
+# "In flight" is answered by the heartbeat, not by guesswork: a live run
+# re-stamps the file every PROGRESS_HEARTBEAT_INTERVAL seconds, so a running
+# entry that has been stamped within a few intervals really does have a run
+# behind it. Three intervals is past "it missed a beat" and far short of the
+# windows a reader uses to call a run dead (UpdateProgress.staleAfter).
+progress_is_owned_by_live_run() {
+    [[ -f "$PROGRESS_FILE" ]] || return 1
+
+    integer grace=$(( PROGRESS_HEARTBEAT_INTERVAL * 3 ))
+    (( grace > 0 )) || grace=45
+    cache_fresh "progress" "$grace" || return 1
+
+    local recorded
+    recorded=$(<"$PROGRESS_FILE") 2>/dev/null || return 1
+    [[ "$recorded" == "${PROGRESS_FORMAT_VERSION}|running|"* ]]
+}
+
+# Record a failure that is not the ending of the run currently holding the
+# progress file - see progress_is_owned_by_live_run for why that distinction
+# has to be made before writing. Returns non-zero when the write was skipped.
+progress_write_failure() {
+    local phase="$1" item="${2:-}"
+    progress_is_owned_by_live_run && return 1
+    progress_write "failed" "$phase" "$item" "" ""
+}
+
 # The final entry for a run that made it all the way to the end. Getting to
 # the end is not the same as succeeding: a run where five packages are still
 # outdated afterwards finished, but it failed for those five, and writing
