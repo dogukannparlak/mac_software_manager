@@ -42,3 +42,52 @@ run_zsh_snippet() {
     local snippet="$1"
     HOME="$TEST_HOME" MSU_LIB_DIR="$REPO_LIB_DIR" zsh -c "source '$REPO_SCRIPT'; $snippet"
 }
+
+# Assertions that actually fail the test.
+#
+# bats runs under macOS' /bin/bash 3.2, where a failing '[[ ]]' does NOT trip
+# errexit inside a function - so a bare '[[ ... ]]' assertion anywhere but the
+# LAST line of a test is silently ignored and the test passes regardless. That
+# is not theoretical: it hid a broken cache fix in this very suite. A function
+# returning non-zero (like the four below) is a plain command failure, which
+# bats does catch wherever it appears - so use these, not bare '[[ ]]', for
+# every string assertion. Plain '[ ... ]' is caught too and stays fine for
+# $status / equality / file checks.
+#
+# assert_contains/refute_contains take a LITERAL substring; the _matches pair
+# takes a glob pattern ('*' and friends are live, everything else literal).
+assert_contains() {
+    if [[ "$2" == *"$1"* ]]; then
+        return 0
+    fi
+    echo "expected output to contain: $1" >&2
+    echo "actual output: $2" >&2
+    return 1
+}
+
+refute_contains() {
+    if [[ "$2" != *"$1"* ]]; then
+        return 0
+    fi
+    echo "expected output NOT to contain: $1" >&2
+    echo "actual output: $2" >&2
+    return 1
+}
+
+assert_matches() {
+    if [[ "$2" == $1 ]]; then
+        return 0
+    fi
+    echo "expected output to match: $1" >&2
+    echo "actual output: $2" >&2
+    return 1
+}
+
+refute_matches() {
+    if [[ "$2" != $1 ]]; then
+        return 0
+    fi
+    echo "expected output NOT to match: $1" >&2
+    echo "actual output: $2" >&2
+    return 1
+}

@@ -108,3 +108,41 @@ load "test_helper"
     [[ "$output" == *"|my-fake-token|fail"* ]]
     [[ "$output" == *"PROGRESS: v1|failed|single|MyFakeName||"* ]]
 }
+
+@test "run_mode_single still reports 'done' when a cache entry cannot be refreshed" {
+    # The reported bug, end to end: 'run' turns errexit on
+    # (update_system.1h.sh section 5), so a single failing cache entry inside
+    # collect_cache_data used to abort the run right there - the cache stayed
+    # half-rebuilt and the final progress line was never written, leaving
+    # GuideApp to read the stale cache and show this successful update as
+    # "failed" while history had already logged it "ok".
+    #
+    # Only cache_refresh_entry is stubbed (failing for one key, succeeding for
+    # the rest); the real collect_cache_data runs.
+    run run_zsh_snippet '
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 0; }
+        brew_is_outdated() { return 1; }   # upgraded, no longer outdated
+        open() { :; }
+        sleep() { :; }
+
+        cache_refresh_entry() {
+            [[ "$1" == "brew_outdated" ]] && return 1
+            cache_put "$1" "stub"
+        }
+
+        set -e
+        set -o pipefail
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "PROGRESS: $(cat "$PROGRESS_FILE")"
+        echo "HISTORY: $(cat "$HISTORY_FILE")"
+        echo "LEAVES: $(cache_get brew_leaves)"
+    '
+    # History and progress agree, and the entries after the failing one were
+    # still collected.
+    assert_contains "|my-fake-token|ok" "$output"
+    assert_contains "LEAVES: stub" "$output"
+    assert_contains "PROGRESS: v1|done|single|MyFakeName||" "$output"
+    [ "$status" -eq 0 ]
+}

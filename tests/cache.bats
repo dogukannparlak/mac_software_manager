@@ -143,3 +143,54 @@ load "test_helper"
     [ "$status" -eq 0 ]
     [ "$output" = "[]" ]
 }
+
+# The 'set -e' contract. Every caller of these two runs with errexit on
+# (update_system.1h.sh section 5), and zsh propagates a function's non-zero
+# return into the caller - so a cache entry that cannot be refreshed used to
+# abort the entire script mid-run.
+
+@test "cache_refresh_entry keeping the old value does not abort a 'set -e' caller" {
+    run run_zsh_snippet '
+        set -e
+        set -o pipefail
+        cache_put "mykey" "old value"
+        cache_refresh_entry "mykey" zsh -c "exit 1"
+        echo "SURVIVED"
+    '
+    assert_contains "SURVIVED" "$output"
+    [ "$status" -eq 0 ]
+}
+
+@test "collect_cache_data keeps refreshing the remaining entries after one fails" {
+    # cache_refresh_entry is stubbed out so no brew/mas/network call happens:
+    # the only question here is what collect_cache_data does when one entry
+    # reports failure - it must carry on to the rest of the tier, because the
+    # caller writes its final progress line only after this returns
+    # (lib/run_modes.sh, run_mode_single).
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cache_refresh_entry() {
+            print -r -- "$1" >> "$CACHE_DIR/.calls"
+            [[ "$1" == "brew_outdated" ]] && return 1
+            cache_put "$1" "stub"
+        }
+
+        set -e
+        set -o pipefail
+        collect_cache_data "updates"
+        echo "SURVIVED rc=$?"
+        echo "CALLS: $(tr "\n" " " < "$CACHE_DIR/.calls")"
+        echo "MANUAL: $(cache_get manual_updates)"
+
+        # local_options must not leak errexit-off back out to the caller.
+        false
+        echo "LEAKED"
+    '
+    # The failing entry is reached, the one after it still runs and lands.
+    assert_contains "brew_outdated" "$output"
+    assert_contains "manual_updates" "$output"
+    assert_contains "MANUAL: stub" "$output"
+    assert_contains "SURVIVED rc=0" "$output"
+    refute_contains "LEAKED" "$output"
+    [ "$status" -eq 1 ]
+}

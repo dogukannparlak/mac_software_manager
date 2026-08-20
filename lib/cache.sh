@@ -49,6 +49,16 @@ cache_put() {
 # If the command fails (e.g. 'brew list --cask' aborting on an untrusted tap)
 # the previous value is kept instead of blanking the menu - but it is restamped
 # so the TTL clock restarts and the render path does not respawn a refresh loop.
+#
+# Return contract: 0 whenever the entry is left holding usable data - freshly
+# written OR the preserved previous value. Non-zero ONLY when nothing could be
+# stored at all (cache_put failing on an unwritable cache dir).
+# Keeping the old value is a designed fallback, not an error, and it must not
+# read as one: every caller runs under 'set -e' (update_system.1h.sh section 5),
+# where zsh propagates a function's non-zero return straight into the caller.
+# Reporting the fallback as failure used to abort mid-refresh - killing the run
+# before it could write its final progress line, so GuideApp read a half-built
+# cache and showed a successful update as "failed".
 cache_refresh_entry() {
     local key="$1"
     shift
@@ -58,7 +68,7 @@ cache_refresh_entry() {
 
     if (( rc != 0 )) && [[ -f "$CACHE_DIR/$key" ]]; then
         touch "$CACHE_DIR/$key"
-        return 1
+        return 0
     fi
 
     cache_put "$key" "$output"
@@ -240,7 +250,20 @@ progress_tap() {
 # Populate the cache. Tier is "updates", "installed", "sparkle" or "all".
 # MAS entries are always written (empty when App Store support is off) so the
 # staleness check cannot get stuck asking for data that will never arrive.
+#
+# Best-effort by design, and 'no_err_exit' is what makes that true: this runs
+# from paths that enable 'set -e' (the refresh_cache action, and the run modes
+# in run_modes.sh), where a single non-zero step - one unreachable brew
+# command, one unwritable entry - would otherwise abort the whole script right
+# here. That left the cache half-rebuilt AND skipped the caller's final
+# progress_write, which is how a successful update ended up reported as
+# "failed". Every entry already handles its own failure (see
+# cache_refresh_entry), so collecting the remaining ones is always the right
+# move. 'local_options' scopes this to the function: errexit is restored for
+# the caller on return, and the explicit 'return 0' keeps a skipped tier from
+# leaking a non-zero status back out.
 collect_cache_data() {
+    setopt local_options no_err_exit
     local tier="${1:-all}"
     local mas_outdated_raw=""
 
@@ -287,4 +310,6 @@ collect_cache_data() {
         cache_refresh_entry "cask_homepages"   collect_cask_homepages
         cache_refresh_entry "github_homepages" collect_github_homepages
     fi
+
+    return 0
 }
