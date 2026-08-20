@@ -914,15 +914,15 @@ final class ToolkitController {
         }
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
+        // Started before the process is, so the pipe is never left full and
+        // unattended - see StderrDrain for what happens when it is.
+        let stderrDrain = StderrDrain(draining: stderrPipe)
 
         process.terminationHandler = { finished in
-            let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrText = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             let outcome = ProcessOutcome(
                 exitCode: finished.terminationStatus,
                 reason: finished.terminationReason,
-                stderr: stderrText
+                stderr: stderrDrain.text()
             )
             Task { @MainActor in onExit(outcome) }
         }
@@ -931,6 +931,10 @@ final class ToolkitController {
             try process.run()
             return process
         } catch {
+            // Nothing was ever spawned, so nothing will ever write to that
+            // pipe or close it: stop reading it rather than leave a reader
+            // waiting on a process that does not exist.
+            stderrDrain.stopDraining()
             onExit(ProcessOutcome(exitCode: -1, reason: .uncaughtSignal, stderr: error.localizedDescription))
             return nil
         }
@@ -947,21 +951,20 @@ final class ToolkitController {
             process.standardOutput = FileHandle.nullDevice
             let stderrPipe = Pipe()
             process.standardError = stderrPipe
+            let stderrDrain = StderrDrain(draining: stderrPipe)
 
             process.terminationHandler = { finished in
-                let data = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let stderrText = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 continuation.resume(returning: ProcessOutcome(
                     exitCode: finished.terminationStatus,
                     reason: finished.terminationReason,
-                    stderr: stderrText
+                    stderr: stderrDrain.text()
                 ))
             }
 
             do {
                 try process.run()
             } catch {
+                stderrDrain.stopDraining()
                 continuation.resume(returning: ProcessOutcome(
                     exitCode: -1,
                     reason: .uncaughtSignal,
@@ -969,5 +972,106 @@ final class ToolkitController {
                 ))
             }
         }
+    }
+}
+
+/// Reads a child process's stderr *while it is still running*, and keeps the
+/// tail of what it read.
+///
+/// A pipe is a fixed-size buffer - 64 KB here. A process that writes past
+/// that into a pipe nobody is reading blocks inside `write()` and stays
+/// blocked: it never exits, so `terminationHandler` never runs, so a reader
+/// that only starts there never starts at all. Each side ends up waiting for
+/// the other, permanently, and the run hangs with no error and no exit.
+/// `brew cleanup --prune=all` and `mas upgrade` (lib/run_modes.sh) are the
+/// two calls whose stderr is not already redirected into `progress_tap`, and
+/// on a machine with a lot to clean up or update either can print well past
+/// 64 KB.
+///
+/// Only the last `limit` bytes survive. This text is shown in a failure
+/// banner, where what matters is how the run ended - not every line it
+/// printed on the way there - and an unbounded buffer would be one more way
+/// for a chatty script to take the app down.
+private final class StderrDrain: @unchecked Sendable {
+
+    /// Far more than a failure needs to explain itself, and small enough to
+    /// hand to a text view without a second thought.
+    private static let limit = 16 * 1024
+
+    /// Says so when the head was dropped, so a truncated tail is never read
+    /// as the whole story.
+    private static let truncationNotice = "[... earlier output dropped ...]\n"
+
+    private let pipe: Pipe
+    private let lock = NSLock()
+    private var buffer = Data()
+    private var droppedHead = false
+    private var isDone = false
+    private let done = DispatchSemaphore(value: 0)
+
+    /// Begins draining `pipe` on the reader queue Foundation manages for it.
+    /// Call this *before* launching the process: the point is that no write
+    /// ever finds the pipe full with nobody reading.
+    init(draining pipe: Pipe) {
+        self.pipe = pipe
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            guard let self else {
+                handle.readabilityHandler = nil
+                return
+            }
+            // Empty means end of file: every write end is closed, so the
+            // process and anything it spawned are done printing.
+            let chunk = handle.availableData
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                self.markDone()
+                return
+            }
+            self.append(chunk)
+        }
+    }
+
+    /// The stderr of a process that has exited, as far as it could be read.
+    ///
+    /// Waits for end of file first, because the last writes can still be in
+    /// flight when the process dies. The wait is bounded: end of file may
+    /// genuinely never come - a grandchild that inherited the descriptor
+    /// keeps the write end open after its parent exits - and a missing last
+    /// line of a log costs far less than another permanent hang.
+    func text(waitingUpTo timeout: TimeInterval = 2) -> String {
+        _ = done.wait(timeout: .now() + timeout)
+        lock.lock()
+        defer { lock.unlock() }
+        let text = String(decoding: buffer, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard droppedHead, !text.isEmpty else { return text }
+        return Self.truncationNotice + text
+    }
+
+    /// Gives up on the pipe - for the caller whose process never launched, so
+    /// nothing will ever write to it or close it.
+    func stopDraining() {
+        pipe.fileHandleForReading.readabilityHandler = nil
+        markDone()
+    }
+
+    private func append(_ chunk: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        buffer.append(chunk)
+        if buffer.count > Self.limit {
+            buffer.removeFirst(buffer.count - Self.limit)
+            droppedHead = true
+        }
+    }
+
+    private func markDone() {
+        lock.lock()
+        let wasDone = isDone
+        isDone = true
+        lock.unlock()
+        // `signal()` once only: `text()` waits once, and a stray extra count
+        // would let a later wait through before its own read had finished.
+        if !wasDone { done.signal() }
     }
 }
