@@ -85,21 +85,59 @@ notify() {
 # with it. macOS ships neither GNU coreutils' 'timeout' nor 'gtimeout' by
 # default, so this rolls a minimal, dependency-free equivalent from zsh job
 # control: a background watcher sends SIGTERM if the command outruns the limit.
-MAS_TIMEOUT=30
+#
+# 'mas' needs two very different limits, and conflating them is a bug: a query
+# ('mas outdated') only fetches metadata and has no business taking more than
+# seconds, while an upgrade downloads the application itself. A multi-gigabyte
+# App Store title on an ordinary line legitimately runs for many minutes;
+# killing it at the query limit throws away the partial download AND makes the
+# post-upgrade verification see the app as "still outdated", which then lands
+# in the history as a failure. Hence the upgrade limit is a hang guard, not a
+# pace limit. Set MAS_UPGRADE_TIMEOUT=0 to remove the upgrade limit entirely.
+MAS_QUERY_TIMEOUT=${MAS_QUERY_TIMEOUT:-30}
+MAS_UPGRADE_TIMEOUT=${MAS_UPGRADE_TIMEOUT:-7200}
+
+# Status run_with_timeout returns when it had to kill the command. 124 is what
+# GNU 'timeout' uses, and no 'mas' failure reports it, so callers can tell "we
+# ran out of patience" apart from "the command actually failed".
+TIMEOUT_EXIT_STATUS=124
 
 # Usage: run_with_timeout <seconds> <command> [args...]
-# Returns the command's exit status, or a non-zero "killed" status on timeout.
+# Returns the command's exit status, or $TIMEOUT_EXIT_STATUS if the limit was
+# reached and the command had to be killed. A limit of 0 means "no timeout".
 run_with_timeout() {
     local secs="$1"
     shift
+
+    if [[ -z "$secs" || "$secs" == "0" ]]; then
+        "$@"
+        return $?
+    fi
+
+    # The watcher is a separate process, so it reports back through a marker
+    # file, created only once the SIGTERM has actually been delivered.
+    local marker
+    marker="$(mktemp "${TMPDIR:-/tmp}/msu_timeout.XXXXXX")" || marker=""
+    [[ -n "$marker" ]] && rm -f "$marker"
+
     "$@" &
     local pid=$!
-    ( sleep "$secs" 2>/dev/null; kill -TERM "$pid" 2>/dev/null ) &
+    ( sleep "$secs" 2>/dev/null
+      kill -TERM "$pid" 2>/dev/null && [[ -n "$marker" ]] && : > "$marker" ) &
     local watcher=$!
     local rc=0
     wait "$pid" 2>/dev/null || rc=$?
     kill -TERM "$watcher" 2>/dev/null
     wait "$watcher" 2>/dev/null
+
+    local timed_out=0
+    # rc == 0 means the command beat the deadline by a hair and the watcher's
+    # signal landed on an already-finished process: that is a success, not a
+    # timeout. Any other status after a delivered SIGTERM is the timeout.
+    [[ -n "$marker" && -e "$marker" ]] && (( rc != 0 )) && timed_out=1
+    [[ -n "$marker" ]] && rm -f "$marker"
+
+    (( timed_out )) && return $TIMEOUT_EXIT_STATUS
     return $rc
 }
 

@@ -390,7 +390,7 @@ run_mode_system() {
 	# Parse 'mas outdated' output
 	if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
 		# Redirect stderr to /dev/null to suppress warnings completely
-		raw_mas_outdated=$(run_with_timeout "$MAS_TIMEOUT" mas outdated 2>/dev/null || true)
+		raw_mas_outdated=$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null || true)
 		for line in "${(@f)raw_mas_outdated}"; do
 			# Ignore non-application lines. Valid lines MUST start with a number (App ID)
 			[[ ! "$line" =~ ^[[:space:]]*[0-9]+ ]] && continue
@@ -496,7 +496,7 @@ run_mode_system() {
 		if [[ "$has_ignored_mas" == "true" ]]; then
 			# Update each non-ignored app individually to respect ignore list
 			echo "   (Updating apps individually to respect ignore list)"
-			run_with_timeout "$MAS_TIMEOUT" mas outdated 2>/dev/null | while read -r line; do
+			run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null | while read -r line; do
 				[[ ! "$line" =~ ^[[:space:]]*[0-9]+ ]] && continue
 				app_id=${line%% *}
 				# Skip if this app is in our ignore list
@@ -504,11 +504,27 @@ run_mode_system() {
 					continue
 				fi
 				progress_write "running" "mas-upgrade" "$(clean_mas_name "$line")" "" "$count_mas_pending"
-				run_with_timeout "$MAS_TIMEOUT" mas upgrade "$app_id" || true
+				# A bare '|| true' here would hide both real errors and the
+				# timeout; the verification step below decides pass/fail, so
+				# the run still continues - it just says what went wrong.
+				integer mas_rc=0
+				run_with_timeout "$MAS_UPGRADE_TIMEOUT" mas upgrade "$app_id" || mas_rc=$?
+				if (( mas_rc == TIMEOUT_EXIT_STATUS )); then
+					echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: 'mas upgrade $app_id' was killed mid-download."
+				elif (( mas_rc != 0 )); then
+					echo "⚠️ 'mas upgrade $app_id' failed (exit $mas_rc)."
+				fi
 			done || true
 		else
 			# No ignored apps, use faster bulk upgrade
-			run_with_timeout "$MAS_TIMEOUT" mas upgrade || true
+			integer mas_rc=0
+			run_with_timeout "$MAS_UPGRADE_TIMEOUT" mas upgrade || mas_rc=$?
+			if (( mas_rc == TIMEOUT_EXIT_STATUS )); then
+				echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: bulk 'mas upgrade' was killed mid-download."
+				echo "   Apps left unfinished stay on the outdated list and are retried on the next run."
+			elif (( mas_rc != 0 )); then
+				echo "⚠️ 'mas upgrade' failed (exit $mas_rc)."
+			fi
 		fi
 	fi
 

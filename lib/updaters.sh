@@ -81,7 +81,7 @@ brew_outdated_tokens() {
 mas_outdated_ids() {
     command -v mas &> /dev/null || return 0
     local line trimmed
-    for line in "${(@f)$(run_with_timeout "$MAS_TIMEOUT" mas outdated 2>/dev/null || true)}"; do
+    for line in "${(@f)$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null || true)}"; do
         trimmed="${line#"${line%%[![:space:]]*}"}"
         [[ "$trimmed" =~ ^[0-9]+ ]] || continue
         print -r -- "${trimmed%% *}"
