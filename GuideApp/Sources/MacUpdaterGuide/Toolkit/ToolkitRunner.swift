@@ -54,6 +54,9 @@ final class ToolkitController {
     /// together. A plain array is fine at this scale (a handful of rows).
     private var queuedItemIDs: [String] = []
     private var queuedLaunchers: [String: () -> Void] = [:]
+    /// Runs for exactly as long as `queuedItemIDs` is not empty - see
+    /// `syncQueueDrainWatch()`.
+    private var queueDrainTask: Task<Void, Never>?
 
     /// The item a just-launched *terminal-mode* single-item run belongs to.
     /// Terminal mode stays single-flight (one visible window, watched
@@ -79,6 +82,14 @@ final class ToolkitController {
     /// Anything written to the shared progress file before this belongs to an
     /// earlier run - see `ProgressWatch` and `UpdateProgress.modified`.
     private var watchStartedAt: Date?
+    /// When this app last concluded on its own that the shared run was over:
+    /// a bulk process of ours died, or the user cancelled one. Neither gets
+    /// to write its ending, so the entry left in the file still says
+    /// "running" - and every later read of that file (a reload, the queue's
+    /// own poll) would otherwise put the run this app just reported as dead
+    /// straight back on the banner, and park the queue behind it again until
+    /// the entry aged out. Cleared when a new run starts watching.
+    private var resolvedRunAt: Date?
 
     let preferences: AppPreferences
 
@@ -95,13 +106,22 @@ final class ToolkitController {
     /// Re-reads the cache. Cheap: no processes, no network.
     func reload() {
         snapshot = UpdateSnapshot.load()
+        refreshProgressFromDisk()
+    }
 
+    /// Re-reads just the progress entry - what someone else's run (or a run
+    /// that died) has left in the shared file since this app last looked.
+    ///
+    /// A run being watched owns `progress` (see `startProgressWatch`): an
+    /// entry older than that watch is an earlier run's, and letting a read
+    /// that happens to land mid-startup put it back on the banner would undo
+    /// exactly what the watch is there to prevent.
+    private func refreshProgressFromDisk() {
         let latest = UpdateProgress.load()
-        // A run being watched owns `progress` (see `startProgressWatch`): an
-        // entry older than that watch is an earlier run's, and letting a
-        // refresh that happens to land mid-startup put it back on the banner
-        // would undo exactly what the watch is there to prevent.
         if let started = watchStartedAt, (latest?.modified ?? .distantPast) < started { return }
+        // Same rule for a run this app has already buried: only an entry
+        // written *after* that verdict can be a run still worth showing.
+        if let resolved = resolvedRunAt, (latest?.modified ?? .distantPast) <= resolved { return }
         progress = latest
     }
 
@@ -138,6 +158,7 @@ final class ToolkitController {
         // file whose next write, if any, could only report the same thing.
         stopProgressWatch()
 
+        resolvedRunAt = Date()
         progress = UpdateProgress(state: .failed, phase: .cancelled, item: "", index: nil, total: nil)
         if let active = activeSingleItem {
             itemStatuses[active.id] = .failed
@@ -160,6 +181,9 @@ final class ToolkitController {
 
         let startedAt = Date()
         watchStartedAt = startedAt
+        // A new run owns the file from here on; whatever the last one died
+        // leaving in it is no longer what anybody is reading.
+        resolvedRunAt = nil
 
         progressTask = Task { [weak self] in
             var watch = ProgressWatch(startedAt: startedAt)
@@ -488,8 +512,10 @@ final class ToolkitController {
             }
 
             // Nothing more can reach the progress file now, so the watch must
-            // not go on spending its startup window overwriting this failure.
+            // not go on spending its startup window overwriting this failure -
+            // and neither may a later re-read of the entry it left behind.
             stopProgressWatch()
+            resolvedRunAt = Date()
             progress = ownEnding ?? processError
             // Whatever the run managed to do before dying still counts, and
             // the queue the watch would have drained on its way out is no
@@ -529,6 +555,7 @@ final class ToolkitController {
             itemStatuses[item.id] = .queued
             queuedItemIDs.append(item.id)
             queuedLaunchers[item.id] = launch
+            syncQueueDrainWatch()
             return
         }
 
@@ -541,6 +568,7 @@ final class ToolkitController {
     /// requested. Safe to call any time - a no-op if the queue is empty, a
     /// bulk run is in progress, or every slot is already taken.
     private func drainQueue() {
+        defer { syncQueueDrainWatch() }
         guard progress?.isRunning != true else { return }
         while activeProcesses.count < preferences.maxConcurrentUpdates, let nextID = queuedItemIDs.first {
             queuedItemIDs.removeFirst()
@@ -548,6 +576,50 @@ final class ToolkitController {
             itemStatuses[nextID] = .updating
             beginFractionSimulation(for: nextID)
             launch()
+        }
+    }
+
+    /// How often a queue held up by a bulk run re-checks whether that run is
+    /// still there. Slower than the progress watch's own poll: nothing is
+    /// being displayed off this, it only decides when to start work.
+    private static let queuePollInterval: Duration = .seconds(2)
+
+    /// Keeps a poll running for exactly as long as something is queued, and
+    /// no longer.
+    ///
+    /// `startOrQueue` parks items while `progress` says a bulk run is going,
+    /// but the two paths that call `drainQueue()` on their own -
+    /// `finishActiveItem` (needs an active process of ours) and the progress
+    /// watch finishing - only fire for runs this app is itself following.
+    /// A run started from a terminal, or one that died and left `running`
+    /// behind, is followed by neither - so every row sat at "Queued" with
+    /// nothing in the app ever going to read that file again, and the queue
+    /// moved only if the user happened to trigger something else. This poll
+    /// is what reads it: a run that has ended - or gone stale, per
+    /// `UpdateProgress.staleAfter(for:)` - releases the queue on its own.
+    private func syncQueueDrainWatch() {
+        guard !queuedItemIDs.isEmpty else {
+            queueDrainTask?.cancel()
+            queueDrainTask = nil
+            return
+        }
+        guard queueDrainTask == nil else { return }
+
+        queueDrainTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.queuePollInterval)
+                guard !Task.isCancelled, let self else { return }
+
+                let stillWaiting = await MainActor.run { () -> Bool in
+                    guard !self.queuedItemIDs.isEmpty else { return false }
+                    // The run the queue is waiting on may have finished, or
+                    // died, without this app hearing a thing about it.
+                    self.refreshProgressFromDisk()
+                    self.drainQueue()
+                    return !self.queuedItemIDs.isEmpty
+                }
+                if !stillWaiting { return }
+            }
         }
     }
 

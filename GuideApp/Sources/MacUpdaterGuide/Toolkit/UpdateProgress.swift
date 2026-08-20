@@ -70,6 +70,25 @@ struct UpdateProgress: Equatable, Sendable {
                 return Localized("Update did not start", "Güncelleme başlamadı")
             }
         }
+
+        /// Whether this phase can legitimately produce nothing for a long
+        /// time: it is waiting on one download or one build, not stepping
+        /// through a list of them. Picks which `staleAfter` window applies -
+        /// see the two constants below.
+        var canBeSilentForLong: Bool {
+            switch self {
+            case .brewUpgrade, .masUpgrade, .installApp, .single:
+                return true
+            // A phase this build does not know comes from a newer writer, so
+            // there is nothing to base "should have written by now" on -
+            // guessing "quick" here would risk calling a live run dead.
+            case .unknown:
+                return true
+            case .starting, .brewUpdate, .analyze, .cleanup, .verify,
+                 .complete, .completeWithFailures, .processError, .cancelled, .notStarted:
+                return false
+            }
+        }
     }
 
     var state: State
@@ -91,9 +110,36 @@ struct UpdateProgress: Equatable, Sendable {
     /// and this must agree, or `parse` fails closed instead of misreading.
     static let formatVersion = "v1"
 
-    /// A run that died without writing a final state would otherwise leave the
-    /// menu claiming to be busy forever.
-    static let staleAfter: TimeInterval = 15 * 60
+    /// How long a `running` entry may go without being touched before it is
+    /// read as a run that died. A run killed mid-flight (a closed terminal
+    /// window, a panic, `kill -9`) never gets to write a final state, and
+    /// without this the menu would claim to be busy forever - and
+    /// `ToolkitController`'s per-item queue would wait forever behind a run
+    /// that no longer exists.
+    ///
+    /// Two windows, because "has not been touched" means different things in
+    /// different phases. The bookkeeping phases (`starting`, `analyze`,
+    /// `verify`, ...) step through work and write as they go, so silence
+    /// there is already suspicious. The phases below wait on one download or
+    /// one build: `mas-upgrade` may legitimately be quiet for as long as
+    /// `MAS_UPGRADE_TIMEOUT` (7200s, lib/utils.sh) and a single large
+    /// `brew upgrade` package is no different. The one 15-minute window
+    /// these replace declared exactly those runs failed *while they were
+    /// still downloading*, and released the queue on top of them.
+    ///
+    /// A current toolkit re-stamps the file every
+    /// `PROGRESS_HEARTBEAT_INTERVAL` seconds for as long as the run is alive
+    /// (`progress_heartbeat_start`, lib/cache.sh), so neither window is
+    /// reachable by a living run and a dead one is caught within
+    /// `staleAfterQuick` at worst. `staleAfterLong` is what remains for a
+    /// toolkit installed before that heartbeat existed, where a long quiet
+    /// phase really is normal.
+    static let staleAfterQuick: TimeInterval = 15 * 60
+    static let staleAfterLong: TimeInterval = 2 * 60 * 60 + 15 * 60
+
+    static func staleAfter(for phase: Phase) -> TimeInterval {
+        phase.canBeSilentForLong ? staleAfterLong : staleAfterQuick
+    }
 
     var isRunning: Bool { state == .running }
 
@@ -174,7 +220,8 @@ struct UpdateProgress: Equatable, Sendable {
             modified: modified
         )
 
-        if progress.state == .running, now.timeIntervalSince(modified) > staleAfter {
+        if progress.state == .running,
+           now.timeIntervalSince(modified) > staleAfter(for: progress.phase) {
             progress.state = .failed
         }
 

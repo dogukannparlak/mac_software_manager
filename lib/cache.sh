@@ -134,8 +134,79 @@ spawn_cache_refresh() {
 #             mas-upgrade, verify, cleanup, install-app, refresh, complete,
 #             complete-with-failures)
 #   item    = package or application currently being worked on, may be empty
+#
+# The file's modification time carries meaning of its own: a live run keeps it
+# current (progress_heartbeat_start, below), so a "running" entry that has
+# stopped aging is a run that died. Readers use that to decide when to stop
+# believing an entry - never the content alone.
 PROGRESS_FILE="$CACHE_DIR/progress"
 PROGRESS_FORMAT_VERSION="v1"
+
+# How often a live run re-stamps the progress file, in seconds. Keep this
+# comfortably under the shortest window any reader uses to call a "running"
+# entry dead (UpdateProgress.staleAfterQuick, 15 minutes).
+PROGRESS_HEARTBEAT_INTERVAL=${PROGRESS_HEARTBEAT_INTERVAL:-15}
+typeset -g PROGRESS_HEARTBEAT_PID=""
+
+# Keeps the current "running" entry *fresh* for as long as this run is alive.
+#
+# The file is only written when a run reaches a new phase, and some phases are
+# a single blocking command: `mas upgrade` may legitimately download for up to
+# MAS_UPGRADE_TIMEOUT (7200s, lib/utils.sh) without a word, and one large
+# `brew upgrade` package is no different. A reader cannot tell that apart from
+# a run that died mid-phase, so it has to guess from the entry's age - and
+# every guess is wrong for one of the two: short enough to notice a crash
+# meant calling a still-downloading run failed, long enough for the download
+# meant a crashed run kept the UI (and GuideApp's per-item queue) waiting on a
+# process that no longer existed.
+#
+# This removes the guess: a background stamper touches the file every
+# PROGRESS_HEARTBEAT_INTERVAL seconds, so an entry that stops aging really is
+# a run that stopped running. Only the modification time changes, never the
+# content - it cannot race with a real progress_write, and no reader has to
+# learn a new field. See CACHE_FORMAT.md and `UpdateProgress.staleAfter(for:)`
+# on the Swift side.
+#
+# The stamper stops itself as soon as any of these is true, so it can never
+# outlive the run and hold a dead entry open:
+#   - the run that started it is gone (`kill -0`), including the SIGKILL and
+#     closed-terminal-window cases where no trap of ours ever runs
+#   - the entry no longer says "running": the run recorded its ending, and
+#     touching that ending would make the *next* run's watch read it as the
+#     entry its own run just wrote
+#   - the file is gone
+progress_heartbeat_start() {
+    # Same reasoning as progress_write below: a headless single-item run does
+    # not own this file, so it has nothing to keep fresh.
+    [[ -n "$GUIDEAPP_NO_SHARED_PROGRESS" ]] && return 0
+    # Already stamping for this run.
+    [[ -n "$PROGRESS_HEARTBEAT_PID" ]] && kill -0 "$PROGRESS_HEARTBEAT_PID" 2>/dev/null && return 0
+    (( PROGRESS_HEARTBEAT_INTERVAL > 0 )) || return 0
+
+    local owner=$$ file="$PROGRESS_FILE" every="$PROGRESS_HEARTBEAT_INTERVAL"
+    local running_prefix="${PROGRESS_FORMAT_VERSION}|running|"
+    # Disowned (`&!`) so nothing in the run ever waits on it, and detached
+    # from the run's own stdout/stderr so it cannot hold a pipe open after the
+    # run itself is done (GuideApp reads that stderr pipe to EOF; so does
+    # bats' `run`).
+    (
+        while sleep "$every"; do
+            kill -0 "$owner" 2>/dev/null || break
+            [[ -f "$file" ]] || break
+            [[ "$(<"$file")" == "$running_prefix"* ]] || break
+            touch "$file" 2>/dev/null || break
+        done
+    ) >/dev/null 2>&1 &!
+    PROGRESS_HEARTBEAT_PID=$!
+    return 0
+}
+
+progress_heartbeat_stop() {
+    [[ -n "$PROGRESS_HEARTBEAT_PID" ]] || return 0
+    kill "$PROGRESS_HEARTBEAT_PID" 2>/dev/null
+    PROGRESS_HEARTBEAT_PID=""
+    return 0
+}
 
 progress_write() {
     # GuideApp sets this for a headless single-item run launched from its own
@@ -154,6 +225,17 @@ progress_write() {
     local tmp="$PROGRESS_FILE.$$"
     print -r -- "${PROGRESS_FORMAT_VERSION}|${state}|${phase}|${item}|${index}|${total}" > "$tmp" 2>/dev/null || return 0
     mv -f "$tmp" "$PROGRESS_FILE" 2>/dev/null || rm -f "$tmp"
+
+    # A run is "alive" from its first running entry until it records an
+    # ending, which is exactly the window the stamper has to cover - so the
+    # state being written is also the signal to start and stop it. Every
+    # ending goes through this function or progress_finalize (which stops it
+    # too), so no run can leave one behind.
+    if [[ "$state" == "running" ]]; then
+        progress_heartbeat_start
+    else
+        progress_heartbeat_stop
+    fi
 }
 
 # The final entry for a run that made it all the way to the end. Getting to
@@ -199,6 +281,10 @@ progress_write_completion() {
 # packages - awscli (3 of 8)") instead of only that it stopped.
 progress_finalize() {
     local exit_rc="${1:-0}"
+
+    # Whatever this decides to write - or to leave alone - the run is over:
+    # the heartbeat must not go on making its last entry look fresh.
+    progress_heartbeat_stop
 
     [[ -f "$PROGRESS_FILE" ]] || return 0
     local recorded

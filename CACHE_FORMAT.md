@@ -57,6 +57,26 @@ v1|running|brew-upgrade|awscli|3|8
   failed/attempted counts in `index`/`total` (the reader words them, so the
   wording can be localized) instead of `done|complete` - which paired a green
   tick and "Finished" with a run where packages were still outdated.
+- The file's **modification time is part of the contract**, not just
+  bookkeeping: a live run re-stamps it every `PROGRESS_HEARTBEAT_INTERVAL`
+  seconds (`progress_heartbeat_start()`, `lib/cache.sh`) with a `touch`, so
+  the content never changes and no reader needs a new field. A `running`
+  entry that has stopped aging is therefore a run that died - the stamper
+  stops itself when its run is gone (`kill -0`, which covers SIGKILL and a
+  closed terminal window, where no EXIT trap runs), when the entry stops
+  saying `running`, or when the file disappears. Without it, the only clue a
+  reader had was the last phase change, and a `mas upgrade` is allowed to
+  download silently for `MAS_UPGRADE_TIMEOUT` (7200s, `lib/utils.sh`).
+- Readers must therefore treat a `running` entry as dead once it is older
+  than `UpdateProgress.staleAfter(for:)` - 15 minutes for the phases that
+  write as they step through work (`starting`, `brew-update`, `analyze`,
+  `cleanup`, `verify`), 2h15m for the ones that wait on a single download or
+  build (`brew-upgrade`, `mas-upgrade`, `install-app`, `single`, and any
+  phase the reader does not recognize). The longer window only ever comes
+  into play for a toolkit installed before the heartbeat existed; with it, a
+  dead run is caught within the short one whatever phase it died in. This is
+  not cosmetic: GuideApp also holds its per-item update queue behind any
+  entry that says `running` (`ToolkitController.startOrQueue`).
 - Shell writer: `progress_write()` in `lib/cache.sh`; reader/self-check:
   `progress_finalize()` in the same file. It runs from the `run` dispatcher's
   EXIT trap so an unfinished "running" entry never leaves the UI showing a

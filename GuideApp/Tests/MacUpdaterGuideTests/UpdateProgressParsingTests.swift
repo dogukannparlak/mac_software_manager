@@ -78,7 +78,7 @@ final class UpdateProgressParsingTests: XCTestCase {
 
     func testFreshRunningStateStaysRunning() {
         let now = Date()
-        let recent = now.addingTimeInterval(-60) // 1 minute ago, well under staleAfter
+        let recent = now.addingTimeInterval(-60) // 1 minute ago, well under any window
         let progress = UpdateProgress.parse(raw: "v1|running|analyze", modified: recent, now: now)
         XCTAssertEqual(progress?.state, .running)
     }
@@ -87,7 +87,7 @@ final class UpdateProgressParsingTests: XCTestCase {
         // A run that died without writing a final state would otherwise leave
         // the UI claiming to be busy forever - this is the safety net.
         let now = Date()
-        let stale = now.addingTimeInterval(-(UpdateProgress.staleAfter + 60))
+        let stale = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
         let progress = UpdateProgress.parse(raw: "v1|running|analyze", modified: stale, now: now)
         XCTAssertEqual(progress?.state, .failed)
     }
@@ -96,9 +96,65 @@ final class UpdateProgressParsingTests: XCTestCase {
         // Staleness promotion only applies to "running" - a "done" or
         // "failed" entry from long ago must not be reinterpreted.
         let now = Date()
-        let stale = now.addingTimeInterval(-(UpdateProgress.staleAfter + 60))
+        let stale = now.addingTimeInterval(-(UpdateProgress.staleAfterLong + 60))
         let progress = UpdateProgress.parse(raw: "v1|done|complete", modified: stale, now: now)
         XCTAssertEqual(progress?.state, .done)
+    }
+
+    // MARK: - How long a quiet run gets before it counts as dead
+
+    func testALongDownloadIsStillRunningPastTheQuickWindow() {
+        // The bug this guards: one 15-minute window covered every phase, so
+        // an App Store download - which writes nothing until it finishes, and
+        // is allowed to run for MAS_UPGRADE_TIMEOUT (7200s) - was reported as
+        // a failed update while it was still downloading. Worse than the
+        // wrong banner: ToolkitController reads the same "not running" and
+        // releases its per-item queue on top of the live run.
+        let now = Date()
+        let quiet = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
+        for phase in ["mas-upgrade", "brew-upgrade", "install-app", "single"] {
+            let progress = UpdateProgress.parse(raw: "v1|running|\(phase)", modified: quiet, now: now)
+            XCTAssertEqual(progress?.state, .running, "\(phase) was declared dead at the quick window")
+        }
+    }
+
+    func testALongDownloadDoesEventuallyGoStale() {
+        // Generous is not forever: a heartbeat-era toolkit stops stamping the
+        // file the moment its run dies, so nothing living ever reaches here.
+        let now = Date()
+        let ancient = now.addingTimeInterval(-(UpdateProgress.staleAfterLong + 60))
+        let progress = UpdateProgress.parse(raw: "v1|running|mas-upgrade", modified: ancient, now: now)
+        XCTAssertEqual(progress?.state, .failed)
+    }
+
+    func testBookkeepingPhasesGetTheQuickWindow() {
+        // These write as they step through work, so silence is already odd.
+        let now = Date()
+        let quiet = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
+        for phase in ["starting", "brew-update", "analyze", "cleanup", "verify"] {
+            let progress = UpdateProgress.parse(raw: "v1|running|\(phase)", modified: quiet, now: now)
+            XCTAssertEqual(progress?.state, .failed, "\(phase) should not get the long window")
+        }
+    }
+
+    func testAPhaseThisBuildDoesNotKnowGetsTheLongWindow() {
+        // From a newer writer: there is nothing to base "should have written
+        // by now" on, and calling a live run dead is the costlier mistake.
+        let now = Date()
+        let quiet = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
+        let progress = UpdateProgress.parse(raw: "v1|running|some-new-phase", modified: quiet, now: now)
+        XCTAssertEqual(progress?.phase, .unknown)
+        XCTAssertEqual(progress?.state, .running)
+    }
+
+    func testAHeartbeatedEntryNeverGoesStale() {
+        // What lib/cache.sh's stamper buys: the entry is touched every
+        // PROGRESS_HEARTBEAT_INTERVAL seconds for as long as the run lives,
+        // so however long the phase takes, its age stays at one interval.
+        let now = Date()
+        let justStamped = now.addingTimeInterval(-15)
+        let progress = UpdateProgress.parse(raw: "v1|running|mas-upgrade", modified: justStamped, now: now)
+        XCTAssertEqual(progress?.state, .running)
     }
 
     func testCompletionWithFailuresParsesItsCounts() {
