@@ -151,6 +151,41 @@ final class UpdateProgressParsingTests: XCTestCase {
         }
     }
 
+    // The two migration phases (lib/migrate.sh, via the scan_migration and
+    // migrate_app actions). CACHE_FORMAT.md:45 lists both in the recognised
+    // set, so a build that fell through to `.unknown` for either would be
+    // behind its own document - and would inherit the long staleness window
+    // with it.
+    func testScanMigrationPhaseParsesAndIsNamed() {
+        let progress = UpdateProgress.parse(raw: "v1|running|scan-migration|||", modified: Date())
+        XCTAssertEqual(progress?.phase, .scanMigration)
+        XCTAssertEqual(progress?.title(for: .english), "Looking for apps Homebrew could manage")
+        XCTAssertEqual(progress?.title(for: .turkish), "Homebrew'in yönetebileceği uygulamalar aranıyor")
+    }
+
+    func testMigratePhaseParsesAndNamesTheApp() {
+        let progress = UpdateProgress.parse(raw: "v1|running|migrate|AltTab||", modified: Date())
+        XCTAssertEqual(progress?.phase, .migrate)
+        XCTAssertEqual(progress?.title(for: .english), "Moving to Homebrew")
+        XCTAssertEqual(progress?.title(for: .turkish), "Homebrew'e taşınıyor")
+        XCTAssertEqual(progress?.detail(for: .english), "AltTab")
+    }
+
+    // Both step through work and write as they go - the scan moves app to app,
+    // a migration is one `brew install --cask --adopt` Homebrew reports on. A
+    // dead run of either must be caught in the quick window: until these cases
+    // existed both fell through to `.unknown` and took the 2h15m one, which
+    // left a dead scan looking live for hours with `startOrQueue` holding
+    // every queued row behind it.
+    func testMigrationPhasesGetTheQuickStalenessWindow() {
+        let now = Date()
+        let quiet = now.addingTimeInterval(-(UpdateProgress.staleAfterQuick + 60))
+        for phase in ["scan-migration", "migrate"] {
+            let progress = UpdateProgress.parse(raw: "v1|running|\(phase)", modified: quiet, now: now)
+            XCTAssertEqual(progress?.state, .failed, "\(phase) should not get the long window")
+        }
+    }
+
     func testAPhaseThisBuildDoesNotKnowGetsTheLongWindow() {
         // From a newer writer: there is nothing to base "should have written
         // by now" on, and calling a live run dead is the costlier mistake.

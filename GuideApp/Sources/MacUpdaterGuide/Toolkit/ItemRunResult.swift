@@ -56,6 +56,32 @@ struct ItemRunResult: Equatable, Sendable {
         case extractFailed = "extract-failed"
         case verifyFailed = "verify-failed"
         case replaceFailed = "replace-failed"
+        // The migration reasons (kind "migrate", lib/migrate.sh). The first
+        // four are the states the engine refuses on before running anything -
+        // it re-derives them from a fresh `brew info` rather than trusting the
+        // scan's cache entry, so a row that looked movable an hour ago can
+        // still come back with one of these.
+        /// No cask by that token exists, or the bundle is not where the scan
+        /// recorded it.
+        case caskNotFound = "cask-not-found"
+        /// The cask installs a package rather than an app bundle: nothing to
+        /// adopt, nothing to put back.
+        case noAppArtifact = "no-app-artifact"
+        /// The cask needs an administrator, which a headless run has nowhere
+        /// to ask for.
+        case needsRoot = "needs-root"
+        /// The cask installs somewhere other than where the app is - adopting
+        /// would leave a second copy rather than take this one over.
+        case targetMismatch = "target-mismatch"
+        /// `--adopt` refused because the installed copy is not the version the
+        /// cask ships. Nothing was changed, and a replace would work.
+        case adoptVersionMismatch = "adopt-version-mismatch"
+        /// Homebrew could not install the cask, and nothing had been moved
+        /// aside.
+        case installFailed = "install-failed"
+        /// A replace failed and the original application was moved back into
+        /// place. Nothing changed.
+        case restoredAfterFailure = "restored-after-failure"
         /// A token this build does not know, from a newer toolkit.
         case unknown
 
@@ -125,6 +151,41 @@ struct ItemRunResult: Equatable, Sendable {
                     "The application could not be replaced. The previous version was restored.",
                     "Uygulama değiştirilemedi. Önceki sürüm geri yüklendi."
                 )
+            case .caskNotFound:
+                return Localized(
+                    "Homebrew has no cask by that name, or the application is no longer where it was found.",
+                    "Homebrew'de bu adda bir cask yok veya uygulama bulunduğu yerde değil."
+                )
+            case .noAppArtifact:
+                return Localized(
+                    "That cask installs a package rather than an application, so there is nothing for Homebrew to take over.",
+                    "Bu cask bir uygulama yerine yükleyici kuruyor, dolayısıyla Homebrew'in devralabileceği bir şey yok."
+                )
+            case .needsRoot:
+                return Localized(
+                    "That cask needs an administrator password, which a background run has nowhere to ask for.",
+                    "Bu cask yönetici parolası gerektiriyor; arka planda çalışan bir işlemin bunu soracağı bir yer yok."
+                )
+            case .targetMismatch:
+                return Localized(
+                    "The cask installs to a different location, so moving the app would leave a second copy behind.",
+                    "Cask farklı bir konuma kuruyor, bu yüzden taşımak geride ikinci bir kopya bırakır."
+                )
+            case .adoptVersionMismatch:
+                return Localized(
+                    "The installed copy is not the version the cask ships, so Homebrew would not take it over. Nothing was changed.",
+                    "Kurulu kopya cask'in getirdiği sürüm değil, bu yüzden Homebrew devralmadı. Hiçbir şey değiştirilmedi."
+                )
+            case .installFailed:
+                return Localized(
+                    "Homebrew could not install the cask. Nothing was changed.",
+                    "Homebrew cask'i kuramadı. Hiçbir şey değiştirilmedi."
+                )
+            case .restoredAfterFailure:
+                return Localized(
+                    "The install failed and the original application was put back. Nothing changed.",
+                    "Kurulum başarısız oldu ve özgün uygulama geri kondu. Hiçbir şey değişmedi."
+                )
             }
         }
     }
@@ -132,9 +193,9 @@ struct ItemRunResult: Equatable, Sendable {
     /// When the run wrote this record. Whole seconds - it comes from the
     /// shell's `EPOCHSECONDS`.
     let recordedAt: Date
-    /// `brew`, `cask`, `mas` or `app`: what the run was invoked as, not a
-    /// re-derived source. `candidateItemIDs` maps it back to this app's own
-    /// item identity.
+    /// `brew`, `cask`, `mas`, `app` or `migrate`: what the run was invoked as,
+    /// not a re-derived source. `candidateItemIDs` maps it back to this app's
+    /// own item identity.
     let kind: String
     /// Formula/cask token, App Store id, or application name.
     let id: String
@@ -182,11 +243,16 @@ struct ItemRunResult: Equatable, Sendable {
     /// found instead (`manual:`) - both are updated by the same command with
     /// the same numeric id. A kind this build does not know matches nothing,
     /// so the record is left alone rather than attached to the wrong row.
+    /// `migrate` is keyed on the cask token the app was being moved to, which
+    /// is what `migrate_app` files as its `id` - the Move to Homebrew page
+    /// uses `migrate:<token>` for the row waiting on it. The token is what the
+    /// run was about; the app name rides along in `name`.
     var candidateItemIDs: [String] {
         switch kind {
         case "brew", "cask": return ["brew:\(id)"]
         case "mas": return ["mas:\(id)", "manual:\(id)"]
         case "app": return ["app:\(id)"]
+        case "migrate": return ["migrate:\(id)"]
         default: return []
         }
     }

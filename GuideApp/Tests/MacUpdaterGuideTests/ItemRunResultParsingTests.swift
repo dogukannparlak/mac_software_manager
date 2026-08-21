@@ -178,4 +178,51 @@ final class ItemRunResultParsingTests: XCTestCase {
             reason: .stillOutdated
         )
     }
+
+    // MARK: - Migration runs (kind "migrate")
+
+    func testAMigrationRunIsKeyedOnTheCaskToken() {
+        // `migrate_app` is invoked with the app name but files its result
+        // under the token it was moving to, which is what the Move to Homebrew
+        // page keys its row on.
+        XCTAssertEqual(record(kind: "migrate", id: "alt-tab").candidateItemIDs, ["migrate:alt-tab"])
+        XCTAssertTrue(record(kind: "migrate", id: "alt-tab").matches(itemID: "migrate:alt-tab"))
+    }
+
+    func testAMigrationRecordDoesNotMatchTheCaskUpdateRow() {
+        // Same token, different thing: "brew:alt-tab" is the row for updating
+        // an installed cask, "migrate:alt-tab" is the row for handing an
+        // unmanaged app over to it. One record must never resolve the other.
+        XCTAssertFalse(record(kind: "migrate", id: "alt-tab").matches(itemID: "brew:alt-tab"))
+        XCTAssertFalse(record(kind: "cask", id: "alt-tab").matches(itemID: "migrate:alt-tab"))
+    }
+
+    func testEveryMigrationReasonResolvesAndIsWorded() {
+        // The seven stable tokens lib/migrate.sh files (CACHE_FORMAT.md). A
+        // token with no copy would fall back to showing raw shell output,
+        // which for these is the one thing that does not explain them.
+        let expected: [String: ItemRunResult.Reason] = [
+            "cask-not-found": .caskNotFound,
+            "no-app-artifact": .noAppArtifact,
+            "needs-root": .needsRoot,
+            "target-mismatch": .targetMismatch,
+            "adopt-version-mismatch": .adoptVersionMismatch,
+            "install-failed": .installFailed,
+            "restored-after-failure": .restoredAfterFailure
+        ]
+        for (raw, reason) in expected {
+            let line = "v1|1755400000|migrate|alt-tab|AltTab|fail|\(raw)"
+            let parsed = ItemRunResult.parse(raw: line)
+            XCTAssertEqual(parsed?.reason, reason, "reason \(raw)")
+            XCTAssertNotNil(parsed?.reason.label, "reason \(raw) needs wording")
+        }
+    }
+
+    func testAMigrationReasonFromANewerToolkitStillParses() {
+        // A reason is a label, not a verdict: the record is still the run's
+        // account of itself and the status is still readable.
+        let parsed = ItemRunResult.parse(raw: "v1|1755400000|migrate|alt-tab|AltTab|fail|some-new-reason")
+        XCTAssertEqual(parsed?.reason, .unknown)
+        XCTAssertEqual(parsed?.status, .fail)
+    }
 }

@@ -33,7 +33,25 @@ struct EngineContract: Equatable, Sendable {
     /// launched from the record the run files (`ItemRunResult`), and an engine
     /// that predates `result_write()` never files one. Raise this in the same
     /// change that starts depending on a newer `ENGINE_CONTRACT`.
+    ///
+    /// This is the *baseline*: what every surface in the app needs before any
+    /// of it can be trusted, and therefore what the "your engine is out of
+    /// date" banner is raised against. A single feature that needs something
+    /// newer does not belong here - see `migrationContract` below.
     static let required = 1
+
+    /// What an engine has to declare before the Move to Homebrew page will do
+    /// anything: `2` is `migration_candidates` plus the `scan_migration` and
+    /// `migrate_app` actions.
+    ///
+    /// Deliberately *not* folded into `required`. Contracts are additive and
+    /// the comparison is `contract >= n`, so a page can ask its own question
+    /// without changing what everybody else is held to. Raising `required` to
+    /// 2 instead would put the engine-too-old banner in front of every user
+    /// whose engine updates and refreshes work perfectly well, over one page
+    /// they may never open. A feature asks for its own threshold; the baseline
+    /// moves only when the baseline really has moved.
+    static let migrationContract = 2
 
     /// When the engine wrote this record. Whole seconds - it comes from the
     /// shell's `EPOCHSECONDS`.
@@ -46,6 +64,9 @@ struct EngineContract: Equatable, Sendable {
     let release: String
 
     var meetsRequirement: Bool { contract >= Self.required }
+
+    /// Whether this engine can be asked to scan for and perform migrations.
+    var supportsMigration: Bool { contract >= Self.migrationContract }
 
     /// `v1|epoch|contract|release`
     ///
@@ -118,5 +139,18 @@ enum EngineContractStore {
     /// `required`" and "declared nothing at all".
     static func satisfiesRequirement(forRunStartedAt startedAt: Date) -> Bool {
         declared(forRunStartedAt: startedAt)?.meetsRequirement == true
+    }
+
+    /// Whether the installed engine can do migrations at all.
+    ///
+    /// Unlike `satisfiesRequirement(forRunStartedAt:)` this deliberately reads
+    /// the record as it stands rather than tying it to a run: the Move to
+    /// Homebrew page has to decide what to draw *before* it runs anything, and
+    /// the question it is asking - "does the installed engine have this
+    /// feature" - is about the engine on disk, not about a particular run's
+    /// account of itself. The engine rewrites this record on every invocation
+    /// including the menu draw, so in practice it is never stale for long.
+    static var supportsMigration: Bool {
+        load()?.supportsMigration == true
     }
 }

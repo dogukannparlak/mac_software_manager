@@ -52,6 +52,7 @@ enum UIStrings {
 
     static let tabGeneral = Localized("General", "Genel")
     static let tabUpdates = Localized("Updates", "Güncellemeler")
+    static let tabMigrate = Localized("Move to Homebrew", "Homebrew'e Taşı")
     static let tabIgnored = Localized("Ignored", "Yoksayılanlar")
     static let tabAdvanced = Localized("Advanced", "Gelişmiş")
 
@@ -231,6 +232,21 @@ extension UIStrings {
         böyle güncellemeler bir butonun arkasında beklemek yerine doğrudan \
         bir terminal penceresinde yeniden başlatılır.
         """
+    )
+    static let actionFailedMigrateScan = Localized(
+        "Could not scan for apps to move",
+        "Taşınabilecek uygulamalar taranamadı"
+    )
+    static let actionFailedMigrateItemFormat = Localized(
+        "Could not move %@ to Homebrew",
+        "%@ Homebrew'e taşınamadı"
+    )
+    /// The engine printed this and exited 1 because a cache refresh already
+    /// holds the lock the scan needs. Nothing is broken, so the wording says
+    /// what to do rather than what went wrong.
+    static let migrateScanBusyDetail = Localized(
+        "A cache refresh is running right now. Try the scan again in a moment.",
+        "Şu anda bir önbellek yenilemesi çalışıyor. Taramayı birazdan tekrar deneyin."
     )
     static let actionFailedEngineOutdated = Localized(
         "The installed update engine is out of date",
@@ -537,3 +553,110 @@ extension UIStrings {
     )
 }
 
+
+// MARK: - Move to Homebrew page
+
+extension UIStrings {
+    static let migrateIntro = Localized(
+        "Applications you installed by hand that Homebrew could keep up to date instead.",
+        "Elle kurduğunuz, bunun yerine Homebrew'in güncel tutabileceği uygulamalar."
+    )
+    static let migrateExplain = Localized(
+        """
+        Scanning only reads what is already on your Mac - the cask descriptions         Homebrew ships and each app's own version information. Nothing is         downloaded, installed or moved until you pick something.
+        """,
+        """
+        Tarama yalnızca Mac'inizde hâlihazırda bulunanları okur: Homebrew'in         getirdiği cask tanımlarını ve her uygulamanın kendi sürüm bilgisini.         Siz bir şey seçene kadar hiçbir şey indirilmez, kurulmaz veya taşınmaz.
+        """
+    )
+    static let migrateScanButton = Localized("Start Scan", "Taramayı Başlat")
+    static let migrateRescanButton = Localized("Scan Again", "Yeniden Tara")
+    static let migrateScanning = Localized("Scanning…", "Taranıyor…")
+    static let migrateScanCost = Localized(
+        "The scan asks Homebrew about every unmanaged app, so it takes a moment and is never run on its own.",
+        "Tarama, yönetilmeyen her uygulama için Homebrew'e soru sorar; bu yüzden biraz sürer ve kendiliğinden hiç çalışmaz."
+    )
+
+    static let migrateNeverScanned = Localized("No scan yet", "Henüz tarama yok")
+    static let migrateNeverScannedDetail = Localized(
+        "Run a scan to see which of your applications Homebrew could take over.",
+        "Hangi uygulamalarınızı Homebrew'in devralabileceğini görmek için bir tarama çalıştırın."
+    )
+    static let migrateNothingFound = Localized("Nothing to move", "Taşınacak bir şey yok")
+    static let migrateNothingFoundDetail = Localized(
+        "Every application on this Mac is already managed by Homebrew, the App Store, or has no cask to move to.",
+        "Bu Mac'teki tüm uygulamalar zaten Homebrew veya App Store tarafından yönetiliyor ya da taşınabilecekleri bir cask yok."
+    )
+
+    static let migrateSectionReady = Localized("Ready to move", "Taşınmaya hazır")
+    static let migrateSectionReadyDetail = Localized(
+        "Homebrew can take these over in place, without downloading them again.",
+        "Homebrew bunları yeniden indirmeden, olduğu yerde devralabilir."
+    )
+    static let migrateSectionConfirm = Localized("Needs your confirmation", "Onayınız gerekiyor")
+    static let migrateSectionConfirmDetail = Localized(
+        "The installed copy is not the version the cask ships, so moving it replaces the app.",
+        "Kurulu kopya cask'in getirdiği sürüm değil; taşımak uygulamanın yerine yenisini koyar."
+    )
+    static let migrateSectionBlocked = Localized("Cannot be moved", "Taşınamaz")
+    static let migrateSectionBlockedDetail = Localized(
+        "Listed so you know why, rather than left out.",
+        "Dışarıda bırakılmak yerine, nedenini bilesiniz diye listelendi."
+    )
+
+    static let migrateSelected = Localized("Move Selected", "Seçilenleri Taşı")
+    static let migrateOne = Localized("Move", "Taşı")
+    static let migrateSelectAll = Localized("Select All", "Tümünü Seç")
+    static let migrateSelectNone = Localized("Select None", "Seçimi Kaldır")
+    static let migrateSelectedCountFormat = Localized("%d selected", "%d seçili")
+    static let migrateDone = Localized("Moved", "Taşındı")
+    static let migrateFailed = Localized("Not moved", "Taşınamadı")
+
+    static let migrateUnverified = Localized("Unverified", "Doğrulanmamış")
+    static let migrateUnverifiedDetail = Localized(
+        "Check the cask page before moving this one.",
+        "Bunu taşımadan önce cask sayfasını kontrol edin."
+    )
+    static let migrateViewCask = Localized("View cask", "Cask'i görüntüle")
+    static let migrateInstalledVersion = Localized("Installed", "Kurulu")
+    static let migrateCaskVersion = Localized("Cask", "Cask")
+
+    // The version-mismatch confirmation sheet.
+    static let migrateConfirmTitleFormat = Localized(
+        "Replace %@ with the Homebrew version?",
+        "%@ Homebrew sürümüyle değiştirilsin mi?"
+    )
+    static let migrateConfirmBody = Localized(
+        """
+        Homebrew will not take over a copy that differs from the version it         ships, so this downloads the cask's version and puts it in place of the         application you have. Your copy is moved aside first and put back if         the install fails.
+        """,
+        """
+        Homebrew, getirdiği sürümden farklı bir kopyayı devralmaz; bu yüzden         cask'in sürümü indirilip elinizdeki uygulamanın yerine konur. Kopyanız         önce bir kenara alınır ve kurulum başarısız olursa geri konur.
+        """
+    )
+    static let migrateConfirmDowngrade = Localized(
+        "The version you have is newer than the one Homebrew ships. Moving it now would take you back to the older version.",
+        "Elinizdeki sürüm Homebrew'in getirdiğinden daha yeni. Şimdi taşımak sizi eski sürüme geri götürür."
+    )
+    static let migrateConfirmAction = Localized("Replace and Move", "Değiştir ve Taşı")
+
+    static let migrateEngineTooOld = Localized(
+        "Update the toolkit first",
+        "Önce araç setini güncelleyin"
+    )
+    static let migrateEngineTooOldDetail = Localized(
+        """
+        The installed engine cannot look for apps to move. Re-run setup_mac.sh         to install a version that can.
+        """,
+        """
+        Kurulu motor taşınacak uygulamaları arayamıyor. Bunu yapabilen bir         sürüm kurmak için setup_mac.sh'yi yeniden çalıştırın.
+        """
+    )
+    /// Shown under a needs-root row: the engine will not escalate, so the one
+    /// route left is the user's own terminal, and the command has to be there
+    /// to copy.
+    static let migrateRunYourselfFormat = Localized(
+        "Run this yourself in Terminal: brew install --cask %@",
+        "Bunu Terminal'de kendiniz çalıştırın: brew install --cask %@"
+    )
+}

@@ -7,6 +7,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case updates
     case tracked
     case tokenMap
+    case migrate
     case ignored
     case advanced
     case about
@@ -19,6 +20,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .updates: return UIStrings.tabUpdates
         case .tracked: return UIStrings.navTracked
         case .tokenMap: return UIStrings.navTokenMap
+        case .migrate: return UIStrings.tabMigrate
         case .ignored: return UIStrings.tabIgnored
         case .advanced: return UIStrings.tabAdvanced
         case .about: return UIStrings.tabAbout
@@ -31,6 +33,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .updates: return "arrow.triangle.2.circlepath"
         case .tracked: return "list.bullet.rectangle"
         case .tokenMap: return "arrow.left.arrow.right"
+        case .migrate: return "arrow.right.doc.on.clipboard"
         case .ignored: return "eye.slash"
         case .advanced: return "wrench.and.screwdriver"
         case .about: return "info.circle"

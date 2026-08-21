@@ -25,6 +25,12 @@ struct UpdateProgress: Equatable, Sendable {
         case verify
         case installApp = "install-app"
         case single
+        /// The user-triggered sweep for applications Homebrew could manage
+        /// (`scan_migration`, lib/migrate.sh). It steps through the apps on
+        /// disk one at a time - see `canBeSilentForLong`.
+        case scanMigration = "scan-migration"
+        /// One application being handed over to a cask (`migrate_app`).
+        case migrate
         case complete
         /// The run reached the end, but the verify pass found items that
         /// were still outdated - written by `progress_write_completion()`
@@ -71,6 +77,13 @@ struct UpdateProgress: Equatable, Sendable {
             case .verify: return Localized("Checking the results", "Sonuçlar kontrol ediliyor")
             case .installApp: return Localized("Installing", "Kuruluyor")
             case .single: return Localized("Updating", "Güncelleniyor")
+            case .scanMigration:
+                return Localized(
+                    "Looking for apps Homebrew could manage",
+                    "Homebrew'in yönetebileceği uygulamalar aranıyor"
+                )
+            case .migrate:
+                return Localized("Moving to Homebrew", "Homebrew'e taşınıyor")
             case .complete: return Localized("Finished", "Bitti")
             case .completeWithFailures:
                 return Localized("Finished with errors", "Hatalarla bitti")
@@ -99,7 +112,16 @@ struct UpdateProgress: Equatable, Sendable {
             // guessing "quick" here would risk calling a live run dead.
             case .unknown:
                 return true
+            // Both migration phases step through work and write as they go:
+            // the scan moves from app to app, and a migration is a single
+            // `brew install --cask --adopt` that Homebrew reports on. Neither
+            // sits on one long silent download, so silence in either really is
+            // a run that died. Before these cases existed both fell through to
+            // `.unknown` and inherited the 2h15m window, which left a dead
+            // scan looking live for hours - and `startOrQueue` holds every
+            // queued row behind any entry that still says `running`.
             case .starting, .brewUpdate, .analyze, .cleanup, .verify,
+                 .scanMigration, .migrate,
                  .complete, .completeWithFailures, .launchFailed,
                  .terminalPermission, .processError, .cancelled, .notStarted:
                 return false

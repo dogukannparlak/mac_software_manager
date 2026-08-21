@@ -81,6 +81,7 @@ struct ContentView: View {
         case .updates:  UpdateSettingsPage()
         case .tracked:  TrackedAppsEditor()
         case .tokenMap: TokenMapEditor()
+        case .migrate:  MigrateToHomebrewPage()
         case .ignored:  IgnoredAppsPage()
         case .advanced: AdvancedSettingsPage()
         case .about:    AboutPage()
