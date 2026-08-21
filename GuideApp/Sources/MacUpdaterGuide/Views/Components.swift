@@ -52,6 +52,19 @@ struct FailureBanner: View {
     let failure: ToolkitController.ActionFailure
     let onDismiss: () -> Void
     var compact: Bool = false
+    /// Called with the failure's own recovery when the user presses the
+    /// button offering it. Absent where the surface showing the banner
+    /// cannot act on one.
+    var onRecover: ((ToolkitController.ActionFailure.Recovery) -> Void)?
+
+    /// Shell output starts hidden. The headline above it is the app's own
+    /// sentence saying what to do; the twelve lines brew printed are evidence
+    /// for whoever wants them, and burying the instruction under them is how
+    /// this banner stopped being read.
+    @State private var showsEvidence = false
+
+    private var headline: String? { failure.reason.headline(for: loc.language) }
+    private var evidence: String { failure.reason.evidence }
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -64,12 +77,52 @@ struct FailureBanner: View {
                     .font(compact ? .callout.weight(.medium) : .body.weight(.medium))
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(failure.detail(for: loc.language))
+                // The app's own sentence, or - when there is none - the
+                // output itself, because the only account there is never
+                // gets hidden behind a toggle.
+                Text(headline ?? evidence)
                     .font(compact ? .caption : .callout)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                     .lineLimit(compact ? 3 : 8)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if headline != nil, !evidence.isEmpty {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) { showsEvidence.toggle() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .rotationEffect(.degrees(showsEvidence ? 90 : 0))
+                            Text(UIStrings.failureDetails[loc.language])
+                                .font(.caption)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+
+                    if showsEvidence {
+                        Text(evidence)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
+                }
+
+                // Only for the failures the app knows a way out of, and only
+                // ever as an offer: opening a terminal window is the user's
+                // call to make, not something to do to them because an
+                // update failed.
+                if let recovery = failure.recovery, let onRecover {
+                    Button(recovery.label(for: loc.language)) { onRecover(recovery) }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(compact ? .small : .regular)
+                        .padding(.top, 8)
+                }
             }
 
             Spacer(minLength: 0)

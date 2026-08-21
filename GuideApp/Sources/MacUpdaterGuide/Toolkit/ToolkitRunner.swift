@@ -44,6 +44,12 @@ final class ToolkitController {
             case hideItem
             case unhideItem
             case toolkitUpdateCheck
+            /// Not a failed action at all but a failed *assumption*: the
+            /// installed engine cannot do what this build reads from it.
+            /// It rides the same banner because it is the same kind of
+            /// message - something did not work and nothing else on screen
+            /// would have said so.
+            case engineOutdated
         }
 
         /// `toolkitMissing` is the one reason the app works out for itself,
@@ -65,6 +71,35 @@ final class ToolkitController {
             /// stderr that says which package, which URL, which error - and
             /// which is brew's or mas's English either way.
             case reported(ItemRunResult.Reason, detail: String)
+            /// The engine that ran declared a contract this build cannot
+            /// work with, or - the case that matters, and the one every
+            /// engine older than the contract produces - declared nothing
+            /// at all. `found` is what it declared, `nil` when it said
+            /// nothing. See `EngineContract`.
+            case engineContract(found: Int?)
+            /// The package could not be updated without a password, and the
+            /// run had no terminal to ask for one in.
+            ///
+            /// Homebrew uninstalls the old version before it installs the
+            /// new one, and a cask whose uninstall stanza touches a
+            /// system-owned path (`delete:` under /Library, `pkgutil:`,
+            /// `launchctl:`) does that through `sudo`. A headless run has no
+            /// tty, so sudo cannot prompt and the whole upgrade fails after
+            /// the download - which is why the same packages fail every time
+            /// while the rest update fine.
+            ///
+            /// Recognised from what the run printed rather than filed as a
+            /// token by the shell: the failure can only happen on a headless
+            /// run, which is exactly the case where the app has the run's
+            /// stderr in hand. A terminal run has the tty sudo wanted, so it
+            /// never gets here.
+            case needsTerminal(detail: String)
+            /// The row a recovery button pointed at is no longer anywhere to
+            /// be found. Should not happen - the snapshot keeps a failed
+            /// item, because a failed upgrade is still outdated - but a
+            /// button that does nothing at all is the one outcome this whole
+            /// type exists to prevent.
+            case itemGone
 
             /// What a finished process leaves to show: what it printed, or
             /// its exit status when it printed nothing.
@@ -73,19 +108,88 @@ final class ToolkitController {
                 return .output(outcome.summary)
             }
 
-            func text(for language: AppLanguage) -> String {
+            /// The three ways sudo says "there is nobody here to type a
+            /// password". Matching sudo's own wording rather than brew's
+            /// keeps this working whichever command underneath asked for the
+            /// escalation; if sudo ever rewords them, the banner quietly goes
+            /// back to showing the raw output, which is what it showed
+            /// before this existed.
+            private static let noTerminalForSudo = [
+                "sudo: a terminal is required",
+                "sudo: a password is required",
+                "sudo: no tty present"
+            ]
+
+            static func needsTerminal(after outcome: ProcessOutcome) -> Bool {
+                noTerminalForSudo.contains { outcome.stderr.contains($0) }
+            }
+
+            /// The part the app words itself: what went wrong, in the
+            /// user's language. `nil` where the run's own output is the only
+            /// account there is - see `evidence`.
+            func headline(for language: AppLanguage) -> String? {
                 switch self {
                 case .toolkitMissing: return UIStrings.toolkitNotFoundDetail[language]
-                case .output(let text): return text
+                case .output: return nil
                 case .noOutput: return UIStrings.actionFailedNoReason[language]
+                case .itemGone: return UIStrings.actionFailedItemGone[language]
                 case .reported(let reported, let detail):
                     // A token with no copy of its own (an unknown one from a
                     // newer toolkit, or one whose whole content is the
                     // output) leaves the printed detail to speak for itself.
                     guard let headline = reported.label?[language] else {
-                        return detail.isEmpty ? UIStrings.actionFailedNoReason[language] : detail
+                        return detail.isEmpty ? UIStrings.actionFailedNoReason[language] : nil
                     }
-                    return detail.isEmpty ? headline : headline + "\n" + detail
+                    return headline
+                case .needsTerminal:
+                    return UIStrings.updateNeedsTerminalDetail[language]
+                case .engineContract(let found):
+                    guard let found else { return UIStrings.engineContractMissingDetail[language] }
+                    return String(
+                        format: UIStrings.engineContractTooOldFormat[language],
+                        found,
+                        EngineContract.required
+                    )
+                }
+            }
+
+            /// What brew/mas/the script printed: raw, English, and long. Kept
+            /// apart from the headline so a surface can put it behind a
+            /// disclosure instead of making the user read a stack of shell
+            /// output to find the one sentence that tells them what to do.
+            var evidence: String {
+                switch self {
+                case .output(let text): return text
+                case .reported(_, let detail): return detail
+                case .needsTerminal(let detail): return detail
+                case .toolkitMissing, .noOutput, .itemGone, .engineContract: return ""
+                }
+            }
+
+            /// Headline and evidence as one block - what a surface with no
+            /// room for a disclosure (a row's own failure line) still shows.
+            func text(for language: AppLanguage) -> String {
+                guard let headline = headline(for: language) else {
+                    return evidence.isEmpty ? UIStrings.actionFailedNoReason[language] : evidence
+                }
+                return evidence.isEmpty ? headline : headline + "\n" + evidence
+            }
+        }
+
+        /// Something the user can press to get out of this failure, where
+        /// the app knows of one. The banner renders it as a button; pressing
+        /// it *is* the permission, so nothing happens until they do.
+        enum Recovery: Equatable, Sendable {
+            /// Re-run this row's update in a real terminal window, where the
+            /// password prompt this failure was about has somewhere to
+            /// appear. Carries the row id rather than the item so the
+            /// failure stays a plain value - the controller looks the item
+            /// back up when the button is pressed.
+            case runInTerminal(itemID: String)
+
+            func label(for language: AppLanguage) -> String {
+                switch self {
+                case .runInTerminal: return UIStrings.updateInTerminal[language]
                 }
             }
         }
@@ -95,6 +199,9 @@ final class ToolkitController {
         /// The package or app this was about, where it was about one.
         let subject: String?
         let reason: Reason
+        /// `nil` for every failure the app has no fix to offer for, which is
+        /// most of them.
+        var recovery: Recovery?
 
         /// "Could not refresh the update list" / "Rectangle güncellenemedi"
         func title(for language: AppLanguage) -> String {
@@ -106,6 +213,7 @@ final class ToolkitController {
             case .hideItem: return named(UIStrings.actionFailedHideItemFormat, language)
             case .unhideItem: return named(UIStrings.actionFailedUnhideItemFormat, language)
             case .toolkitUpdateCheck: return UIStrings.actionFailedToolkitUpdateCheck[language]
+            case .engineOutdated: return UIStrings.actionFailedEngineOutdated[language]
             }
         }
 
@@ -448,6 +556,7 @@ final class ToolkitController {
 
         isRefreshing = true
         refreshTask?.cancel()
+        let startedAt = Date()
         refreshTask = Task { [weak self] in
             let outcome = await Self.run(script: script, arguments: ["refresh_cache", force ? "force" : "auto"])
             await MainActor.run {
@@ -455,6 +564,11 @@ final class ToolkitController {
                 if !outcome.succeeded { self.report(.refresh, .from(outcome)) }
                 self.isRefreshing = false
                 self.reload()
+                // A run this app started has just ended, so an engine new
+                // enough to declare itself has necessarily done so. This is
+                // where the mismatch is caught before it costs anyone an
+                // update, rather than on the first row that fails.
+                if outcome.succeeded { self.reportEngineContract(forRunStartedAt: startedAt) }
             }
         }
     }
@@ -630,14 +744,65 @@ final class ToolkitController {
     /// translated sentence rather than a raw token nothing renders.
     private func report(_ action: ActionFailure.Action,
                         subject: String? = nil,
-                        _ reason: ActionFailure.Reason) {
-        lastFailure = ActionFailure(action: action, subject: subject, reason: reason)
+                        _ reason: ActionFailure.Reason,
+                        recovery: ActionFailure.Recovery? = nil) {
+        lastFailure = ActionFailure(action: action, subject: subject, reason: reason, recovery: recovery)
+    }
+
+    /// Does the thing the banner's button offered, then clears the banner -
+    /// the failure has been answered, and leaving it up next to a run that is
+    /// now starting would say the opposite.
+    ///
+    /// Only ever reached from a button the user pressed: the app never opens
+    /// a terminal window on its own.
+    func recover(from recovery: ActionFailure.Recovery) {
+        switch recovery {
+        case .runInTerminal(let itemID):
+            // The banner outlives the row: `scheduleStatusClear` drops the
+            // item from `recentItemsByID` eight seconds after the failure,
+            // while the failure itself stays up until it is read. The
+            // snapshot is the fallback that keeps the button working after
+            // that - and it always has the item, because an upgrade that
+            // failed is by definition still outdated.
+            guard let item = recentItemsByID[itemID] ?? snapshot.items.first(where: { $0.id == itemID }) else {
+                // Pressing a button and getting nothing back is the failure
+                // mode this app keeps having to fix; it does not get to
+                // happen here too.
+                return report(.startRun, .itemGone)
+            }
+            dismissFailure()
+            updateSingle(item, forceTerminal: true)
+        }
     }
 
     /// Drops the failure the banner is showing - the banner's own dismiss
     /// button, and nothing else: a failure stays up until it is read.
     func dismissFailure() {
         lastFailure = nil
+    }
+
+    /// Whether the engine-too-old banner has already been raised in this
+    /// session. The mismatch is one standing condition, not one failure per
+    /// row: reinstalling the engine is the only thing that changes it, and
+    /// that means a restart, so saying it once is saying it.
+    private var reportedEngineContract = false
+
+    /// Says out loud that the engine cannot answer what this build asks it,
+    /// after a run that has just finished and therefore would have left a
+    /// current record if it could.
+    ///
+    /// This is the whole point of the contract record. The fallback it
+    /// replaces stays where it is - a row still needs a status, and the
+    /// documented rule is that no record means "check the outdated list",
+    /// never "failed" - but it is no longer silent, so a user watching a
+    /// successful upgrade get marked failed is told why the app disagrees
+    /// with what they saw.
+    private func reportEngineContract(forRunStartedAt startedAt: Date) {
+        guard !reportedEngineContract else { return }
+        let declared = EngineContractStore.declared(forRunStartedAt: startedAt)
+        guard declared?.meetsRequirement != true else { return }
+        reportedEngineContract = true
+        report(.engineOutdated, .engineContract(found: declared?.contract))
     }
 
     var toolkitUpdatePending: Bool {
@@ -911,10 +1076,47 @@ final class ToolkitController {
             // says which package failed and is gone with the badge, the
             // banner keeps the reason on screen until it has been read.
             itemFailureReasons[item.id] = reason
-            report(.updateItem, subject: item.name, reason)
+
+            // The one failure this app knows a way out of. There is only one
+            // answer to "shall I open a terminal for the password prompt this
+            // run had nowhere to show" - the update cannot happen anywhere
+            // else - so by default it just does it, and the banner explains
+            // the window that appeared rather than asking for a click first.
+            // Turned off, the same failure waits behind the button instead.
+            var needsTerminal = false
+            if case .needsTerminal = reason { needsTerminal = true }
+            let openNow = needsTerminal && preferences.autoOpenTerminalWhenRequired
+
+            report(
+                .updateItem,
+                subject: item.name,
+                reason,
+                recovery: (needsTerminal && !openNow) ? .runInTerminal(itemID: item.id) : nil
+            )
+
+            if openNow {
+                // After the report, so the explanation is already on screen
+                // when the window opens - and after the queue below has been
+                // told this run is over, which `drainQueue` at the end of
+                // this function does.
+                let id = item.id
+                Task { @MainActor [weak self] in
+                    guard let self, let again = self.recentItemsByID[id]
+                        ?? self.snapshot.items.first(where: { $0.id == id }) else { return }
+                    self.updateSingle(again, forceTerminal: true)
+                }
+            }
         } else {
             itemFailureReasons[item.id] = nil
         }
+
+        // No record means the verdict above came from the outdated list. That
+        // is legitimate against an engine that predates the contract - but the
+        // user is entitled to know their row was decided by a guess, so this
+        // goes last, where it takes the banner off the symptom and puts it on
+        // the cause. A contract-capable engine that simply filed no record is
+        // a different thing and says nothing here.
+        if record == nil { reportEngineContract(forRunStartedAt: startedAt) }
 
         endFractionSimulation(for: item.id)
         scheduleStatusClear(for: item.id)
@@ -926,7 +1128,15 @@ final class ToolkitController {
     /// otherwise the process outcome on its own, which is all there was
     /// before the result contract existed and all there is against an engine
     /// that predates it.
-    private static func failureReason(record: ItemRunResult?, outcome: ProcessOutcome) -> ActionFailure.Reason {
+    static func failureReason(record: ItemRunResult?, outcome: ProcessOutcome) -> ActionFailure.Reason {
+        // Checked before the record's own token, because the token for this
+        // is "command-failed" - true, and useless. The run reports that brew
+        // exited non-zero; only what it printed says the upgrade was one
+        // password away from working, and that difference is the one thing
+        // the user can act on.
+        if ActionFailure.Reason.needsTerminal(after: outcome) {
+            return .needsTerminal(detail: outcome.stderr)
+        }
         // A token this build has no copy for says less than the output does.
         guard let record, record.reason.label != nil else { return .from(outcome) }
         return .reported(record.reason, detail: outcome.stderr)
@@ -953,10 +1163,8 @@ final class ToolkitController {
     /// here as well would put the same failure on screen twice.
     private func resolveActiveSingleItem() {
         guard let active = activeSingleItem else { return }
-        let record = ItemRunResultStore.consume(
-            itemID: active.id,
-            since: activeSingleItemStartedAt ?? .distantPast
-        )
+        let startedAt = activeSingleItemStartedAt ?? .distantPast
+        let record = ItemRunResultStore.consume(itemID: active.id, since: startedAt)
         let failed = record.map { !$0.succeeded }
             ?? snapshot.items.contains { $0.id == active.id }
         itemStatuses[active.id] = failed ? .failed : .succeeded
@@ -967,6 +1175,12 @@ final class ToolkitController {
         } else {
             itemFailureReasons[active.id] = nil
         }
+        // The banner is otherwise left to the progress file for a
+        // terminal-mode run (see this function's note), but an engine that
+        // cannot report is not that run's failure - it is a standing one, and
+        // nothing else on screen will say it.
+        if record == nil { reportEngineContract(forRunStartedAt: startedAt) }
+
         endFractionSimulation(for: active.id)
         activeSingleItem = nil
         activeSingleItemStartedAt = nil

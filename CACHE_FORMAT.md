@@ -17,10 +17,10 @@ sourced from a free-form app or release name).
 
 ## Versioned formats
 
-Three formats carry an explicit version marker (`vN|`) as their first field:
-`progress` below, the notification queue, and the single-item run results -
-the last two documented in their own sections further down, since neither
-lives in `cache/`. This is the convention every other format should adopt if
+Four formats carry an explicit version marker (`vN|`) as their first field:
+`progress` and `engine` below, the notification queue, and the single-item run
+results - the last two documented in their own sections further down, since
+neither lives in `cache/`. This is the convention every other format should adopt if
 it ever needs a breaking change (new field, reordered fields, a field
 dropped): bump to `v2`, keep the old reader path only if you need a
 migration window, and make an unrecognized/missing version fail closed
@@ -114,6 +114,75 @@ v1|running|brew-upgrade|awscli|3|8
   otherwise be read as a finished, successful run. An unrecognized *phase* is
   the one field that does fall back (`unknown`), because a phase is only a
   label to print, not a verdict on the run.
+
+### `engine`
+
+What the installed engine declares it can be relied on to write. Rewritten by
+**every** invocation of the engine - the SwiftBar menu draw, a cache refresh, a
+bulk run, a headless single-item run - before any action is dispatched.
+
+```
+v1|epoch|contract|release
+```
+
+| # | Field | Values | Notes |
+|---|---|---|---|
+| 1 | version | `v1` | Bump on any incompatible change to the fields below |
+| 2 | epoch | integer | When the engine wrote the record (`EPOCHSECONDS`, whole seconds). This is what attributes the record to a run - same rule, and same one second of slack, as the result records below |
+| 3 | contract | integer | What the engine writes, as a single monotonic number. `ENGINE_CONTRACT` in `lib/cache.sh` |
+| 4 | release | any string, may be empty | The engine's `<bitbar.version>`, for diagnostics only. **Never** part of the decision |
+
+Canonical example (used verbatim by both test suites):
+```
+v1|1755400000|1|1.5.0
+```
+
+| Contract | The reader may rely on |
+|---|---|
+| `1` | Single-item run results (`results/`, `result_write`) and this record itself |
+
+- **Why a number of its own and not the release version.** The two answer
+  different questions. `<bitbar.version>` is stamped from `VERSION` by
+  `tools/sync_version.sh` and tracks releases; two engines carrying the same
+  one can still write different things. That is not hypothetical - the entire
+  `results/` contract was added *within* v1.5.0, so "v1.5.0" describes both an
+  engine that files single-item results and one that cannot, and an app
+  trusting the release version reads the two as identical. This is exactly the
+  mismatch that produced the incident in the results section below. `contract`
+  moves only when what a reader may depend on moves.
+- **Why the engine writes it at runtime instead of declaring it in a header.**
+  The contract is implemented in `lib/*.sh`, not in the dispatcher that carries
+  the header. A half-updated install - a new `update_system.1h.sh` over old
+  libs - would have the header promising what the loaded code cannot do. A
+  record written from `lib/cache.sh` can only be produced by an engine that
+  actually loaded that file.
+- **Why it is written before dispatch.** It makes absence conclusive. A run
+  that has just finished has necessarily left a current record *if it was new
+  enough to write one at all*, so a reader asking straight after a run can tell
+  "this engine cannot report that" from "this engine has not run yet" - which a
+  record written by the action itself, or only at install time, could not.
+- **Reading it.** Take the record only when its timestamp is not older than the
+  run being asked about (one second of slack, as above). That is also what
+  closes the downgrade case: a record left by a newer engine that has since
+  been replaced by an older one is older than the run asking, and is correctly
+  read as "this engine said nothing" rather than vouching for an engine that is
+  no longer installed. `contract >= required` passes; contracts are additive,
+  so an engine *ahead* of the reader is always acceptable.
+- **Bump `ENGINE_CONTRACT`** whenever a reader becomes entitled to something an
+  older engine never wrote: a new file under `cache/` or a sibling directory, a
+  `vN` bump in one of the formats here, or a new field a reader may require.
+  Never for a change no reader can observe. Bump `EngineContract.required` in
+  the same change that starts depending on it - the two are not the same edit,
+  and only the second one is a promise the app is making.
+- Shell writer: `engine_write()` in `lib/cache.sh`, called from section 5 of
+  `update_system.1h.sh`. Best-effort and never fatal, like `progress_write` and
+  `result_write`.
+- Swift reader: `EngineContract.parse(raw:)` and `EngineContractStore` in
+  `GuideApp/Sources/MacUpdaterGuide/Toolkit/EngineContract.swift`, consumed by
+  `ToolkitController.reportEngineContract(forRunStartedAt:)`. A missing or
+  unrecognized version, a short or long line, an undateable timestamp or a
+  non-numeric contract all return `nil` - the same fail-closed rule everything
+  else here follows, and the same thing a pre-contract engine produces.
 
 ## Unversioned formats (documented, no marker yet)
 
@@ -359,7 +428,14 @@ v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
   the item still on the outdated list - and never to "failed". GuideApp can
   be pointed at an engine older than this contract, which will never write
   one; "no record" is the same "no usable data" outcome a malformed line
-  gets.
+  gets. That fallback is no longer *silent*: it is a guess made by a reader
+  that never saw the run, and the reader now says so. Against an engine that
+  did not declare contract 1 (see "Engine contract" above), GuideApp raises a
+  `FailureBanner` naming the mismatch instead of letting the guess speak for
+  the run. This is the incident that produced the record: a successful
+  `brew upgrade` on an engine with no `result_write` was reported as "failed",
+  because the guess re-read a cache the dead run had never refreshed, and
+  nothing anywhere said the two halves disagreed.
 - Unread records are pruned by age on every write (`result_prune`,
   `RESULT_RETENTION_SECONDS`, 24h). Anything still there by then belongs to a
   run nobody was watching - a terminal window, a SwiftBar menu click - and

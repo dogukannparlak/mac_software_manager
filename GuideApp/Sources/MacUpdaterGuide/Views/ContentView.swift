@@ -29,7 +29,11 @@ struct ContentView: View {
                 // check - are started from several of them and from the menu
                 // bar, and none of them has anywhere else to report.
                 if let failure = toolkit.lastFailure {
-                    FailureBanner(failure: failure) { toolkit.dismissFailure() }
+                    FailureBanner(
+                        failure: failure,
+                        onDismiss: { toolkit.dismissFailure() },
+                        onRecover: { toolkit.recover(from: $0) }
+                    )
                         .padding(.horizontal, 20)
                         .padding(.top, 12)
                 }

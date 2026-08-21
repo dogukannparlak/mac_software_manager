@@ -29,7 +29,12 @@ struct MenuBarView: View {
             // have to be readable from here too - the window may never be
             // opened at all.
             if let failure = toolkit.lastFailure {
-                FailureBanner(failure: failure, onDismiss: { toolkit.dismissFailure() }, compact: true)
+                FailureBanner(
+                    failure: failure,
+                    onDismiss: { toolkit.dismissFailure() },
+                    compact: true,
+                    onRecover: { toolkit.recover(from: $0) }
+                )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 10)
             }

@@ -463,6 +463,67 @@ result_write() {
     return 0
 }
 
+# ------------------------------------------------------------------------------
+# ENGINE CONTRACT RECORD
+# ------------------------------------------------------------------------------
+# What the installed engine can be relied on to write, stated where GuideApp
+# can read it. See CACHE_FORMAT.md ("Engine contract").
+#
+# Format:  v1|epoch|contract|release
+#
+# Why a number of its own instead of the release version: <bitbar.version>
+# tracks releases, and two engines carrying the same one can still write
+# different things. That is not hypothetical - result_write and the whole
+# results/ contract were added within v1.5.0, so "v1.5.0" describes both an
+# engine that files single-item results and one that cannot, and an app
+# trusting the release version reads the two as identical. ENGINE_CONTRACT
+# moves only when what a reader may depend on moves, which is the question
+# actually being asked.
+#
+# Why the engine writes it at runtime instead of declaring it in a header:
+# the contract is implemented in these lib files, not in the dispatcher that
+# carries the header. A half-updated install - a new update_system.1h.sh over
+# old libs - would have the header promising what the loaded code cannot do.
+# A record written from here can only be produced by an engine that actually
+# loaded this file.
+#
+# Bump ENGINE_CONTRACT whenever a reader becomes entitled to something an
+# older engine never wrote: a new file under cache/ or a sibling directory, a
+# vN bump in one of the formats in CACHE_FORMAT.md, or a new field a reader is
+# allowed to require. Never for a change no reader can observe.
+#
+#   1  single-item run results (results/, result_write) and this record itself
+ENGINE_FILE="$CACHE_DIR/engine"
+ENGINE_FORMAT_VERSION="v1"
+ENGINE_CONTRACT="1"
+
+# Usage: engine_write [release]
+#
+# Called once per invocation from update_system.1h.sh, before any action is
+# dispatched, so the record is never older than the run a reader is asking
+# about. That is what makes it trustworthy in the direction that matters: a
+# record left behind by a newer engine that has since been replaced by an
+# older one is older than the run asking, and a reader applying the same "not
+# written before the run started" rule it applies to result records reads it
+# as what it is - this engine said nothing.
+#
+# Best-effort and never fatal, exactly like progress_write and result_write: a
+# run that did update its package must not become a failure because it could
+# not file a record about itself.
+engine_write() {
+    local release="${1:-${VERSION:-}}"
+    release="${release//$'\n'/ }"; release="${release//|/}"
+
+    mkdir -p "$CACHE_DIR" 2>/dev/null || return 0
+
+    local tmp="$ENGINE_FILE.$$"
+    if print -r -- "${ENGINE_FORMAT_VERSION}|${EPOCHSECONDS}|${ENGINE_CONTRACT}|${release}" > "$tmp" 2>/dev/null; then
+        [[ -s "$tmp" ]] && mv -f "$tmp" "$ENGINE_FILE" 2>/dev/null
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 0
+}
+
 # Populate the cache. Tier is "updates", "installed", "sparkle" or "all".
 # MAS entries are always written (empty when App Store support is off) so the
 # staleness check cannot get stuck asking for data that will never arrive.

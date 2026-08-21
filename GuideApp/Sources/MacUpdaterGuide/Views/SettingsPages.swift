@@ -89,6 +89,16 @@ struct GeneralSettingsPage: View {
                         }
                     }
 
+                    Toggle(isOn: $preferences.autoOpenTerminalWhenRequired) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(UIStrings.autoOpenTerminal[loc.language])
+                            Text(UIStrings.autoOpenTerminalHelp[loc.language])
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     if preferences.runUpdatesInTerminal {
                         Divider()
 

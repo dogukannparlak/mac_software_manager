@@ -293,3 +293,146 @@ canonical_result() {
     [ "$status" -eq 0 ]
     [ "$output" = "rc=0" ]
 }
+
+# ------------------------------------------------------------------------------
+# Engine contract record (CACHE_FORMAT.md, "Engine contract")
+# ------------------------------------------------------------------------------
+# What the installed engine declares it writes, so GuideApp can tell an engine
+# that cannot report an outcome from one that reported a failure. This file and
+# GuideApp/Tests/MacUpdaterGuideTests/EngineContractParsingTests.swift assert
+# against the identical canonical line.
+#
+# The timestamp is the one field a test cannot pin (it is the clock), so it is
+# swapped for the document's own before comparing.
+CANONICAL_ENGINE="v1|1755400000|1|1.5.0"
+
+canonical_engine() {
+    printf 'v1|1755400000|%s' "${1#v1|*|}"
+}
+
+@test "engine_write produces the exact canonical example from CACHE_FORMAT.md" {
+    run run_zsh_snippet '
+        engine_write "1.5.0"
+        cat "$ENGINE_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$(canonical_engine "$output")" = "$CANONICAL_ENGINE" ]
+}
+
+@test "ENGINE_FORMAT_VERSION matches the version this suite pins to" {
+    # Bumping it means bumping EngineContract.formatVersion on the Swift side
+    # and CACHE_FORMAT.md in the same change, or the document now describes a
+    # format nothing produces.
+    run run_zsh_snippet 'echo "$ENGINE_FORMAT_VERSION"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1" ]
+}
+
+@test "ENGINE_CONTRACT matches what the Swift side requires" {
+    # The mirror of EngineContract.required. Raising one without the other
+    # means either an app asking for what no engine writes, or an engine
+    # promising what no reader checks.
+    run run_zsh_snippet 'echo "$ENGINE_CONTRACT"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+}
+
+@test "engine_write stamps the record with the current time" {
+    # The stamp is what tells this engine's record from one a newer engine
+    # left behind before being replaced by an older one - a reader drops
+    # anything written before the run it is asking about.
+    run run_zsh_snippet '
+        now=$EPOCHSECONDS
+        engine_write "1.5.0"
+        recorded="$(cut -d"|" -f2 "$ENGINE_FILE")"
+        (( recorded >= now && recorded <= now + 5 )) && echo "in range" || echo "out of range: $recorded vs $now"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "in range" ]
+}
+
+@test "engine_write falls back to the running engine's own version" {
+    # The dispatcher passes $VERSION explicitly, but the release field is a
+    # diagnostic: an engine that could not read its own header still has a
+    # contract to declare, and must still declare it.
+    run run_zsh_snippet '
+        VERSION="9.9.9"
+        engine_write
+        cut -d"|" -f4 "$ENGINE_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "9.9.9" ]
+}
+
+@test "engine_write keeps the record parseable when the version is unreadable" {
+    run run_zsh_snippet '
+        VERSION=""
+        engine_write
+        cat "$ENGINE_FILE"
+        echo "fields=$(awk -F"|" "{print NF}" "$ENGINE_FILE")"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "fields=4" "$output"
+}
+
+@test "engine_write strips pipes and newlines from the release field" {
+    # Four fields, always: a stray pipe here would push the reader's field
+    # count over and make it fail closed on a perfectly good engine.
+    run run_zsh_snippet '
+        engine_write "1.5|0"
+        awk -F"|" "{print NF}" "$ENGINE_FILE"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "4" ]
+}
+
+@test "engine_write replaces the previous record instead of appending" {
+    # One line, always - the reader parses the whole file as a single record.
+    run run_zsh_snippet '
+        engine_write "1.4.0"
+        engine_write "1.5.0"
+        wc -l < "$ENGINE_FILE" | tr -d " "
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+}
+
+@test "engine_write leaves no temp file behind for a reader to trip over" {
+    run run_zsh_snippet '
+        engine_write "1.5.0"
+        print -l -- "$CACHE_DIR"/engine*(N:t)
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "engine" ]
+}
+
+@test "engine_write survives a cache directory it cannot create" {
+    # Best-effort by contract, exactly like progress_write and result_write:
+    # a run that did update its package must not be turned into a failure
+    # because it could not file a record about itself.
+    run run_zsh_snippet '
+        rm -rf "$CACHE_DIR"
+        : > "$CACHE_DIR"   # a file where the directory should be
+        engine_write "1.5.0"
+        echo "rc=$?"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "rc=0" ]
+}
+
+@test "a real invocation declares the contract before it dispatches anything" {
+    # The property the whole design rests on: the record is written before any
+    # action runs, so it is never older than the run a reader is asking about
+    # and "no record" means "this engine cannot report", not "this engine has
+    # not run yet". Proven with an action that fails on arrival - if the
+    # record is there after a run that got no further than rejecting its own
+    # arguments, nothing an action does can be what wrote it.
+    run bash -c '
+        HOME="'"$TEST_HOME"'" MSU_LIB_DIR="'"$REPO_LIB_DIR"'" \
+            zsh "'"$REPO_SCRIPT"'" run no-such-mode >/dev/null 2>&1
+        echo "exit=$?"
+        cat "'"$TEST_HOME"'/Library/Application Support/MacSoftwareUpdater/cache/engine" 2>/dev/null
+    '
+    assert_contains "exit=1" "$output"
+    assert_matches "*v1|*|1|*" "$output"
+}

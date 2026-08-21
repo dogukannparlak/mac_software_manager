@@ -195,6 +195,84 @@ extension UIStrings {
         "The toolkit gave no reason. The package is still listed as outdated.",
         "Araç bir neden bildirmedi. Paket hâlâ güncel değil olarak listeleniyor."
     )
+    /// Why a package that downloaded fine still could not be installed, in
+    /// terms a user can act on: it is a password prompt with nowhere to
+    /// appear, not a broken package. See `ActionFailure.Reason.needsTerminal`.
+    static let updateNeedsTerminalDetail = Localized(
+        """
+        Homebrew has to remove the old version before installing the new one, \
+        and for this package that needs administrator rights. It cannot ask \
+        for your password from here, so the update has to be run in a \
+        Terminal window where you can type it.
+        """,
+        """
+        Homebrew yeni sürümü kurmadan önce eskisini kaldırmak zorunda ve bu \
+        paket için bunun yönetici izni gerekiyor. Parolanı buradan \
+        soramadığı için güncellemenin, parolanı yazabileceğin bir Terminal \
+        penceresinde çalıştırılması gerekiyor.
+        """
+    )
+    /// The banner's button for the failure above.
+    static let updateInTerminal = Localized("Update in Terminal", "Terminal'de Güncelle")
+    static let autoOpenTerminal = Localized(
+        "Open Terminal automatically when a password is needed",
+        "Parola gerektiğinde Terminal'i kendiliğinden aç"
+    )
+    static let autoOpenTerminalHelp = Localized(
+        """
+        A few packages cannot be updated without administrator rights, and a \
+        background update has nowhere to ask for your password. With this on, \
+        those are reopened in a terminal window right away instead of waiting \
+        behind a button.
+        """,
+        """
+        Birkaç paket yönetici izni olmadan güncellenemiyor ve arka planda \
+        çalışan bir güncellemenin parolanı soracağı bir yer yok. Bu açıkken \
+        böyle güncellemeler bir butonun arkasında beklemek yerine doğrudan \
+        bir terminal penceresinde yeniden başlatılır.
+        """
+    )
+    static let actionFailedEngineOutdated = Localized(
+        "The installed update engine is out of date",
+        "Kurulu güncelleme motoru eski"
+    )
+    /// Shown when the engine that ran filed no contract record at all, which
+    /// is what every engine older than the contract does - see
+    /// `EngineContract`. The point of the sentence is that the status on the
+    /// row was guessed, so a user who just watched an update succeed knows
+    /// why the app disagrees.
+    static let engineContractMissingDetail = Localized(
+        """
+        The engine that ran is older than this app expects and cannot report \
+        what happened to an item, so the status shown was worked out from the \
+        outdated list and may be wrong. Reinstall the engine with setup_mac.sh.
+        """,
+        """
+        Çalışan motor bu uygulamanın beklediğinden eski ve bir öğeye ne \
+        olduğunu bildiremiyor; bu yüzden gösterilen durum güncel olmayanlar \
+        listesinden çıkarıldı ve yanlış olabilir. Motoru setup_mac.sh ile \
+        yeniden kurun.
+        """
+    )
+    /// "%1$d" is what the engine declared, "%2$d" what this app needs.
+    static let engineContractTooOldFormat = Localized(
+        """
+        The installed engine supports contract v%1$d, but this app needs \
+        v%2$d. Some of what it reports cannot be read. Reinstall the engine \
+        with setup_mac.sh.
+        """,
+        """
+        Kurulu motor v%1$d sözleşmesini destekliyor, bu uygulama ise v%2$d \
+        gerektiriyor. Bildirdiklerinin bir kısmı okunamıyor. Motoru \
+        setup_mac.sh ile yeniden kurun.
+        """
+    )
+    static let actionFailedItemGone = Localized(
+        "That package is no longer in the update list. Refresh and try again.",
+        "Bu paket artık güncelleme listesinde yok. Yenileyip tekrar deneyin."
+    )
+    /// The banner's toggle for whatever brew/mas printed.
+    static let failureDetails = Localized("Details", "Ayrıntılar")
     static let dismissFailure = Localized("Dismiss", "Kapat")
 }
 
@@ -458,3 +536,4 @@ extension UIStrings {
         "Varsayılan kapalı: güncellemeler arka planda çalışır, ilerleme burada, uygulama içinde gösterilir. Bunu açarsanız güncellemeleri bir terminal penceresinde izleyebilir (ve durdurabilir)siniz."
     )
 }
+

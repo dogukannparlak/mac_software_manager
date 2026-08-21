@@ -181,6 +181,7 @@ final class AppPreferences {
     private static let hideDockIconKey = "com.macupdater.guide.hideDockIcon"
     private static let runInTerminalKey = "com.macupdater.guide.runUpdatesInTerminal"
     private static let maxConcurrentUpdatesKey = "com.macupdater.guide.maxConcurrentUpdates"
+    private static let autoTerminalKey = "com.macupdater.guide.autoOpenTerminalWhenRequired"
 
     /// How often the menu bar data is rebuilt, in minutes.
     var refreshMinutes: Int {
@@ -202,6 +203,24 @@ final class AppPreferences {
     /// limit is queued and starts automatically as the next slot frees up.
     var maxConcurrentUpdates: Int {
         didSet { UserDefaults.standard.set(maxConcurrentUpdates, forKey: Self.maxConcurrentUpdatesKey) }
+    }
+
+    /// On by default: an update that cannot finish without a password is
+    /// reopened in a terminal window straight away, instead of stopping to
+    /// offer a button first.
+    ///
+    /// Some casks uninstall the old version through `sudo` (an `uninstall
+    /// delete:` under /Library, `pkgutil:`, `launchctl:`), and a background
+    /// run has no terminal for the password prompt to appear in - so it fails
+    /// every time, after the download, for the same handful of packages. The
+    /// window is the only place that update can happen, and asking first only
+    /// adds a click to a decision with one answer.
+    ///
+    /// Turn it off to be asked instead: the same failure then waits behind
+    /// an "Update in Terminal" button in the banner and nothing opens on its
+    /// own.
+    var autoOpenTerminalWhenRequired: Bool {
+        didSet { UserDefaults.standard.set(autoOpenTerminalWhenRequired, forKey: Self.autoTerminalKey) }
     }
 
     static let maxConcurrentUpdatesChoices = [1, 2, 3, 4]
@@ -227,6 +246,11 @@ final class AppPreferences {
 
         hideDockIcon = UserDefaults.standard.bool(forKey: Self.hideDockIconKey)
         runUpdatesInTerminal = UserDefaults.standard.bool(forKey: Self.runInTerminalKey)
+        // Defaults to true, which `bool(forKey:)` cannot express - it returns
+        // false for a key that was never written. `object(forKey:)` tells the
+        // two apart.
+        autoOpenTerminalWhenRequired =
+            (UserDefaults.standard.object(forKey: Self.autoTerminalKey) as? Bool) ?? true
 
         let storedConcurrency = UserDefaults.standard.integer(forKey: Self.maxConcurrentUpdatesKey)
         maxConcurrentUpdates = Self.maxConcurrentUpdatesChoices.contains(storedConcurrency) ? storedConcurrency : 2

@@ -61,6 +61,12 @@ typeset -a CONFIG_WARNINGS
 add_config_warning() {
     local warning="$1"
     (( ${CONFIG_WARNINGS[(Ie)$warning]} == 0 )) && CONFIG_WARNINGS+=("$warning")
+    # A warning already on the list makes the '&&' above fail, and this
+    # function's own status is that of its last command. Six actions load the
+    # config again after section 5 turns on 'set -e', re-raising every warning
+    # the first load already recorded - so without this, one duplicate ends
+    # the whole run, silently. Recording a warning is never a failure.
+    return 0
 }
 
 # ------------------------------------------------------------------------------
@@ -116,7 +122,15 @@ load_config_safely() {
     local raw_line trimmed_line key value line_no=0
 
     while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
-        ((line_no++))
+        # NOT '((line_no++))': in zsh an arithmetic command's exit status is
+        # the truth value of its result, so a post-increment from 0 returns
+        # the old value - 0 - which is a *failure*. Under the 'set -e' that
+        # section 5 turns on, that killed this function on the very first
+        # line of settings.conf, and with it every action that loads the
+        # config after that point: install_app, update_app, launch_update and
+        # the three toggles. All of them exited 1 having printed nothing at
+        # all. A plain assignment has no truth value to trip over.
+        line_no=$(( line_no + 1 ))
         trimmed_line="${raw_line#"${raw_line%%[![:space:]]*}"}"
         trimmed_line="${trimmed_line%"${trimmed_line##*[![:space:]]}"}"
 
@@ -322,6 +336,16 @@ done
 # never go blank over one bad entry) opts back out with its own 'set +e'.
 set -e
 set -o pipefail
+
+# State what this engine can be relied on to write, before anything is
+# dispatched. Every real invocation passes through here - the SwiftBar menu
+# draw, a cache refresh, a bulk run, a headless single-item run - so the record
+# is always at least as new as whatever run a reader is asking about, which is
+# what lets GuideApp tell "this engine does not support that" from "this engine
+# has not run yet". An engine older than the contract writes nothing here, and
+# the app says so out loud instead of quietly guessing the outcome off a stale
+# cache. See engine_write in lib/cache.sh and CACHE_FORMAT.md.
+engine_write "$VERSION"
 
 # Background Cache Refresh
 # "auto" (default) refreshes only the stale tiers, "force" refreshes everything.

@@ -35,6 +35,13 @@ enum ToolkitPaths {
         supportDirectory.appending(path: "results", directoryHint: .isDirectory)
     }
 
+    /// The installed engine's own statement of what it writes, rewritten by
+    /// every invocation of it. Inside cache/ because that is where the engine
+    /// keeps what it tells this app about the machine's state - but unlike its
+    /// neighbours it has no TTL: it is only ever as old as the last run, which
+    /// is the whole point of it. See CACHE_FORMAT.md ("Engine contract").
+    static var engineFile: URL { cacheFile("engine") }
+
     static var settingsFile: URL { supportDirectory.appending(path: "settings.conf") }
     static var ignoredFile: URL { supportDirectory.appending(path: "ignored_apps.conf") }
     static var trackedAppsFile: URL { supportDirectory.appending(path: "tracked_apps.conf") }
