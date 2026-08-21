@@ -12,6 +12,59 @@ set -o pipefail
 # Enable extended globbing to support advanced pattern matching like (#i)
 setopt extended_glob
 
+# ------------------------------------------------------------------------------
+# COMMAND LINE OPTIONS
+# ------------------------------------------------------------------------------
+# Every file this installer puts in place normally comes from the published
+# repo and has to clear download_verified first. That is the right default for
+# users, but it makes developing on a checkout impossible: an unpushed fix on
+# disk loses to the older published copy, which verifies fine and is installed
+# straight over it. --local exists for exactly that case.
+# $0 inside a function is the function's own name in zsh, so both of these are
+# captured here, at top level, where $0 is still the script itself.
+SCRIPT_DIR="${0:A:h}"
+SCRIPT_NAME="${0:t}"
+LOCAL_MODE=0
+
+show_help() {
+    print -r -- "Usage: ${SCRIPT_NAME} [--local] [-h|--help]
+
+Installs the mac_software_manager update engine and runs the migration wizard.
+
+Options:
+  --local     Install the files sitting next to this script, that is from
+                ${SCRIPT_DIR}
+              instead of downloading them. The download and SHA256
+              verification step is skipped entirely.
+              Use it while developing on a checkout whose changes are not
+              pushed yet: without it, an unpushed local fix is replaced by the
+              older published copy, which verifies fine and therefore wins.
+              Every file installed this way is reported as unverified.
+  -h, --help  Show this help and exit.
+
+Without --local nothing changes: each file is downloaded and verified against
+SHA256SUMS (GitHub first, Codeberg as failover), and the copy next to this
+script is used only when no verified remote source can be reached."
+}
+
+while (( $# > 0 )); do
+    case "$1" in
+        --local)
+            LOCAL_MODE=1
+            shift
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        *)
+            print -r -- "Unknown option: $1" >&2
+            print -r -- "Run '${SCRIPT_NAME} --help' to see the available options." >&2
+            exit 1
+            ;;
+    esac
+done
+
 echo ""
 echo "${fg[blue]}███╗   ███╗ █████╗  ██████╗ ██████╗ ███████╗${reset_color}"
 echo "${fg[blue]}████╗ ████║██╔══██╗██╔════╝██╔═══██╗██╔════╝${reset_color}"
@@ -29,6 +82,13 @@ echo "1. Install necessary missing tools (Homebrew, SwiftBar and optionally mas)
 echo "2. Check and Migrate your applications to managed versions"
 echo "3. Configure real-time update monitoring"
 echo ""
+if (( LOCAL_MODE )); then
+    echo "${fg[yellow]}⚠️  --local: installing from ${SCRIPT_DIR}${reset_color}"
+    echo "${fg[yellow]}    Download and SHA256 verification are deliberately disabled for this${reset_color}"
+    echo "${fg[yellow]}    run - not silently skipped. Every engine file below is installed${reset_color}"
+    echo "${fg[yellow]}    unverified, straight from this working tree. Development use only.${reset_color}"
+    echo ""
+fi
 
 # Homebrew: never let a query command trigger an implicit 'brew update'.
 # The setup flow runs 'brew update' explicitly where fresh metadata is required.
@@ -181,6 +241,42 @@ download_verified() {
     fi
 
     return $rc
+}
+
+# Put one of this project's own files into place.
+#
+# Default: exactly as before - fetch the published copy, verify it, install it.
+# --local: copy the file sitting next to this script instead, and say out loud
+# that it went in unchecked. Nothing is skipped quietly here - in this mode a
+# file's provenance is "whatever is in this working tree", which no published
+# checksum can describe, so the guarantee is dropped on purpose and reported.
+install_project_file() {
+    local file_name="$1"
+    local output_path="$2"
+    local want_header="${3:-}"
+    local src="$SCRIPT_DIR/$file_name"
+    local rc=0
+
+    if (( ! LOCAL_MODE )); then
+        download_verified "$file_name" "$output_path" "$want_header" || rc=$?
+        return $rc
+    fi
+
+    if [[ ! -f "$src" ]]; then
+        echo "${fg[red]}❌ --local: $file_name does not exist in $SCRIPT_DIR.${reset_color}"
+        return 1
+    fi
+
+    # Running the already-installed copy of this script with --local: source
+    # and destination are the same file, so there is nothing to copy.
+    if [[ "$src" -ef "$output_path" ]]; then
+        echo "${fg[yellow]}--local: $file_name is already the installed file - left in place (unverified).${reset_color}"
+        return 0
+    fi
+
+    cp "$src" "$output_path" || return 1
+    echo "${fg[yellow]}--local: $file_name installed from $SCRIPT_DIR - checksum verification deliberately disabled.${reset_color}"
+    return 0
 }
 
 # Read a single KEY="value" setting from an existing settings.conf.
@@ -1283,9 +1379,9 @@ mkdir -p "$APP_DIR/lib"
 LIB_INSTALL_FAILED=0
 for lib_name in "${LIB_NAMES[@]}"; do
     lib_file="lib/${lib_name}.sh"
-    if download_verified "$lib_file" "$APP_DIR/$lib_file"; then
+    if install_project_file "$lib_file" "$APP_DIR/$lib_file"; then
         :
-    elif [[ -f "./$lib_file" ]]; then
+    elif (( ! LOCAL_MODE )) && [[ -f "./$lib_file" ]]; then
         echo "${fg[yellow]}$lib_file unavailable or unverified remotely - using the local copy from this installer.${reset_color}"
         cp "./$lib_file" "$APP_DIR/$lib_file"
     else
@@ -1323,9 +1419,9 @@ for stale_plugin in "${existing_plugins[@]}"; do
     fi
 done
 
-if download_verified "update_system.1h.sh" "$TARGET_PLUGIN" "bitbar.title"; then
-    echo "Latest version downloaded and verified."
-elif [[ -f "./update_system.1h.sh" ]]; then
+if install_project_file "update_system.1h.sh" "$TARGET_PLUGIN" "bitbar.title"; then
+    (( LOCAL_MODE )) || echo "Latest version downloaded and verified."
+elif (( ! LOCAL_MODE )) && [[ -f "./update_system.1h.sh" ]]; then
     echo "${fg[yellow]}Remote copy unavailable or unverified - using the local copy from this installer.${reset_color}"
     cp "./update_system.1h.sh" "$TARGET_PLUGIN"
 else
@@ -1336,8 +1432,8 @@ chmod +x "$TARGET_PLUGIN"
 
 # Install Uninstaller to App Support (Not Plugin Dir)
 echo "Updating Uninstaller..."
-if ! download_verified "uninstall.sh" "$APP_DIR/uninstall.sh"; then
-    [[ -f "./uninstall.sh" ]] && cp "./uninstall.sh" "$APP_DIR/uninstall.sh"
+if ! install_project_file "uninstall.sh" "$APP_DIR/uninstall.sh"; then
+    (( ! LOCAL_MODE )) && [[ -f "./uninstall.sh" ]] && cp "./uninstall.sh" "$APP_DIR/uninstall.sh"
 fi
 chmod +x "$APP_DIR/uninstall.sh"
 

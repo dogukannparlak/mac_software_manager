@@ -296,6 +296,41 @@ App Name|website|owner/repo
 Either field can be left blank to keep the automatically detected value for
 just that one. Purely local: the shell engine never reads this file.
 
+## 🧑‍💻 Development
+
+### Installing your working tree (`--local`)
+
+`setup_mac.sh` normally downloads every file it installs and verifies it
+against `SHA256SUMS` before putting it in place, falling back to the copy next
+to the installer only when no verified remote source can be reached. That is
+what you want as a user — and exactly what gets in the way while developing.
+Run the plain installer from a checkout with unpushed fixes and the *published*
+copy wins: it downloads, verifies fine, and is written straight over your local
+changes.
+
+Use `--local` for that case:
+
+```bash
+./setup_mac.sh --local
+```
+
+With the flag, the download and checksum step is skipped entirely and
+`update_system.1h.sh`, all ten `lib/*.sh` files and `uninstall.sh` are copied
+from the directory the script itself lives in. Everything else about the run —
+the migration wizard, the prompts, the SwiftBar setup — is unchanged.
+
+The verification is not skipped quietly. A `--local` run says so up front and
+prints one line per file confirming that the checksum check was deliberately
+disabled, because in this mode a file's provenance is "whatever is in this
+working tree", which no published checksum can describe.
+
+Without the flag, behaviour is byte-for-byte what it has always been: remote
+first, local copy only as a fallback. `./setup_mac.sh --help` describes both.
+
+When you are ready to push, regenerate the checksums — see the **For
+contributors** note under [Notes](#-notes); installed copies refuse to
+self-update against a stale `SHA256SUMS`.
+
 ## 📝 Notes
 
 > **Important:** Since this script uses checksums to detect updates, modifying the code (e.g., changing icons) will trigger a "Plugin Update Available" alert. If you customize the script, please go to Preferences → Disable Self-Update to prevent your changes from being overwritten.
