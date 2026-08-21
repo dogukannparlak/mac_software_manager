@@ -41,7 +41,11 @@ quit_running_app() {
     while (( waited < 10 )); do
         app_running "$app_path" || return 0
         sleep 1
-        (( waited++ ))
+        # Same trap as load_config_safely's line counter: a post-increment
+        # from 0 evaluates to 0, which zsh reports as a failed command, and
+        # this loop runs under 'set -e'. The first second of waiting for an
+        # app to quit would have ended the whole install.
+        waited=$(( waited + 1 ))
     done
 
     echo "   $app_name did not quit; forcing."

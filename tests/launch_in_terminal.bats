@@ -180,3 +180,217 @@ progress_entry() {
     assert_contains "System Settings > Privacy & Security > Automation" "$output"
     [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||" ]
 }
+
+# ------------------------------------------------------------------------------
+# The launch that needs no Automation permission
+# ------------------------------------------------------------------------------
+# Every other branch drives the terminal with an Apple Event, which macOS
+# refuses outright for an app whose bundle carries no
+# NSAppleEventsUsageDescription - with no prompt to allow, so the user cannot
+# fix it from the dialog they never saw. 'open' goes through LaunchServices
+# instead and needs no grant at all.
+
+@test "launch_via_terminal_file hands the terminal a runnable .command file" {
+    run run_zsh_snippet '
+        open() { print -r -- "OPEN:$*"; return 0 }
+        launch_via_terminal_file "echo hello" || echo "rc=$?"
+        for f in "${TMPDIR:-/tmp}"/msm-launch.*.command(N); do
+            print -r -- "PERMS:$(stat -f "%Sp" "$f")"
+            cat "$f"
+            rm -f "$f"
+        done
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "OPEN:-a Terminal " "$output"
+    assert_contains "#!/bin/zsh" "$output"
+    assert_contains "echo hello" "$output"
+    # Executable, or Terminal will not run it at all.
+    assert_matches "*PERMS:-rwx*" "$output"
+}
+
+@test "the launch file removes itself once the run is over" {
+    # It is a launch detail, not something to leave in the user's temp
+    # directory - and it is the last line, so the window still has it while
+    # the update runs.
+    run run_zsh_snippet '
+        open() { return 0 }
+        launch_via_terminal_file "echo hello"
+        for f in "${TMPDIR:-/tmp}"/msm-launch.*.command(N); do tail -n 1 "$f"; rm -f "$f"; done
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "rm -f " "$output"
+}
+
+@test "launch_via_terminal_file honours the configured terminal" {
+    run run_zsh_snippet '
+        PREFERRED_TERMINAL="Ghostty"
+        open() { print -r -- "OPEN:$*"; return 0 }
+        launch_via_terminal_file "echo hello"
+        for f in "${TMPDIR:-/tmp}"/msm-launch.*.command(N); do rm -f "$f"; done
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "OPEN:-a Ghostty " "$output"
+}
+
+@test "a refused Apple Event falls back instead of sending the user to System Settings" {
+    # The regression this guards: GuideApp could not open a terminal at all,
+    # because its bundle never asked for the Automation permission the
+    # osascript path needs - and the app reported a permission problem rather
+    # than using the way in that needs no permission.
+    run run_zsh_snippet '
+        osascript() { print -u2 -r -- "execution error: Not authorized to send Apple events to Terminal. (-1743)"; return 1 }
+        open() { print -r -- "OPEN:$*"; return 0 }
+        launch_in_terminal "/tmp/fake_script.sh" "single" "cask" "obs"
+        echo "rc=$?"
+        for f in "${TMPDIR:-/tmp}"/msm-launch.*.command(N); do rm -f "$f"; done
+    '
+    assert_contains "OPEN:-a Terminal " "$output"
+    assert_contains "rc=0" "$output"
+}
+
+@test "a terminal that failed for any other reason is still reported" {
+    # The fallback is only for a refusal. A terminal that is broken will not
+    # open for 'open' either, and pretending it launched would leave GuideApp
+    # watching a run that does not exist.
+    run run_zsh_snippet '
+        osascript() { print -u2 -r -- "execution error: Terminal got an error: cannot make window (-2700)"; return 1 }
+        open() { print -r -- "OPEN:$*"; return 0 }
+        launch_in_terminal "/tmp/fake_script.sh" "single" "cask" "obs"
+        echo "rc=$?"
+    '
+    refute_contains "OPEN:" "$output"
+    # LAUNCH_TERMINAL_FAILED - pinned literally, since bats is bash and would
+    # expand the zsh-side name to an empty string, turning this into "rc=".
+    assert_contains "rc=1" "$output"
+}
+
+# ------------------------------------------------------------------------------
+# Actions that load the config after 'set -e' is on
+# ------------------------------------------------------------------------------
+# Every test above runs against a throwaway HOME with no settings.conf, so
+# load_config_safely returned at its first line and none of them ever executed
+# its body. On a real installation it does, and its line counter was
+# '((line_no++))' - an arithmetic command whose exit status in zsh is the truth
+# value of its result, so counting up from 0 returns 0, which is a *failure*.
+# Under the errexit section 5 turns on, that killed the script on the first
+# line of settings.conf: install_app, update_app, launch_update and the three
+# toggles all exited 1 having printed nothing at all, and GuideApp's "Update in
+# Terminal" button did nothing whatsoever.
+
+# A settings.conf like a real installation has - which is the whole point:
+# without one, none of this code runs.
+write_settings() {
+    local dir="$TEST_HOME/Library/Application Support/MacSoftwareUpdater"
+    mkdir -p "$dir"
+    cat > "$dir/settings.conf" <<EOF
+PREFERRED_TERMINAL="Terminal"
+MAS_ENABLED="1"
+CLEANUP_ENABLED="1"
+AUTO_INSTALL_APPS="0"
+UPDATE_BRANCH="main"
+CODEBERG_USERNAME=""
+EOF
+}
+
+@test "load_config_safely survives its own line counter under set -e" {
+    write_settings
+    run run_zsh_snippet '
+        set -e
+        load_config_safely
+        echo "rc=$? terminal=$PREFERRED_TERMINAL mas=$MAS_ENABLED"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "rc=0 terminal=Terminal mas=1" "$output"
+}
+
+@test "load_config_safely still counts lines for its warnings" {
+    # The counter has to keep working, not just stop being fatal: the line
+    # number is the only thing that makes a syntax warning actionable.
+    local dir="$TEST_HOME/Library/Application Support/MacSoftwareUpdater"
+    mkdir -p "$dir"
+    printf 'MAS_ENABLED="1"\nthis is not valid\n' > "$dir/settings.conf"
+    run run_zsh_snippet '
+        set -e
+        load_config_safely
+        print -l -- "${CONFIG_WARNINGS[@]}"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "line 2" "$output"
+}
+
+@test "update_app reaches the launcher on an installation that has a config" {
+    # The regression, end to end: with a settings.conf present this exited 1
+    # before it ever tried to open anything, printing nothing - so the failure
+    # was invisible from both sides.
+    write_settings
+    stub_launcher "" 0
+    run run_dispatch update_app cask obs obs 32.2.1 32.2.2
+    [ "$status" -eq 0 ]
+}
+
+@test "update_app still reports a launcher that failed, config or not" {
+    write_settings
+    stub_launcher "execution error: Not authorized to send Apple events to Terminal. (-1743)" 1
+    run run_dispatch update_app cask obs obs 32.2.1 32.2.2
+    [ "$status" -ne 0 ]
+    assert_contains "System Settings > Privacy & Security > Automation" "$output"
+}
+
+@test "launch_update reaches the launcher on an installation that has a config" {
+    write_settings
+    stub_launcher "" 0
+    run run_dispatch launch_update
+    [ "$status" -eq 0 ]
+}
+
+@test "install_app reaches the launcher on an installation that has a config" {
+    write_settings
+    stub_launcher "" 0
+    run run_dispatch install_app "Rectangle"
+    [ "$status" -eq 0 ]
+}
+
+@test "the wait-for-quit loop counts up without ending the install" {
+    # Same trap, same fix: 'waited' starts at 0, so the first '(( waited++ ))'
+    # reported failure and errexit ended the run one second into waiting for
+    # an app to close.
+    run run_zsh_snippet '
+        set -e
+        waited=0
+        waited=$(( waited + 1 ))
+        waited=$(( waited + 1 ))
+        echo "rc=$? waited=$waited"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "rc=0 waited=2" "$output"
+}
+
+@test "a config warning raised twice does not end the run" {
+    # The second half of the same bug. Every action above loads the config a
+    # second time, after 'set -e' is on, which re-raises every warning the
+    # first load already recorded - and add_config_warning's status was that
+    # of the duplicate check, so the duplicate itself was fatal. An install
+    # with one bad config line could not open a terminal at all.
+    run run_zsh_snippet '
+        set -e
+        add_config_warning "same thing"
+        add_config_warning "same thing"
+        # Counted by hand, not with ${#CONFIG_WARNINGS[@]}: the array already
+        # holds the "no Codeberg mirror configured" warning every run without
+        # a mirror raises at startup.
+        echo "rc=$? count=${(M)#CONFIG_WARNINGS[@]:#same thing}"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "rc=0 count=1" "$output"
+}
+
+@test "update_app survives a config file that has something wrong with it" {
+    # End to end, on the installation shape that actually broke: a config
+    # with a bad line, loaded once at startup and again by the action.
+    local dir="$TEST_HOME/Library/Application Support/MacSoftwareUpdater"
+    mkdir -p "$dir"
+    printf 'PREFERRED_TERMINAL="Terminal"\nnonsense line\n' > "$dir/settings.conf"
+    stub_launcher "" 0
+    run run_dispatch update_app cask obs obs 32.2.1 32.2.2
+    [ "$status" -eq 0 ]
+}

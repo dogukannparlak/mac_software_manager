@@ -301,6 +301,43 @@ end tell
 EOF
 }
 
+# Opens the terminal WITHOUT asking macOS for permission to control it.
+#
+# Every branch above drives the terminal with an Apple Event, which needs an
+# Automation grant the user may never have been asked for - an app whose bundle
+# carries no NSAppleEventsUsageDescription is refused outright, with no prompt
+# to allow. 'open' hands a file to the terminal through LaunchServices, which
+# is not an Apple Event and needs no grant at all, so this still works when the
+# osascript path is refused.
+#
+# The cost is that the window does not come to the front by itself and the
+# command arrives as a file rather than a typed line - which is why this is the
+# fallback and not the first choice.
+launch_via_terminal_file() {
+    local cmd="$1"
+    local terminal="${PREFERRED_TERMINAL:-Terminal}"
+    local file=""
+
+    # Terminal only runs a file it recognises, and what it recognises is the
+    # .command extension - mktemp cannot produce one directly.
+    file="$(mktemp "${TMPDIR:-/tmp}/msm-launch.XXXXXX")" || return 1
+    mv -f "$file" "$file.command" 2>/dev/null || { rm -f "$file"; return 1; }
+    file="$file.command"
+
+    {
+        print -r -- "#!/bin/zsh"
+        print -r -- "$cmd"
+        # Last act, so the window still has it while the update runs: this
+        # file is a launch detail, not something to leave in the user's
+        # temp directory once it has served its purpose.
+        print -r -- "rm -f ${(qq)file}"
+    } > "$file" 2>/dev/null || { rm -f "$file"; return 1; }
+
+    chmod +x "$file" 2>/dev/null || { rm -f "$file"; return 1; }
+    launch_capture open -a "$terminal" "$file" || { rm -f "$file"; return 1; }
+    return 0
+}
+
 # Launch update script in the configured terminal app.
 #
 # Returns LAUNCH_TERMINAL_OK only when the terminal was actually asked to run
@@ -376,6 +413,17 @@ EOF
             launch_via_terminal_app "$cmd" || rc=$?
             ;;
     esac
+
+    # Refused rather than broken: there is one more way in that needs no
+    # permission at all, and a window that opens without being brought to the
+    # front beats sending the user to System Settings for a grant they should
+    # never have needed. Only tried on a denial - a terminal that failed for
+    # any other reason will not open for this either.
+    if (( rc != 0 )) && launch_error_is_permission_denied; then
+        if launch_via_terminal_file "$cmd"; then
+            rc=0
+        fi
+    fi
 
     if (( rc == 0 )); then
         LAUNCH_TERMINAL_ERROR=""
