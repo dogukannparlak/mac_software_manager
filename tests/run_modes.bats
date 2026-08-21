@@ -328,3 +328,165 @@ bats_require_minimum_version 1.5.0
     assert_contains "App Store updates are disabled" "$stderr"
     refute_contains "App Store updates are disabled" "$output"
 }
+
+# ------------------------------------------------------------------------------
+# The single-item result record (CACHE_FORMAT.md, "Single-item run results")
+# ------------------------------------------------------------------------------
+# A run's own account of how it went, which is what GuideApp now reads for the
+# row it launched instead of re-reading the outdated list and guessing. The
+# format itself is covered in tests/cache_format.bats; these are about the run
+# filing one, with the right verdict and the right reason, on every path a row
+# can be left waiting on.
+
+# The single record a run left behind, or "NONE".
+latest_result_snippet='
+    result_line() {
+        local -a found
+        found=("$RESULTS_DIR"/result.*(N))
+        if (( ${#found} )); then
+            cat "${found[1]}"
+        else
+            echo "NONE"
+        fi
+    }
+'
+
+@test "run_mode_single files an ok record for a package that really updated" {
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 0; }
+        brew_is_outdated() { return 1; }   # upgraded, no longer outdated
+        collect_cache_for_item() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_matches '*RESULT: v1|*|brew|my-fake-token|MyFakeName|ok|*' "$output"
+}
+
+@test "run_mode_single files the record even though the shared progress file is skipped" {
+    # The reason results are one file per run rather than another field on
+    # the progress entry: GuideApp launches these headless and concurrently,
+    # so they deliberately write nothing to the shared progress file
+    # (GUIDEAPP_NO_SHARED_PROGRESS). The record is exactly what those runs
+    # have instead - if it followed the same opt-out, the rows launched from
+    # the app would be the only ones with no outcome to read.
+    run run_zsh_snippet "$latest_result_snippet"'
+        export GUIDEAPP_NO_SHARED_PROGRESS=1
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 0; }
+        brew_is_outdated() { return 1; }
+        collect_cache_for_item() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+        [[ -f "$PROGRESS_FILE" ]] && echo "PROGRESS WRITTEN" || echo "PROGRESS SKIPPED"
+    '
+    assert_matches '*RESULT: v1|*|brew|my-fake-token|MyFakeName|ok|*' "$output"
+    assert_contains "PROGRESS SKIPPED" "$output"
+}
+
+@test "run_mode_single tells a package that is still outdated from one brew refused" {
+    # Both are "the update did not happen", and the exit code says the same
+    # thing for both - the reason token is the only thing that separates
+    # them, and it is all a row has to show when the run's output went to a
+    # terminal window the app never saw.
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 0; }
+        brew_is_outdated() { return 0; }   # upgrade "worked", package still listed
+        collect_cache_for_item() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_matches '*RESULT: v1|*|brew|my-fake-token|MyFakeName|fail|still-outdated*' "$output"
+}
+
+@test "run_mode_single records a non-zero brew exit as a failed command" {
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        brew() { return 1; }
+        brew_is_outdated() { return 0; }
+        collect_cache_for_item() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single brew my-fake-token MyFakeName 1.0 2.0
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_matches '*RESULT: v1|*|brew|my-fake-token|MyFakeName|fail|command-failed*' "$output"
+}
+
+@test "run_mode_single records a killed mas download as a timeout, not a plain failure" {
+    # The distinction the history log already words out loud: "we ran out of
+    # patience" is not "the App Store said no", and a row that cannot tell
+    # them apart tells the user to retry the wrong thing.
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=1
+        mas() { :; }
+        mas_is_installed() { return 0; }
+        run_with_timeout() { return $TIMEOUT_EXIT_STATUS; }
+        collect_cache_for_item() { :; }
+        open() { :; }
+        sleep() { :; }
+
+        set -- run single mas 497799835 Xcode 15.0 15.1
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_matches '*RESULT: v1|*|mas|497799835|Xcode|fail|timeout*' "$output"
+}
+
+@test "run_mode_single reports a disabled or missing 'mas' in the record too" {
+    # These exit before anything is attempted. Without a record the row falls
+    # back to "still on the outdated list", which is true but says nothing -
+    # and this is a failure with a fix the user can act on.
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "${HISTORY_FILE:h}" "$CACHE_DIR"
+        MAS_ENABLED=0
+        set -- run single mas 497799835 Xcode 15.0 15.1
+        ( run_mode_single "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_matches '*RESULT: v1|*|mas|497799835|Xcode|fail|mas-disabled*' "$output"
+}
+
+@test "run_mode_install records why an app update never got off the ground" {
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "$CACHE_DIR"
+        sleep() { :; }
+
+        set -- run install myapp live
+        ( run_mode_install "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_contains "No pending update recorded for myapp" "$output"
+    assert_matches '*RESULT: v1|*|app|myapp|myapp|fail|not-pending*' "$output"
+}
+
+@test "run_mode_install files no record for a dry run" {
+    # A dry run changes nothing and no row is waiting on it (GuideApp runs it
+    # fire-and-forget), so it has no outcome to report - and a "fail" record
+    # for a check that passed would be read as a real one.
+    run run_zsh_snippet "$latest_result_snippet"'
+        mkdir -p "$CACHE_DIR"
+        sleep() { :; }
+
+        set -- run install myapp dry
+        ( run_mode_install "$@" )
+        echo "RESULT: $(result_line)"
+    '
+    assert_contains "RESULT: NONE" "$output"
+}

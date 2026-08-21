@@ -17,6 +17,23 @@
 # parameters (only $MODE, already captured in a variable) and are always
 # called bare.
 
+# The install path's own single-item result record (CACHE_FORMAT.md,
+# "Single-item run results"). Identity is always the application, under the
+# kind "app" - `target_app` is exactly what GuideApp passed in, so the record
+# maps straight back to the row waiting on it.
+#
+# Usage: install_result <status> [reason]
+#
+# A dry run never writes one: nothing was going to be installed, so there is
+# no outcome to report and no row waiting for one (GuideApp runs a dry run
+# fire-and-forget, with no item attached).
+install_result() {
+    if (( DRY_RUN )); then
+        return 0
+    fi
+    result_write "app" "$target_app" "$target_app" "$1" "${2:-}"
+}
+
 # --- SELF-UPDATING APP INSTALL (Sparkle / GitHub) ---
 run_mode_install() {
     target_app="$3"
@@ -49,6 +66,7 @@ run_mode_install() {
     if [[ -z "$entry" ]]; then
         echo "❌ No pending update recorded for $target_app."
         echo "   Refresh the menu and try again."
+        install_result "fail" "not-pending"
         sleep 4
         exit 1
     fi
@@ -66,6 +84,7 @@ run_mode_install() {
 
     if [[ ! -d "$installed_path" ]]; then
         echo "❌ $installed_path does not exist."
+        install_result "fail" "not-installed"
         sleep 4
         exit 1
     fi
@@ -73,6 +92,7 @@ run_mode_install() {
     # Setapp keeps its own copies in sync; replacing them breaks Setapp
     if [[ "$installed_path" == /Applications/Setapp/* ]]; then
         echo "❌ Setapp manages this application. Use Setapp to update it."
+        install_result "fail" "setapp-managed"
         sleep 4
         exit 1
     fi
@@ -83,6 +103,10 @@ run_mode_install() {
         [[ "$app_url" == *.pkg ]] && echo "   scripts as root and cannot be rolled back."
         echo "   Opening the download page instead."
         [[ -n "$app_url" ]] && open "$app_url"
+        # Exits 0 - nothing went wrong - but the app is no newer than it was,
+        # so the record says so: a row that reported "Updated" off a clean
+        # exit here would be claiming an update that only a browser can do.
+        install_result "fail" "no-direct-download"
         sleep 4
         exit 0
     fi
@@ -103,6 +127,7 @@ run_mode_install() {
     if ! curl -fL --progress-bar --proto '=https' --tlsv1.2 --connect-timeout 10 --max-time 600 \
         -H "User-Agent: $USER_AGENT" "$app_url" -o "$archive_path"; then
         echo "❌ Download failed."
+        install_result "fail" "download-failed"
         sleep 4
         exit 1
     fi
@@ -110,6 +135,7 @@ run_mode_install() {
     echo "📦 Extracting..."
     if ! new_app=$(extract_app_from_archive "$archive_path" "$workdir"); then
         echo "❌ Could not find exactly one application bundle in the archive."
+        install_result "fail" "extract-failed"
         sleep 4
         exit 1
     fi
@@ -117,6 +143,7 @@ run_mode_install() {
 
     if ! verify_app_replacement "$installed_path" "$new_app" "$app_remote" "$archive_path" "$app_sig"; then
         echo ""
+        install_result "fail" "verify-failed"
         progress_write "failed" "install-app" "$target_app" "" ""
         echo "🛑 Verification failed. Nothing was changed."
         echo "   $target_app is still at version $app_local."
@@ -138,6 +165,7 @@ run_mode_install() {
 
     echo "🔄 Replacing $target_app..."
     if ! replace_app_bundle "$installed_path" "$new_app"; then
+        install_result "fail" "replace-failed"
         echo "🛑 Update failed. The previous version has been restored."
         (( was_running )) && open -a "$target_app" 2>/dev/null || true
         sleep 6
@@ -159,6 +187,12 @@ run_mode_install() {
 
     echo "🗂️ Refreshing cached data..."
     collect_cache_data "apps"
+
+    # After the refresh, before the progress line - the same ordering
+    # run_mode_single explains: whoever reads this record next may go
+    # straight to the update list, and the progress line is what a
+    # terminal-mode run is resolved on.
+    install_result "ok"
 
     # Written after the cache refresh above, not before it: a reader that
     # treats "done" as "safe to re-check the pending-updates list now"
@@ -192,19 +226,30 @@ run_mode_single() {
     echo "🚀 Updating $name ($old_ver -> $new_ver)..."
     echo "---------------------------"
 
+    # Why it failed, as one of the stable tokens GuideApp words in the user's
+    # language (CACHE_FORMAT.md, "Single-item run results"). Narrowed wherever
+    # the run learns something more specific than "it came back non-zero":
+    # this record is the only account of the failure a row has when the run's
+    # output went to a terminal window nobody read, and "timeout" rather than
+    # a bare "command-failed" is the difference between "we ran out of
+    # patience" and "the App Store said no".
     update_rc=0
+    update_reason=""
     case "$type" in
         "brew"|"cask")
         brew upgrade "$id" || update_rc=$?
+        (( update_rc == 0 )) || update_reason="command-failed"
         # Exit code alone is not proof: verify the package left the outdated list
         if (( update_rc == 0 )) && brew_is_outdated "$id"; then
             echo "⚠️ $id is still reported as outdated after the upgrade." >&2
             update_rc=1
+            update_reason="still-outdated"
         fi
         ;;
     "mas")
         if [[ "$MAS_ENABLED" != "1" ]]; then
             echo "❌ Error: App Store updates are disabled." >&2
+            result_write "$type" "$id" "$name" "fail" "mas-disabled"
             exit 1
         fi
         # Every other mas call site in this project guards on this; without
@@ -213,6 +258,7 @@ run_mode_single() {
         if ! command -v mas &> /dev/null; then
             echo "❌ Error: 'mas' is not installed, so App Store apps cannot be updated." >&2
             echo "   Install it with: brew install mas" >&2
+            result_write "$type" "$id" "$name" "fail" "mas-missing"
             exit 1
         fi
         # Use upgrade instead of install to force update for existing apps.
@@ -232,15 +278,18 @@ run_mode_single() {
         else
             run_with_timeout "$MAS_UPGRADE_TIMEOUT" mas install "$id" || update_rc=$?
         fi
+        (( update_rc == 0 )) || update_reason="command-failed"
         # Said out loud, the way the bulk path says it: without this the run
         # just lands in the history as a plain failure, with nothing to
         # separate "we ran out of patience" from "the App Store said no".
         if (( update_rc == TIMEOUT_EXIT_STATUS )); then
             echo "⏱️ Timed out after ${MAS_UPGRADE_TIMEOUT}s: updating $name was killed mid-download." >&2
+            update_reason="timeout"
         fi
         if (( update_rc == 0 )) && mas_is_outdated "$id"; then
             echo "⚠️ $name is still reported as outdated after the upgrade." >&2
             update_rc=1
+            update_reason="still-outdated"
         fi
         ;;
     esac
@@ -274,6 +323,13 @@ run_mode_single() {
     # (lib/cache.sh) for what it does refresh, and why it holds the "cache"
     # lock while it writes.
     collect_cache_for_item "$type" "$id"
+
+    # This run's own account of itself, and the only one GuideApp reads for a
+    # row it launched headlessly: written after the cache refresh above (a
+    # reader that takes this as "now go look at the list" must not find a
+    # stale one) and before the progress line below (a terminal-mode run is
+    # resolved off that line, and the record has to be there when it is).
+    result_write "$type" "$id" "$name" "$( (( update_rc == 0 )) && print ok || print fail )" "$update_reason"
 
     progress_write "$( (( update_rc == 0 )) && print done || print failed )" "single" "$name" "" ""
 

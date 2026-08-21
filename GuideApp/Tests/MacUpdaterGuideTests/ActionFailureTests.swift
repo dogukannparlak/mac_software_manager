@@ -45,7 +45,11 @@ final class ActionFailureTests: XCTestCase {
     }
 
     func testEveryReasonRendersSomethingInBothLanguages() {
-        let reasons: [Failure.Reason] = [.toolkitMissing, .noOutput, .output("boom")]
+        let reasons: [Failure.Reason] = [
+            .toolkitMissing, .noOutput, .output("boom"),
+            .reported(.stillOutdated, detail: "boom"),
+            .reported(.unknown, detail: "")
+        ]
         for reason in reasons {
             for language in AppLanguage.allCases {
                 XCTAssertFalse(reason.text(for: language).isEmpty,
@@ -61,6 +65,37 @@ final class ActionFailureTests: XCTestCase {
             let text = Failure.Reason.toolkitMissing.text(for: language)
             XCTAssertFalse(text.contains("toolkit-missing"), "\(language) still shows the raw token")
             XCTAssertEqual(text, UIStrings.toolkitNotFoundDetail[language])
+        }
+    }
+
+    // MARK: - A reason the run filed itself
+
+    func testAReportedReasonIsWordedAndKeepsWhatTheRunPrinted() {
+        // The token is the category, which the app can translate; the output
+        // is the specifics, which is brew's or mas's English either way -
+        // the row needs both, so neither replaces the other.
+        let reason = Failure.Reason.reported(.stillOutdated, detail: "Warning: awscli 2.36.24 already installed")
+        for language in AppLanguage.allCases {
+            let text = reason.text(for: language)
+            XCTAssertTrue(text.hasPrefix(ItemRunResult.Reason.stillOutdated.label?[language] ?? "!"))
+            XCTAssertTrue(text.hasSuffix("Warning: awscli 2.36.24 already installed"))
+        }
+    }
+
+    func testAReportedReasonWithNoWordingOfItsOwnShowsTheOutput() {
+        // "command-failed" carries no copy: what brew printed IS the reason,
+        // and prefixing it with a generic sentence would only push the real
+        // one down.
+        let reason = Failure.Reason.reported(.commandFailed, detail: "Error: No such keg")
+        XCTAssertEqual(reason.text(for: .english), "Error: No such keg")
+    }
+
+    func testAReportedReasonWithNothingAtAllStillSaysSomething() {
+        // A token this build does not know, from a run that printed nothing:
+        // silence is the one thing a failed row may not show.
+        let reason = Failure.Reason.reported(.unknown, detail: "")
+        for language in AppLanguage.allCases {
+            XCTAssertEqual(reason.text(for: language), UIStrings.actionFailedNoReason[language])
         }
     }
 

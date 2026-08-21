@@ -26,6 +26,15 @@ enum ToolkitPaths {
         supportDirectory.appending(path: "notifications", directoryHint: .isDirectory)
     }
 
+    /// Where a single-item run drops its own outcome for this app to read -
+    /// one file per run. A sibling of cacheDirectory for the same reason
+    /// notificationsDirectory is: these are one-shot reports of something
+    /// that happened, not TTL-refreshed state. See CACHE_FORMAT.md
+    /// ("Single-item run results").
+    static var resultsDirectory: URL {
+        supportDirectory.appending(path: "results", directoryHint: .isDirectory)
+    }
+
     static var settingsFile: URL { supportDirectory.appending(path: "settings.conf") }
     static var ignoredFile: URL { supportDirectory.appending(path: "ignored_apps.conf") }
     static var trackedAppsFile: URL { supportDirectory.appending(path: "tracked_apps.conf") }

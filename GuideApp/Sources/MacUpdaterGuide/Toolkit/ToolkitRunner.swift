@@ -55,6 +55,16 @@ final class ToolkitController {
             /// and the item is still outdated - `run single` reports success
             /// either way, so there is genuinely nothing to quote.
             case noOutput
+            /// The reason the run itself filed, as one of the stable tokens
+            /// of the single-item result contract (CACHE_FORMAT.md), plus
+            /// whatever it printed on the way there.
+            ///
+            /// This is the one reason that is both specific *and*
+            /// translatable: the token says which of a closed set of things
+            /// went wrong, so the app can word it, while `detail` keeps the
+            /// stderr that says which package, which URL, which error - and
+            /// which is brew's or mas's English either way.
+            case reported(ItemRunResult.Reason, detail: String)
 
             /// What a finished process leaves to show: what it printed, or
             /// its exit status when it printed nothing.
@@ -68,6 +78,14 @@ final class ToolkitController {
                 case .toolkitMissing: return UIStrings.toolkitNotFoundDetail[language]
                 case .output(let text): return text
                 case .noOutput: return UIStrings.actionFailedNoReason[language]
+                case .reported(let reported, let detail):
+                    // A token with no copy of its own (an unknown one from a
+                    // newer toolkit, or one whose whole content is the
+                    // output) leaves the printed detail to speak for itself.
+                    guard let headline = reported.label?[language] else {
+                        return detail.isEmpty ? UIStrings.actionFailedNoReason[language] : detail
+                    }
+                    return detail.isEmpty ? headline : headline + "\n" + detail
                 }
             }
         }
@@ -172,6 +190,10 @@ final class ToolkitController {
     /// needs the older "watch the shared progress file, resolve on quiet"
     /// approach `startProgressWatch()` uses.
     private var activeSingleItem: UpdateItem?
+    /// When that run was launched - what tells a result record it wrote from
+    /// one an earlier run of the same item left behind, exactly as
+    /// `watchStartedAt` does for the shared progress file.
+    private var activeSingleItemStartedAt: Date?
     /// The bulk run's own `Process`, kept only so `cancelUpdate()` has
     /// something to signal - never set for a terminal-mode run, where this
     /// object is just the short-lived launcher that opened the terminal
@@ -327,6 +349,7 @@ final class ToolkitController {
             itemStatuses[active.id] = .failed
             endFractionSimulation(for: active.id)
             activeSingleItem = nil
+            activeSingleItemStartedAt = nil
             scheduleStatusClear(for: active.id)
         }
     }
@@ -739,6 +762,7 @@ final class ToolkitController {
             itemStatuses[active.id] = .failed
             endFractionSimulation(for: active.id)
             activeSingleItem = nil
+            activeSingleItemStartedAt = nil
             scheduleStatusClear(for: active.id)
         }
     }
@@ -832,6 +856,7 @@ final class ToolkitController {
         nextItemRunToken += 1
         let token = nextItemRunToken
         itemRunTokens[item.id] = token
+        let startedAt = Date()
         activeProcesses[item.id] = startProcess(
             script: script,
             arguments: arguments,
@@ -841,21 +866,29 @@ final class ToolkitController {
             // own outcome via `finishActiveItem`, not that file.
             extraEnvironment: ["GUIDEAPP_NO_SHARED_PROGRESS": "1"]
         ) { [weak self] outcome in
-            self?.finishActiveItem(item, token: token, outcome: outcome)
+            self?.finishActiveItem(item, token: token, startedAt: startedAt, outcome: outcome)
         }
     }
 
     /// Called once a concurrent single-item run's process has exited, one way
-    /// or another. Whether it actually updated is read straight from a fresh
-    /// snapshot - the same "is it still on the outdated list" check the shell
-    /// side already uses to decide success/failure, rather than trusting a
-    /// process exit code that `run single` always reports as 0.
+    /// or another.
     ///
-    /// That exit code being useless is exactly why `outcome` still has to
-    /// come in here: it carries the run's stderr, which is the only account
-    /// of *why* the package did not update. It used to be discarded at the
-    /// call site, so the row said "failed" and the reason went nowhere.
-    private func finishActiveItem(_ item: UpdateItem, token: Int, outcome: ProcessOutcome) {
+    /// Whether it actually updated comes from the run's own result record -
+    /// the single-item contract in CACHE_FORMAT.md, written by
+    /// `result_write()` after the shell has verified the item really did
+    /// leave the outdated list. The process exit code cannot answer it (`run
+    /// single` exits 0 either way), and the snapshot check below is only the
+    /// fallback: it is this app guessing from a list the run rewrote moments
+    /// earlier, which reads a real success as a failure whenever that
+    /// rewrite lands late, and has no way at all to tell "still outdated"
+    /// from "the App Store refused it".
+    ///
+    /// The fallback stays because it must: GuideApp can be pointed at an
+    /// engine older than this contract, which will never write a record.
+    ///
+    /// `outcome` is still needed for its stderr - the run's own detail of
+    /// *why*, which no token can carry.
+    private func finishActiveItem(_ item: UpdateItem, token: Int, startedAt: Date, outcome: ProcessOutcome) {
         // Cancelled, or already superseded by a later run on the same row:
         // this process is reporting on something nobody is waiting for any
         // more, and the row's state is not its to write. Without the check, a
@@ -866,11 +899,14 @@ final class ToolkitController {
         itemRunTokens[item.id] = nil
         activeProcesses[item.id] = nil
         snapshot = UpdateSnapshot.load()
-        let stillPending = snapshot.items.contains { $0.id == item.id }
-        itemStatuses[item.id] = stillPending ? .failed : .succeeded
 
-        if stillPending {
-            let reason = ActionFailure.Reason.from(outcome)
+        let record = ItemRunResultStore.consume(itemID: item.id, since: startedAt)
+        let failed = record.map { !$0.succeeded }
+            ?? snapshot.items.contains { $0.id == item.id }
+        itemStatuses[item.id] = failed ? .failed : .succeeded
+
+        if failed {
+            let reason = Self.failureReason(record: record, outcome: outcome)
             // Both surfaces, because they answer different questions: the row
             // says which package failed and is gone with the badge, the
             // banner keeps the reason on screen until it has been read.
@@ -885,22 +921,55 @@ final class ToolkitController {
         drainQueue()
     }
 
+    /// Why a row's own run failed: the reason the run filed, where it filed
+    /// one worth wording, with whatever it printed kept underneath it -
+    /// otherwise the process outcome on its own, which is all there was
+    /// before the result contract existed and all there is against an engine
+    /// that predates it.
+    private static func failureReason(record: ItemRunResult?, outcome: ProcessOutcome) -> ActionFailure.Reason {
+        // A token this build has no copy for says less than the output does.
+        guard let record, record.reason.label != nil else { return .from(outcome) }
+        return .reported(record.reason, detail: outcome.stderr)
+    }
+
     private func beginTrackingSingleItem(_ item: UpdateItem) {
         activeSingleItem = item
+        activeSingleItemStartedAt = Date()
         recentItemsByID[item.id] = item
         itemStatuses[item.id] = .updating
         beginFractionSimulation(for: item.id)
     }
 
     /// Called once a terminal-mode run's shared progress file has gone quiet.
-    /// See `finishActiveItem` for the headless-concurrent equivalent; both use
-    /// the same "still on the outdated list" verification.
+    /// See `finishActiveItem` for the headless-concurrent equivalent; both
+    /// read the same result record, and both fall back to the same "still on
+    /// the outdated list" guess only when there is no record to read.
+    ///
+    /// There is no process here to take a reason from - the launcher that
+    /// opened the terminal window exited long ago and the run's output went
+    /// to that window - so the record's token is the only account of the
+    /// failure this app can put on the row. The banner is left to the
+    /// progress file, which the run wrote its own ending to; reporting it
+    /// here as well would put the same failure on screen twice.
     private func resolveActiveSingleItem() {
         guard let active = activeSingleItem else { return }
-        let stillPending = snapshot.items.contains { $0.id == active.id }
-        itemStatuses[active.id] = stillPending ? .failed : .succeeded
+        let record = ItemRunResultStore.consume(
+            itemID: active.id,
+            since: activeSingleItemStartedAt ?? .distantPast
+        )
+        let failed = record.map { !$0.succeeded }
+            ?? snapshot.items.contains { $0.id == active.id }
+        itemStatuses[active.id] = failed ? .failed : .succeeded
+        if failed {
+            if let reason = record?.reason, reason.label != nil {
+                itemFailureReasons[active.id] = .reported(reason, detail: "")
+            }
+        } else {
+            itemFailureReasons[active.id] = nil
+        }
         endFractionSimulation(for: active.id)
         activeSingleItem = nil
+        activeSingleItemStartedAt = nil
         scheduleStatusClear(for: active.id)
     }
 

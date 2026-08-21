@@ -161,3 +161,135 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
     [ "${lines[0]}" = "rc=0" ]
     [ "${lines[1]}" = "no file" ]
 }
+
+# ------------------------------------------------------------------------------
+# Single-item run results (CACHE_FORMAT.md, "Single-item run results")
+# ------------------------------------------------------------------------------
+# The one machine-readable place a single-item run says how it went. Same
+# arrangement as the progress tests above: this file and
+# GuideApp/Tests/MacUpdaterGuideTests/ItemRunResultParsingTests.swift assert
+# against the identical canonical line, so a writer or reader that drifts from
+# the document fails a test on whichever side is now wrong.
+#
+# The timestamp is the one field a test cannot pin (it is the clock), so it is
+# swapped for the document's own before comparing - see canonical_result below.
+CANONICAL_RESULT="v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated"
+
+# Replaces the epoch in a real record with the canonical one, so the rest of
+# the line can be compared exactly rather than by glob.
+canonical_result() {
+    printf 'v1|1755400000|%s' "${1#v1|*|}"
+}
+
+@test "result_write produces the exact canonical example from CACHE_FORMAT.md" {
+    run run_zsh_snippet '
+        result_write "cask" "alt-tab" "AltTab" "fail" "still-outdated"
+        cat "$RESULTS_DIR"/result.*
+    '
+    [ "$status" -eq 0 ]
+    [ "$(canonical_result "$output")" = "$CANONICAL_RESULT" ]
+}
+
+@test "RESULT_FORMAT_VERSION matches the version this suite pins to" {
+    # Bumping it means bumping ItemRunResult.formatVersion on the Swift side
+    # and CACHE_FORMAT.md in the same change, or the document now describes a
+    # format nothing produces.
+    run run_zsh_snippet 'echo "$RESULT_FORMAT_VERSION"'
+    [ "$status" -eq 0 ]
+    [ "$output" = "v1" ]
+}
+
+@test "result_write stamps the record with the current time" {
+    # The timestamp is what tells this run's record from one an earlier run of
+    # the same item left behind - a reader drops anything older than the run
+    # asking, so a wrong or missing stamp silently loses every result.
+    run run_zsh_snippet '
+        now=$EPOCHSECONDS
+        result_write "brew" "awscli" "awscli" "ok" ""
+        recorded="$(cut -d"|" -f2 "$RESULTS_DIR"/result.*)"
+        (( recorded >= now && recorded <= now + 5 )) && echo "in range" || echo "out of range: $recorded vs $now"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "in range" ]
+}
+
+@test "result_write leaves the reason empty on a successful run" {
+    run run_zsh_snippet '
+        result_write "brew" "awscli" "awscli" "ok" ""
+        cat "$RESULTS_DIR"/result.*
+    '
+    [ "$status" -eq 0 ]
+    [ "$(canonical_result "$output")" = "v1|1755400000|brew|awscli|awscli|ok|" ]
+}
+
+@test "result_write strips pipes and newlines from the free-form fields" {
+    # id and name are the only fields sourced from anything free-form, and a
+    # stray pipe in either would shift every field after it - the reader
+    # counts fields, so the record would be rejected outright.
+    run run_zsh_snippet '
+        name="$(printf "Two\nLines|Here")"
+        result_write "app" "We|ird" "$name" "fail" "download-failed"
+        wc -l < "$RESULTS_DIR"/result.*
+        cat "$RESULTS_DIR"/result.*
+    '
+    [ "$status" -eq 0 ]
+    [ "${lines[0]// /}" = "1" ]
+    [ "$(canonical_result "${lines[1]}")" = "v1|1755400000|app|Weird|Two LinesHere|fail|download-failed" ]
+}
+
+@test "result_write leaves no temp file behind for a reader to trip over" {
+    # Records are written to "<name>.tmp" and renamed into place so nobody
+    # ever reads half a line; readers skip .tmp entries, and a finished write
+    # must not leave one lying there for the retention window.
+    run run_zsh_snippet '
+        result_write "brew" "awscli" "awscli" "ok" ""
+        print -l -- "$RESULTS_DIR"/*(N:t)
+    '
+    [ "$status" -eq 0 ]
+    assert_matches 'result.*' "$output"
+    refute_matches '*.tmp' "$output"
+}
+
+@test "result_write keeps one record per run instead of overwriting the last one" {
+    # Several single-item runs can be in flight at once (GuideApp's
+    # concurrency setting) - the reason these are files in a directory rather
+    # than one shared entry like progress. Two runs reporting must leave two
+    # records.
+    run run_zsh_snippet '
+        result_write "brew" "awscli" "awscli" "ok" ""
+        result_write "cask" "alt-tab" "AltTab" "fail" "still-outdated"
+        print -l -- "$RESULTS_DIR"/result.*(N) | wc -l
+    '
+    [ "$status" -eq 0 ]
+    [ "${output// /}" = "2" ]
+}
+
+@test "result_prune drops records past the retention window and keeps the rest" {
+    # Records are meant to be consumed by GuideApp as the run ends; the ones
+    # still here long after belong to runs nobody was watching (a terminal
+    # window, a SwiftBar click) and would otherwise pile up forever.
+    run run_zsh_snippet '
+        mkdir -p "$RESULTS_DIR"
+        print -r -- "v1|1|brew|old|old|ok|" > "$RESULTS_DIR/result.1.old"
+        touch -t 202001010000 "$RESULTS_DIR/result.1.old"
+        print -r -- "v1|2|brew|new|new|ok|" > "$RESULTS_DIR/result.1.new"
+        result_prune
+        print -l -- "$RESULTS_DIR"/result.*(N:t)
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "result.1.new" ]
+}
+
+@test "result_write survives a results directory it cannot create" {
+    # Best-effort by contract: every caller runs under 'set -e', and a run
+    # that did update its package must not be turned into a failure because
+    # its report could not be filed.
+    run run_zsh_snippet '
+        rm -rf "$RESULTS_DIR"
+        : > "$RESULTS_DIR"   # a file where the directory should be
+        result_write "brew" "awscli" "awscli" "ok" ""
+        echo "rc=$?"
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "rc=0" ]
+}

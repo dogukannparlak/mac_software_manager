@@ -374,6 +374,95 @@ progress_tap() {
     done
 }
 
+# ------------------------------------------------------------------------------
+# 3b3. SINGLE-ITEM RUN RESULTS
+# ------------------------------------------------------------------------------
+# What ONE item's update run has to say about itself: which item, whether it
+# updated, and if it did not, why. GuideApp reads these - see CACHE_FORMAT.md
+# ("Single-item run results"), which both sides are required to stay in sync
+# with.
+#
+# Format:  v1|epoch|kind|id|name|status|reason
+#
+# Why it exists: three separate things used to answer "did that item update",
+# and they could disagree. The history log's ok/fail (run_mode_single), the
+# shared progress file's done/failed, and - for the runs it launches itself -
+# GuideApp re-reading the outdated list afterwards to see whether the item was
+# still on it. Only the first two are the run's own verdict; the third is a
+# guess made by a reader that never saw the run, and it is wrong whenever the
+# cache was written a moment too late, or the item is legitimately still
+# outdated after a partial upgrade. This is the run stating its outcome once,
+# in one place, so nothing has to be inferred from a list.
+#
+# Deliberately NOT the progress file: several single-item runs can be in
+# flight at once (GuideApp's concurrency setting), while that file describes
+# the one thing the toolkit is doing right now - which is exactly why a
+# headless single-item run skips it (GUIDEAPP_NO_SHARED_PROGRESS, see
+# progress_write above). One file per run, like the notification queue, is
+# what lets each run report its own outcome without overwriting anyone else's.
+RESULTS_DIR="$APP_DIR/results"
+RESULT_FORMAT_VERSION="v1"
+
+# How long an unread result file is kept. A record is meant to be consumed by
+# GuideApp as soon as the run it belongs to ends; anything still here long
+# afterwards belongs to a run nobody was watching (a terminal window, a
+# SwiftBar menu click) and is only taking up space.
+RESULT_RETENTION_SECONDS=${RESULT_RETENTION_SECONDS:-86400}
+
+# Drops result files past RESULT_RETENTION_SECONDS. Called from result_write,
+# so the directory is tidied by the only thing that ever adds to it - no timer
+# and no separate cleanup path that could quietly stop running.
+result_prune() {
+    local file
+    local -a existing st
+    existing=("$RESULTS_DIR"/result.*(N))
+    (( ${#existing} )) || return 0
+
+    for file in "${existing[@]}"; do
+        zstat -A st +mtime "$file" 2>/dev/null || continue
+        if (( EPOCHSECONDS - st[1] > RESULT_RETENTION_SECONDS )); then
+            rm -f "$file" 2>/dev/null || true
+        fi
+    done
+    return 0
+}
+
+# Usage: result_write <kind> <id> <name> <status> [reason]
+#   kind   = brew | cask | mas | app - exactly what the run was invoked with,
+#            never a re-derived one: the reader maps it back to its own item
+#            identity (CACHE_FORMAT.md), and a kind it does not know is
+#            ignored rather than guessed at.
+#   id     = formula/cask token, App Store id, or application name
+#   status = ok | fail
+#   reason = a stable token the reader words in the user's language, empty
+#            on ok
+#
+# Best-effort and never fatal: every caller runs under 'set -e', and a run
+# that did update its package must not be turned into a failure because its
+# report could not be filed. Written to a temp file and renamed into place so
+# a reader never sees half a record.
+result_write() {
+    local kind="$1" id="$2" name="${3:-}" state="$4" reason="${5:-}"
+
+    # Pipe-delimited, one line, per CACHE_FORMAT.md - id and name are the only
+    # fields that come from anything free-form.
+    id="${id//$'\n'/ }"; id="${id//|/}"
+    name="${name//$'\n'/ }"; name="${name//|/}"
+
+    mkdir -p "$RESULTS_DIR" 2>/dev/null || return 0
+    result_prune
+
+    local final_file="$RESULTS_DIR/result.$$.$RANDOM"
+    local tmp_file="${final_file}.tmp"
+    if print -r -- "${RESULT_FORMAT_VERSION}|${EPOCHSECONDS}|${kind}|${id}|${name}|${state}|${reason}" > "$tmp_file" 2>/dev/null; then
+        if [[ -s "$tmp_file" ]] && mv "$tmp_file" "$final_file" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    rm -f "$tmp_file" 2>/dev/null || true
+    return 0
+}
+
 # Populate the cache. Tier is "updates", "installed", "sparkle" or "all".
 # MAS entries are always written (empty when App Store support is off) so the
 # staleness check cannot get stuck asking for data that will never arrive.

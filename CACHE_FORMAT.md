@@ -17,12 +17,14 @@ sourced from a free-form app or release name).
 
 ## Versioned formats
 
-Only `progress` currently carries an explicit version marker (`vN|`) as its
-first field. This is the convention every other format should adopt if it
-ever needs a breaking change (new field, reordered fields, a field dropped):
-bump to `v2`, keep the old reader path only if you need a migration window,
-and make an unrecognized/missing version fail closed (return "no data",
-never guess). See `tests/cache_format.bats` and
+Three formats carry an explicit version marker (`vN|`) as their first field:
+`progress` below, the notification queue, and the single-item run results -
+the last two documented in their own sections further down, since neither
+lives in `cache/`. This is the convention every other format should adopt if
+it ever needs a breaking change (new field, reordered fields, a field
+dropped): bump to `v2`, keep the old reader path only if you need a
+migration window, and make an unrecognized/missing version fail closed
+(return "no data", never guess). See `tests/cache_format.bats` and
 `UpdateProgressParsingTests.swift` for the pattern - both assert against the
 exact same example line, so a change to one side that the other does not
 match breaks a test on whichever side has the stale code.
@@ -257,6 +259,121 @@ v1|Mac Software Manager|Update Complete|3 package(s) updated successfully.
 - Shell writer: `notify()` in `lib/utils.sh`.
 - Swift reader: `NotificationBridge` in
   `GuideApp/Sources/MacUpdaterGuide/Toolkit/NotificationBridge.swift`.
+
+## Single-item run results (`results/`)
+
+How one item's update run went: which item, whether it updated, and if it did
+not, why. Like the notification queue these are one-shot reports of something
+that happened rather than TTL-refreshed state, so they live at
+`$APP_DIR/results/` (a sibling of `cache/`, not inside it) and follow the same
+`vN|` convention.
+
+This is what GuideApp reads to resolve a row it launched. It exists because
+three separate mechanisms used to answer "did that item update", and they
+could disagree:
+
+1. the `ok`/`fail` `run_mode_single` appends to `update_history.log`,
+2. the `done`/`failed` written to `cache/progress` - which a headless
+   single-item run does not write at all (`GUIDEAPP_NO_SHARED_PROGRESS`),
+   because that file describes the one thing the toolkit is doing right now
+   and several of those runs can be in flight at once,
+3. GuideApp re-reading the outdated list once the run was over and calling
+   the row failed if the item was still on it.
+
+Only the first two are the run's own verdict. The third is a guess made by a
+reader that never saw the run: it reads a real success as a failure whenever
+the cache refresh lands a moment late, it cannot tell "still outdated" from
+"the App Store refused it" or "the download outran the timeout", and it has
+nothing to show for the failure it reports. The record replaces that guess.
+(1) and (2) stay exactly what they were - the user-facing log, and the shared
+banner for the run everyone can see.
+
+One file per finished run, named `result.<pid>.<random>` (the name carries no
+meaning - readers must not parse it, only iterate the directory). Written via
+a temp file + atomic rename, so a reader never sees a partially-written
+record. The temp file is the final name plus `.tmp`: readers must skip `.tmp`
+entries and leave them alone, since one belongs to a write still in progress.
+
+```
+v1|epoch|kind|id|name|status|reason
+```
+
+| # | Field | Values | Notes |
+|---|---|---|---|
+| 1 | version | `v1` | Bump on any incompatible change to the fields below |
+| 2 | epoch | integer | When the run wrote the record (`EPOCHSECONDS`, whole seconds). This is what attributes a record to a run - see "Reading them" below |
+| 3 | kind | `brew` \| `cask` \| `mas` \| `app` | Exactly what the run was invoked with, never re-derived: `run single`'s type, or `app` for the Sparkle/GitHub `run install` path. A kind the reader does not know matches no row and is left alone |
+| 4 | id | any string | Formula/cask token, App Store id, or application name - again as the run received it |
+| 5 | name | any string, may be empty | Display name, for logs and diagnostics; never part of the verdict |
+| 6 | status | `ok` \| `fail` | Closed set: the Swift reader rejects the whole record on any other token rather than guess an outcome, so adding a status is an incompatible change - bump the version |
+| 7 | reason | a token from the table below, empty on `ok` | Unlike `status` this *does* fall back (`unknown`) in the reader: a reason is a label to print, not a verdict on the run - the same rule `progress`'s `phase` follows |
+
+Canonical example (used verbatim by both test suites):
+```
+v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
+```
+
+| Reason | Written by | Means |
+|---|---|---|
+| *(empty)* | both | `status` is `ok`; there is nothing to explain |
+| `still-outdated` | `run single` | The upgrade command reported success, but the item is still on the outdated list afterwards - the shell verifies, it never trusts an exit code |
+| `timeout` | `run single` | `mas` was killed at `MAS_UPGRADE_TIMEOUT` (`lib/utils.sh`) - a hang guard tripping, not the App Store refusing |
+| `command-failed` | `run single` | brew/mas exited non-zero; what it printed is the detail |
+| `mas-disabled` | `run single` | App Store support is turned off |
+| `mas-missing` | `run single` | `mas` is not installed |
+| `not-pending` | `run install` | No pending update was recorded for the app |
+| `not-installed` | `run install` | No bundle at `/Applications/<app>.app` |
+| `setapp-managed` | `run install` | Setapp owns the app; replacing its copy breaks Setapp |
+| `no-direct-download` | `run install` | Only a `.pkg` or a download page was on offer, so the page was opened |
+| `download-failed` | `run install` | The download did not complete |
+| `extract-failed` | `run install` | The archive did not contain exactly one application bundle |
+| `verify-failed` | `run install` | The downloaded app failed verification; nothing was changed |
+| `replace-failed` | `run install` | The replacement failed and the previous version was restored |
+
+- There is deliberately no third status for "nothing was done, but nothing
+  went wrong". `ok` means the item was updated and `fail` means it was not,
+  which is exactly the question the row is asking; the nuance rides in the
+  reason. `no-direct-download` is the case that makes this concrete: the run
+  exits `0` having opened a browser page, and a row that read that as
+  "Updated" would be claiming an update only the user can perform.
+- **Writing them.** A record is written on every path that ends a run a row
+  could be waiting on, including the early ones (`mas-disabled`,
+  `not-pending`). Two paths deliberately write none: a dry run (nothing was
+  going to be installed, and GuideApp runs those fire-and-forget with no item
+  attached), and `run install` with no application named at all, which has no
+  identity to file the record under. Within a run the record goes **after**
+  that item's cache refresh (a reader may take it as "now go look at the
+  list") and **before** the final `progress_write` (a terminal-mode run is
+  resolved off that line, and the record has to be there when it is).
+- **Reading them.** Match on `kind`+`id`: `brew`/`cask` map to GuideApp's
+  `brew:<token>`, `app` to `app:<name>`, and `mas` to *either* `mas:<id>` or
+  `manual:<id>` - one shell kind covers both sources, since an Apple app the
+  `mas` CLI misses is still updated by the same command with the same id.
+  Then check the timestamp: a record older than the run asking belongs to an
+  earlier run of the same item that nobody consumed (one started from a
+  terminal window, one cancelled after it had already reported), and must not
+  answer for this one. Allow one second of slack - the stamp is whole
+  seconds, the run's start is not. A reader deletes **only** the record it
+  matched: a scan on one row must never consume another row's report.
+- **When there is no record**, the reader falls back to its old check - is
+  the item still on the outdated list - and never to "failed". GuideApp can
+  be pointed at an engine older than this contract, which will never write
+  one; "no record" is the same "no usable data" outcome a malformed line
+  gets.
+- Unread records are pruned by age on every write (`result_prune`,
+  `RESULT_RETENTION_SECONDS`, 24h). Anything still there by then belongs to a
+  run nobody was watching - a terminal window, a SwiftBar menu click - and
+  the directory must not grow without bound.
+- Shell writer: `result_write()` in `lib/cache.sh`; call sites are
+  `run_mode_single()` and `run_mode_install()` in `lib/run_modes.sh` (the
+  latter through its `install_result` helper, which is also what skips the
+  dry run).
+- Swift reader: `ItemRunResult.parse(raw:)` and `ItemRunResultStore.consume(itemID:since:)`
+  in `GuideApp/Sources/MacUpdaterGuide/Toolkit/ItemRunResult.swift`, consumed
+  by `ToolkitController.finishActiveItem` (headless runs) and
+  `resolveActiveSingleItem` (terminal-mode runs). A missing or unrecognized
+  version, a short line, an undateable timestamp or an unknown `status` all
+  return `nil` - the same fail-closed rule `UpdateProgress` follows.
 
 ## Explicitly out of scope
 
