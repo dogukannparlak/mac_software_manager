@@ -202,7 +202,7 @@ run_mode_install() {
     progress_write "done" "install-app" "$target_app" "" ""
 
     echo "🔄 Refreshing SwiftBar..."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     sleep 2
     exit 0
 }
@@ -340,7 +340,7 @@ run_mode_single() {
         echo "❌ Update FAILED for $name (exit $update_rc). Logged as failed." >&2
     fi
     echo "🔄 Refreshing SwiftBar..."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     echo "Done!"
     sleep 1
     exit 0
@@ -406,7 +406,7 @@ run_mode_plugin() {
             # If only updating plugin, refresh and exit
             if [[ "$MODE" == "plugin" ]]; then
                 echo "🔄 Refreshing SwiftBar..."
-                open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+                open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
                 echo "Done!"
                 sleep 1
                 exit 0
@@ -704,7 +704,7 @@ run_mode_system() {
         notify "Everything was already up to date." "Update Complete"
     fi
     echo "🔄 Refreshing SwiftBar..."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     echo "Done!"
     sleep 1
     exit 0

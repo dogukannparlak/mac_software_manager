@@ -346,7 +346,7 @@ if [[ "$1" == "refresh_cache" ]]; then
             ;;
     esac
 
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -376,7 +376,7 @@ if [[ "$1" == "change_interval" ]]; then
         mv "$SCRIPT_FILE" "$NEW_PATH" && chmod +x "$NEW_PATH"
         notify "Update frequency changed to $SELECTION."
         sleep 2
-        open -g "swiftbar://refreshallplugins" || true
+        open -g "swiftbar://refreshallplugins" 2>/dev/null || true
     else
          notify "Frequency is already set to $SELECTION."
     fi
@@ -412,7 +412,7 @@ if [[ "$1" == "toggle_autostart" ]]; then
     fi
 
     notify "$MSG"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -532,7 +532,7 @@ if [[ "$1" == "change_branch" ]]; then
         spawn_cache_refresh "force"
 
         notify "Switched to $SELECTION channel."
-        open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+        open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     else
         echo "❌ Error: Could not install the $NEW_BRANCH version. Reverting config."
         notify "Channel switch failed. Config reverted."
@@ -579,7 +579,7 @@ if [[ "$1" == "ignore_app" ]]; then
     esac
     safe_dialog_name=$(applescript_escape "$name")
     osascript -e "display dialog \"$safe_dialog_name has been ignored.\" & return & return & \"It will no longer appear in the updates list.\" buttons {\"OK\"} default button \"OK\" with title \"App Ignored\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -602,7 +602,7 @@ if [[ "$1" == "unignore_app" ]]; then
     esac
     safe_dialog_name=$(applescript_escape "$name")
     osascript -e "display dialog \"$safe_dialog_name has been restored.\" & return & return & \"It will now appear in the updates list.\" buttons {\"OK\"} default button \"OK\" with title \"App Restored\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -637,7 +637,7 @@ if [[ "$1" == "toggle_mas" ]]; then
     spawn_cache_refresh "force"
 
     osascript -e "display dialog \"$MSG\" & return & return & \"The plugin will now refresh to reflect this change.\" buttons {\"OK\"} default button \"OK\" with title \"App Store updates\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -667,7 +667,7 @@ if [[ "$1" == "toggle_auto_install" ]]; then
     fi
 
     osascript -e "display dialog \"$MSG\" & return & return & \"$DETAIL\" buttons {\"OK\"} default button \"OK\" with title \"App Installation\" with icon note giving up after 8"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -697,7 +697,7 @@ if [[ "$1" == "toggle_cleanup" ]]; then
     fi
 
     osascript -e "display dialog \"$MSG\" & return & return & \"$DETAIL\" buttons {\"OK\"} default button \"OK\" with title \"Homebrew Cleanup\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -730,7 +730,7 @@ fi
 # Manual Update Check
 if [[ "$1" == "check_updates" ]]; then
     check_for_updates_manual
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -762,7 +762,7 @@ if [[ "$1" == "brew_update" ]]; then
     cache_refresh_entry "brew_status"   collect_brew_status
 
     echo "✅ Homebrew database is up to date."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" || true
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
