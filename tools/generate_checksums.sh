@@ -32,6 +32,7 @@ DISTRIBUTED_FILES=(
     lib/updaters.sh
     lib/selfupdate_apps.sh
     lib/app_install.sh
+    lib/migrate.sh
     lib/run_modes.sh
     lib/menu.sh
 )

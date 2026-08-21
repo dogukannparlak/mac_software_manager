@@ -17,7 +17,7 @@ import XCTest
 final class EngineContractParsingTests: XCTestCase {
 
     /// The canonical example, used verbatim by both test suites.
-    private static let canonical = "v1|1755400000|1|1.5.0"
+    private static let canonical = "v1|1755400000|2|1.5.0"
     private static let canonicalDate = Date(timeIntervalSince1970: 1_755_400_000)
 
     // MARK: - Parsing
@@ -25,7 +25,7 @@ final class EngineContractParsingTests: XCTestCase {
     func testParsesTheCanonicalExampleFromCacheFormatDoc() {
         let record = EngineContract.parse(raw: Self.canonical)
         XCTAssertEqual(record?.recordedAt, Self.canonicalDate)
-        XCTAssertEqual(record?.contract, 1)
+        XCTAssertEqual(record?.contract, 2)
         XCTAssertEqual(record?.release, "1.5.0")
         XCTAssertEqual(record?.meetsRequirement, true)
     }
@@ -37,10 +37,13 @@ final class EngineContractParsingTests: XCTestCase {
         XCTAssertEqual(EngineContract.formatVersion, "v1")
     }
 
-    func testTheRequiredContractIsTheOneTheShellSideDeclares() {
-        // The mirror of ENGINE_CONTRACT in lib/cache.sh. Raising one without
-        // the other means either an app asking for something no engine
-        // writes, or an engine promising something no reader checks.
+    func testTheRequiredContractIsNoHigherThanTheShellSideDeclares() {
+        // Contracts are additive, so this is deliberately NOT equality with
+        // ENGINE_CONTRACT in lib/cache.sh - the engine is allowed to run
+        // ahead of the app. What must never happen is the reverse: an app
+        // asking for something no engine writes. `required` moves only in the
+        // change that starts depending on a newer entry; the shell is at 2
+        // (migration candidates) while nothing here reads them yet.
         XCTAssertEqual(EngineContract.required, 1)
     }
 

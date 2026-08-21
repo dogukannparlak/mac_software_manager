@@ -493,9 +493,10 @@ result_write() {
 # allowed to require. Never for a change no reader can observe.
 #
 #   1  single-item run results (results/, result_write) and this record itself
+#   2  migration candidates (migration_candidates) and migrate_app
 ENGINE_FILE="$CACHE_DIR/engine"
 ENGINE_FORMAT_VERSION="v1"
-ENGINE_CONTRACT="1"
+ENGINE_CONTRACT="2"
 
 # Usage: engine_write [release]
 #

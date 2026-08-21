@@ -304,7 +304,7 @@ canonical_result() {
 #
 # The timestamp is the one field a test cannot pin (it is the clock), so it is
 # swapped for the document's own before comparing.
-CANONICAL_ENGINE="v1|1755400000|1|1.5.0"
+CANONICAL_ENGINE="v1|1755400000|2|1.5.0"
 
 canonical_engine() {
     printf 'v1|1755400000|%s' "${1#v1|*|}"
@@ -328,13 +328,16 @@ canonical_engine() {
     [ "$output" = "v1" ]
 }
 
-@test "ENGINE_CONTRACT matches what the Swift side requires" {
-    # The mirror of EngineContract.required. Raising one without the other
-    # means either an app asking for what no engine writes, or an engine
-    # promising what no reader checks.
+@test "ENGINE_CONTRACT is the number CACHE_FORMAT.md documents" {
+    # Contracts are additive: the reader passes on 'contract >= required', so
+    # an engine ahead of EngineContract.required is fine and an engine behind
+    # it is not. This pins the engine's side of that comparison - raising it
+    # means adding the matching row to the contract table in CACHE_FORMAT.md,
+    # and raising EngineContract.required only in the change that starts
+    # depending on the new entry.
     run run_zsh_snippet 'echo "$ENGINE_CONTRACT"'
     [ "$status" -eq 0 ]
-    [ "$output" = "1" ]
+    [ "$output" = "2" ]
 }
 
 @test "engine_write stamps the record with the current time" {
@@ -434,5 +437,5 @@ canonical_engine() {
         cat "'"$TEST_HOME"'/Library/Application Support/MacSoftwareUpdater/cache/engine" 2>/dev/null
     '
     assert_contains "exit=1" "$output"
-    assert_matches "*v1|*|1|*" "$output"
+    assert_matches "*v1|*|2|*" "$output"
 }

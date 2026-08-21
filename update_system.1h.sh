@@ -297,7 +297,7 @@ fi
 # lib/run_modes.sh) - the two must never drift apart. See CACHE_FORMAT.md and
 # the doc comment on each lib file for what lives where.
 typeset -a LIB_NAMES
-LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install run_modes menu)
+LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes menu)
 
 # MSU_LIB_DIR overrides where libs are sourced from - used by the bats test
 # suite (tests/test_helper.bash) to point straight at the repo's lib/
@@ -587,6 +587,19 @@ if [[ "$1" == "update_app" ]]; then
     exit 0
 fi
 
+# Move an application to Homebrew in the user's terminal.
+# param2 = app name, param3 = cask token, param4 = adopt (default) | replace | dry
+#
+# The headless `migrate_app` above deliberately never runs sudo - it has no tty
+# to prompt on. Homebrew itself may still need a password to write over a
+# root-owned bundle, and this is the same work somewhere it can ask for one.
+# Same launcher, same failure reporting, as install_app/update_app.
+if [[ "$1" == "migrate_app_in_terminal" ]]; then
+    load_config_safely
+    launch_in_terminal_or_report "$SCRIPT_FILE" "migrate" "$2" "$3" "${4:-adopt}" || exit 1
+    exit 0
+fi
+
 # Ignore App
 if [[ "$1" == "ignore_app" ]]; then
     type="$2"  # brew, cask, or mas
@@ -790,6 +803,58 @@ if [[ "$1" == "brew_update" ]]; then
     exit 0
 fi
 
+# Scan for applications that Homebrew could manage but does not.
+#
+# Never part of a background refresh, and never a tier: the scan costs one
+# 'brew info' round trip per candidate token across every unmanaged app on the
+# machine (lib/migrate.sh), so it runs when - and only when - the user asks for
+# it. Holds the same "cache" lock the whole-cache refresh takes, since both
+# write cache entries.
+if [[ "$1" == "scan_migration" ]]; then
+    if ! acquire_lock "cache" "$CACHE_LOCK_WAIT"; then
+        echo "⏳ A cache refresh is already running."
+        sleep 3
+        exit 1
+    fi
+
+    progress_write "running" "scan-migration" "" "" ""
+    trap 'progress_finalize $?' EXIT
+
+    echo "🔎 Looking for applications Homebrew could manage..."
+
+    # The scan skips apps that are already casks, which it reads from this
+    # entry - so make sure it exists first, exactly as the "apps" tier does
+    # before collect_app_updates (collect_cache_data, lib/cache.sh).
+    [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew list --cask --versions
+    cache_refresh_entry "$MIGRATION_CACHE_KEY" migration_scan
+
+    release_lock "cache"
+
+    echo "✅ Migration scan complete."
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
+    exit 0
+fi
+
+# Hand one application over to Homebrew.
+# param2 = app name, param3 = cask token, param4 = adopt (default) | replace | dry
+#
+# No lock: this touches exactly one application, and GuideApp already enforces
+# its own concurrency limit on the runs it launches - the same reasoning the
+# "run single"/"run install" modes are exempted under.
+if [[ "$1" == "migrate_app" ]]; then
+    load_config_safely
+
+    progress_write "running" "migrate" "$2" "" ""
+    trap 'progress_finalize $?' EXIT
+
+    # A non-zero exit is what the trap turns into "failed|migrate|<app>",
+    # keeping the phase and item the run was on - see progress_finalize.
+    migrate_to_cask "$2" "$3" "${4:-adopt}" || exit 1
+
+    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
+    exit 0
+fi
+
 # Main Update Execution (Run)
 if [[ "$1" == "run" ]]; then
     MODE="${2:-all}"
@@ -805,7 +870,7 @@ if [[ "$1" == "run" ]]; then
     # General → "Aynı Anda Yapılabilecek Güncelleme Sayısı"), and taking the
     # same exclusive lock here would just serialize them right back to one at
     # a time, defeating that setting.
-    if [[ "$MODE" != "single" && "$MODE" != "install" ]]; then
+    if [[ "$MODE" != "single" && "$MODE" != "install" && "$MODE" != "migrate" ]]; then
         if ! acquire_lock "update" 20; then
             echo "⏳ Another update is already running."
             echo "   Wait for it to finish, then start this one again."
@@ -817,14 +882,16 @@ if [[ "$1" == "run" ]]; then
     progress_write "running" "starting" "" "" ""
     trap 'progress_finalize $?' EXIT
 
-    # Each mode is a function in lib/run_modes.sh. install/single read the
-    # script's own positional parameters ($3 onward), so they MUST be called
-    # with "$@" - a zsh function gets its own positional parameters from how
-    # it is invoked, it does not inherit the caller's. plugin/system read
-    # none, so they are always called bare.
+    # Each mode is a function in lib/run_modes.sh (migrate is in
+    # lib/migrate.sh, next to the work it does). install/single/migrate read
+    # the script's own positional parameters ($3 onward), so they MUST be
+    # called with "$@" - a zsh function gets its own positional parameters
+    # from how it is invoked, it does not inherit the caller's. plugin/system
+    # read none, so they are always called bare.
     case "$MODE" in
         install) run_mode_install "$@" ;;
         single)  run_mode_single "$@" ;;
+        migrate) run_mode_migrate "$@" ;;
         plugin)  run_mode_plugin ;;
         system)  run_mode_system ;;
         all)     run_mode_plugin; run_mode_system ;;

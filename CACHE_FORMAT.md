@@ -17,10 +17,10 @@ sourced from a free-form app or release name).
 
 ## Versioned formats
 
-Four formats carry an explicit version marker (`vN|`) as their first field:
-`progress` and `engine` below, the notification queue, and the single-item run
-results - the last two documented in their own sections further down, since
-neither lives in `cache/`. This is the convention every other format should adopt if
+Five formats carry an explicit version marker (`vN|`) as their first field:
+`progress`, `engine` and `migration_candidates` below, the notification queue,
+and the single-item run results - the last two documented in their own sections
+further down, since neither lives in `cache/`. This is the convention every other format should adopt if
 it ever needs a breaking change (new field, reordered fields, a field
 dropped): bump to `v2`, keep the old reader path only if you need a
 migration window, and make an unrecognized/missing version fail closed
@@ -42,7 +42,7 @@ v1|state|phase|item|index|total
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | state | `running` \| `done` \| `failed` | Closed set: the Swift reader rejects the whole line on any other token rather than guessing an outcome, so adding a state is an incompatible change - bump the version |
-| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
+| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `scan-migration`, `migrate`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
 | 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
@@ -134,12 +134,13 @@ v1|epoch|contract|release
 
 Canonical example (used verbatim by both test suites):
 ```
-v1|1755400000|1|1.5.0
+v1|1755400000|2|1.5.0
 ```
 
 | Contract | The reader may rely on |
 |---|---|
 | `1` | Single-item run results (`results/`, `result_write`) and this record itself |
+| `2` | Migration candidates (`migration_candidates`, the `scan_migration` action) and the `migrate_app` / `migrate_app_in_terminal` actions, including the `migrate` result kind and its reasons |
 
 - **Why a number of its own and not the release version.** The two answer
   different questions. `<bitbar.version>` is stamped from `VERSION` by
@@ -183,6 +184,113 @@ v1|1755400000|1|1.5.0
   unrecognized version, a short or long line, an undateable timestamp or a
   non-numeric contract all return `nil` - the same fail-closed rule everything
   else here follows, and the same thing a pre-contract engine produces.
+
+### `migration_candidates`
+
+Applications sitting in `/Applications` (or `~/Applications`) that Homebrew
+does not manage but could, and what would happen to each if it were handed
+over. Written **only** by the user-triggered `scan_migration` action - see the
+note on cost below.
+
+```
+v1|app_name|app_path|bundle_id|installed_version|token|cask_version|match|state|homepage
+```
+
+| # | Field | Values | Notes |
+|---|---|---|---|
+| 1 | version | `v1` | Bump on any incompatible change to the fields below |
+| 2 | app_name | any string | Bundle name without `.app`, as it appears on disk. This is the id the `migrate_app` action is invoked with |
+| 3 | app_path | absolute path | Where the bundle actually is. `~/Applications` entries are normal here and are exactly what the `target-mismatch` state below is about |
+| 4 | bundle_id | any string, may be empty | `CFBundleIdentifier` from the installed `Info.plist`; empty when the plist could not be read |
+| 5 | installed_version | any string, may be empty | `CFBundleShortVersionString` from the installed `Info.plist`, raw and un-normalized |
+| 6 | token | cask token | The candidate cask. Never a `brew search` result - see below |
+| 7 | cask_version | any string, may be empty | The cask's `version` field, i.e. what migrating would move the app to |
+| 8 | match | `override` \| `artifact` \| `bundle` \| `token` | How the app was tied to the cask, strongest first - see the table below |
+| 9 | state | `adoptable` \| `version-mismatch` \| `no-app-artifact` \| `needs-root` \| `target-mismatch` \| `deprecated` | What migrating would do, decided without running anything - see the table below |
+| 10 | homepage | `https://` URL or empty | The cask's `homepage`, blank unless it is an https URL |
+
+Canonical example (used verbatim by both test suites):
+```
+v1|AltTab|/Applications/AltTab.app|com.lwouis.alt-tab-macos|11.5.0|alt-tab|11.5.0|artifact|adoptable|https://alt-tab.app/
+```
+
+**`match` - how sure the pairing is.** Only the middle two are evidence about
+the application itself. The UI is expected to mark anything other than
+`artifact` and `bundle` as unverified, because the weakest kind of match is
+exactly the kind that pairs an app with an unrelated cask.
+
+| Value | Means |
+|---|---|
+| `override` | A hand-written `app_token_map.conf` entry. The user stated the answer; nothing is guessed after it |
+| `artifact` | The cask installs a bundle whose file name is exactly the installed `.app`'s |
+| `bundle` | The cask names this exact `CFBundleIdentifier` in its `uninstall` `quit`/`launchctl` list - written by the cask author against the real application |
+| `token` | A token derived from the app's name resolved to *a* cask, and that is all that is known. The weakest match, and the one to show as unverified |
+
+**`state` - what migrating would do.** Computed from the cask's JSON metadata
+and the installed `Info.plist` alone: nothing is run, nothing is downloaded,
+nothing on disk is touched. Listed in the order they are decided, since a
+blocker outranks a warning.
+
+| Value | Means |
+|---|---|
+| `deprecated` | The cask is deprecated or disabled. A disabled cask cannot be installed at all, so nothing below it matters |
+| `no-app-artifact` | The cask installs no `.app` (a pkg or installer cask such as `logitech-g-hub`). There is nothing to adopt and nothing to put back: not migratable |
+| `needs-root` | An installer script declaring `sudo`, or a target under `/Library`. The engine does not escalate - see the header of `lib/migrate.sh` for why a headless run must not reach a password prompt |
+| `target-mismatch` | The cask installs somewhere other than `app_path`. This is the `~/Applications` trap: adopting does not *move* a bundle, it installs a second copy at the cask's target and leaves the original where it was |
+| `version-mismatch` | There is an app artifact, but the versions do not line up, so `--adopt` will refuse. A `replace` would work |
+| `adoptable` | `brew install --cask --adopt` should succeed |
+
+- **The adoptable rule is Homebrew's own**, from `Cask::Artifact::Moved#move`
+  (`moved.rb:95-135`): with `auto_updates` the bundle versions are not compared
+  at all, and without it **both** the short version and the build version of the
+  incoming bundle must equal the installed one. What the scan compares is the
+  cask's recorded `bundle_short_version`/`bundle_version` rather than the
+  download itself - that metadata is generated from that very download, so it is
+  the closest thing to the answer available without fetching it. A cask
+  recording neither makes Homebrew fall back to a recursive `diff` whose outcome
+  cannot be predicted from here; that reports as `version-mismatch`, since
+  "adopt may well refuse" is the honest answer. Being wrong about it is cheap:
+  a refused adopt leaves the target untouched.
+- **`brew search` is never used to find the token.** It is a fuzzy, human-facing
+  tool that is allowed to guess, and on the machine this was developed against
+  it answers "ClearDisk" with "clearvpn". Every candidate token is resolved with
+  `brew info --cask --json=v2 <token>`, which either matches the exact token or
+  fails.
+- **Not a cache tier.** This key is deliberately absent from
+  `CACHE_KEYS_UPDATES`/`INSTALLED`/`APPS`/`WEBSITES`: a scan costs one
+  `brew info` round trip per candidate token across every unmanaged app on the
+  machine. It is written when the user asks for it (`scan_migration`) and never
+  by the background refresh, so it carries no TTL and readers must treat it as
+  a snapshot of whenever it was last taken, not as current state.
+- Shell writer: `migration_scan()` in `lib/migrate.sh`, via the `scan_migration`
+  action in section 5 of `update_system.1h.sh`. The act of migrating is a
+  separate action (`migrate_app <name> <token> <adopt|replace|dry>`), which
+  re-derives the state from a fresh `brew info` rather than trusting this entry
+  - the entry may be days old, and the decision writes to `/Applications`.
+  `migrate_app_in_terminal` takes the same arguments and does the same work in
+  the user's terminal (via `launch_in_terminal_or_report`, so it arrives as
+  `run migrate`): the headless path never runs `sudo`, having no tty to prompt
+  on, and this is where Homebrew can ask for a password when it needs one to
+  write over a root-owned bundle. Both were added under contract `2`; neither
+  is a separate contract, because they ship in the same release.
+- Swift reader: `MigrationCandidate.parse(raw:)` and `MigrationCandidateStore`
+  in `GuideApp/Sources/MacUpdaterGuide/Toolkit/MigrationCandidate.swift`,
+  rendered by `MigrateToHomebrewPage`. A missing or unrecognized version, a
+  line without exactly 10 fields, an empty app name or token, or an unknown
+  `match` all return `nil` - the same fail-closed rule everything else here
+  follows. `match` and `state` differ on purpose: an unknown **match** rejects
+  the record (it says nothing about whether the pairing was verified, and both
+  guesses are wrong in a way the user pays for), while an unknown **state**
+  falls back to a non-actionable `unknown` rather than dropping an app the user
+  can see on disk. Either way an unrecognized value is never read as
+  `adoptable`. `MigrationCandidate.parseAll` skips only the lines it cannot
+  read, so one record from a newer engine does not empty the page.
+- Reading the entry is gated on the engine contract, not just on the file being
+  there: the page checks `EngineContract.migrationContract` (2) before it
+  offers to scan. That threshold is deliberately separate from
+  `EngineContract.required`, which is the baseline every surface needs -
+  raising the baseline over one page would put the "engine is out of date"
+  banner in front of users whose updates work fine.
 
 ## Unversioned formats (documented, no marker yet)
 
@@ -371,7 +479,7 @@ v1|epoch|kind|id|name|status|reason
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | epoch | integer | When the run wrote the record (`EPOCHSECONDS`, whole seconds). This is what attributes a record to a run - see "Reading them" below |
-| 3 | kind | `brew` \| `cask` \| `mas` \| `app` | Exactly what the run was invoked with, never re-derived: `run single`'s type, or `app` for the Sparkle/GitHub `run install` path. A kind the reader does not know matches no row and is left alone |
+| 3 | kind | `brew` \| `cask` \| `mas` \| `app` \| `migrate` | Exactly what the run was invoked with, never re-derived: `run single`'s type, `app` for the Sparkle/GitHub `run install` path, or `migrate` for the `migrate_app` action (whose `id` is the cask token it was migrating to). Unlike `status`, this is **open**: a kind the reader does not know matches no row and is left alone, which is what let `migrate` be added without a version bump |
 | 4 | id | any string | Formula/cask token, App Store id, or application name - again as the run received it |
 | 5 | name | any string, may be empty | Display name, for logs and diagnostics; never part of the verdict |
 | 6 | status | `ok` \| `fail` | Closed set: the Swift reader rejects the whole record on any other token rather than guess an outcome, so adding a status is an incompatible change - bump the version |
@@ -398,6 +506,13 @@ v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
 | `extract-failed` | `run install` | The archive did not contain exactly one application bundle |
 | `verify-failed` | `run install` | The downloaded app failed verification; nothing was changed |
 | `replace-failed` | `run install` | The replacement failed and the previous version was restored |
+| `cask-not-found` | `migrate_app` | No cask by that token exists, or the application bundle is not where it was recorded |
+| `no-app-artifact` | `migrate_app` | The cask installs no `.app` (a pkg/installer cask). There is nothing to adopt and nothing to put back |
+| `needs-root` | `migrate_app` | The cask needs administrator rights - an installer script declaring `sudo`, or a target under `/Library`. The engine will not escalate; see `lib/migrate.sh` |
+| `target-mismatch` | `migrate_app` | The cask installs somewhere other than where the app already is, so migrating would leave a second copy behind rather than take this one over |
+| `adopt-version-mismatch` | `migrate_app` | `brew install --cask --adopt` refused because the installed bundle is not the version the cask ships. Nothing was changed; a `replace` would install the cask's version |
+| `install-failed` | `migrate_app` | Homebrew could not install the cask, and nothing had been moved aside (or the backup could not be put back - the message names where it is) |
+| `restored-after-failure` | `migrate_app` | A `replace` failed and the original application was moved back into place. Nothing changed |
 
 - There is deliberately no third status for "nothing was done, but nothing
   went wrong". `ok` means the item was updated and `fail` means it was not,

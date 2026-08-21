@@ -1373,7 +1373,7 @@ echo "Configuration saved to: ${fg[cyan]}$CONFIG_FILE${reset_color}"
 # This list MUST match LIB_NAMES in update_system.1h.sh exactly.
 echo "Fetching engine library..."
 typeset -a LIB_NAMES
-LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install run_modes menu)
+LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes menu)
 
 mkdir -p "$APP_DIR/lib"
 LIB_INSTALL_FAILED=0
