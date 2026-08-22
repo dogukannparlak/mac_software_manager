@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    # Feature and fix branches run the full suite before they ever open a PR.
+    branches: [main, 'feature/**', 'fix/**']
   pull_request:
-    branches: [main, develop]
+    # Filters on the branch a PR targets, not the one it comes from, so the
+    # feature/fix globs above have no meaning here - everything merges to main.
+    branches: [main]
   workflow_dispatch:
 
 jobs:
