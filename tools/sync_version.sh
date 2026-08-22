@@ -34,16 +34,29 @@ CHECK_ONLY=0
 DRIFT=0
 
 # Replace a pattern in a file, reporting whether it changed.
-# Usage: apply <file> <sed expression> <grep expression for the expected result>
+# Usage: apply <file> <sed expression> <grep expression for the expected result> [count]
+#
+# <count> is the number of lines the grep expression must match. It defaults to
+# "at least one", which is right for the files that carry a single version
+# string. project.pbxproj carries one per build configuration, so it passes an
+# exact count - otherwise a half-updated file would look in sync.
 apply() {
-    local file="$1" expression="$2" expected="$3"
+    local file="$1" expression="$2" expected="$3" count="${4:-}"
 
     if [[ ! -f "$file" ]]; then
         echo "❌ Missing file: $file"
         exit 1
     fi
 
-    if grep -qE "$expected" "$file"; then
+    local matched
+    matched=$(grep -cE "$expected" "$file" || true)
+
+    if [[ -n "$count" ]]; then
+        if (( matched == count )); then
+            echo "  ✓ $file"
+            return 0
+        fi
+    elif (( matched > 0 )); then
         echo "  ✓ $file"
         return 0
     fi
@@ -80,6 +93,12 @@ apply "README.md" \
 apply "README.md" \
     "s|/releases/download/v[0-9.]+/Installer\.zip|/releases/download/v${VERSION}/Installer.zip|" \
     "/releases/download/v${VERSION}/Installer\.zip"
+
+# Two build configurations (Debug and Release) each carry their own copy.
+apply "GuideApp/MacUpdaterGuide.xcodeproj/project.pbxproj" \
+    "s|(MARKETING_VERSION = )[0-9.]+;|\1${VERSION};|" \
+    "MARKETING_VERSION = ${VERSION};" \
+    2
 
 if (( CHECK_ONLY )); then
     if (( DRIFT )); then
