@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Cross-language format agreement for a single-item run's result record
 /// (CACHE_FORMAT.md, "Single-item run results").

@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Parsing tests for `UpdateProgress.parse(raw:modified:now:)` - the cache
 /// "v1|state|phase|item|index|total" format the shell engine writes and this

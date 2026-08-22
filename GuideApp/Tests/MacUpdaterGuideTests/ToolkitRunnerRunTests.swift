@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// End-to-end tests for `ToolkitController.run(script:arguments:)`, exercised
 /// through a real `Process`/`Pipe` against a tiny fixture script - the same

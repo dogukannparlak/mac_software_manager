@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Tests for `CLIToolCategorizer` - the heuristic that groups the CLI Tools
 /// list on the Installed Apps page. Real `brew desc` output for a mix of

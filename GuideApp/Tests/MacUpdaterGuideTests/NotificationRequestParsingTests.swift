@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Parsing tests for `NotificationRequest.parse(raw:)` - the
 /// "v1|title|subtitle|body" format the shell engine's `notify()` (lib/utils.sh)

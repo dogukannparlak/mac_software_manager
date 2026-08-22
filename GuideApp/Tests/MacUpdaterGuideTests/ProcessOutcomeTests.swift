@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Pure decision-logic tests for `ToolkitController.ProcessOutcome`.
 ///

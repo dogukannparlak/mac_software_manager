@@ -299,8 +299,12 @@ final class DebugLocalizationAudit {
             .map { $0.drop { $0 == " " || $0 == "\t" } }
             .map(String.init)
 
+        // First element is what follows the opening delimiter on its own line,
+        // last is the indentation the closing delimiter sits on. Neither is
+        // content: dropping only the first left every block ending in a
+        // newline Swift does not put there.
         var output = ""
-        for line in lines.dropFirst() {
+        for line in lines.dropFirst().dropLast() {
             if line.hasSuffix("\\") {
                 output += String(line.dropLast())
             } else {

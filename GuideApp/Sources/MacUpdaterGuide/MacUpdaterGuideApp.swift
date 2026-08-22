@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 @main
 struct MacUpdaterGuideApp: App {
@@ -58,7 +58,6 @@ struct MacUpdaterGuideApp: App {
             }
         }
 
-
         // The menu bar item is created by this app - no plugin host involved.
         // Its content is a read-only status panel; anything configurable lives
         // in Settings, because changing preferences through nested menu bar
@@ -71,7 +70,7 @@ struct MacUpdaterGuideApp: App {
                 .environment(navigation)
                 .environment(inventory)
         } label: {
-            MenuBarLabel(count: toolkit.snapshot.count, isRefreshing: toolkit.isRefreshing)
+            MenuBarLabel(pending: toolkit.snapshot.count, isRefreshing: toolkit.isRefreshing)
         }
         .menuBarExtraStyle(.window)
 
@@ -81,14 +80,14 @@ struct MacUpdaterGuideApp: App {
 /// The menu bar icon itself: a badge when something is waiting, a plain
 /// check mark when it is not.
 private struct MenuBarLabel: View {
-    let count: Int
+    let pending: Int
     let isRefreshing: Bool
 
     var body: some View {
         HStack(spacing: 3) {
             Image(systemName: symbol)
-            if count > 0 {
-                Text("\(count)")
+            if pending > 0 {
+                Text("\(pending)")
             }
         }
     }
@@ -97,7 +96,7 @@ private struct MenuBarLabel: View {
     /// README documents and what people recognise.
     private var symbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }
-        return count > 0 ? "arrow.triangle.2.circlepath.circle" : "checkmark.circle"
+        return pending > 0 ? "arrow.triangle.2.circlepath.circle" : "checkmark.circle"
     }
 }
 

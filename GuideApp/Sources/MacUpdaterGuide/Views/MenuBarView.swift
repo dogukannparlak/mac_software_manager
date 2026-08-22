@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// The menu bar panel.
 ///
@@ -82,11 +82,11 @@ struct MenuBarView: View {
     }
 
     private var headerSymbol: String {
-        toolkit.snapshot.count > 0 ? "arrow.down.circle.fill" : "checkmark.circle.fill"
+        !toolkit.snapshot.isEmpty ? "arrow.down.circle.fill" : "checkmark.circle.fill"
     }
 
     private var headerTint: Color {
-        toolkit.snapshot.count > 0 ? .orange : .green
+        !toolkit.snapshot.isEmpty ? .orange : .green
     }
 
     private var headerTitle: String {
@@ -196,7 +196,7 @@ struct MenuBarView: View {
 
     private var footer: some View {
         VStack(spacing: 0) {
-            if toolkit.snapshot.count > 0 {
+            if !toolkit.snapshot.isEmpty {
                 MenuActionButton(
                     title: UIStrings.updateEverything[loc.language],
                     symbol: "arrow.triangle.2.circlepath",

@@ -39,7 +39,10 @@ enum UIStrings {
     static let maxConcurrentUpdates = Localized("Simultaneous Updates", "Aynı Anda Yapılabilecek Güncelleme Sayısı")
     static let maxConcurrentUpdatesHelp = Localized(
         "How many background updates can run at once. Anything started beyond this is queued and starts automatically once a slot frees up.",
-        "Arka planda aynı anda kaç güncellemenin çalışabileceği. Bunun ötesinde başlatılanlar kuyruğa alınır ve bir yuva boşaldığında otomatik başlar."
+        """
+        Arka planda aynı anda kaç güncellemenin çalışabileceği. Bunun ötesinde başlatılanlar kuyruğa alınır ve bir yuva \
+        boşaldığında otomatik başlar.
+        """
     )
     /// Per-row status while a single-item update is waiting for a free slot.
     static let queuedRowStatus = Localized("Queued", "Sırada")
@@ -509,7 +512,10 @@ extension UIStrings {
     static let editLinksTitleFormat = Localized("Edit Links for %@", "%@ için Bağlantıları Düzenle")
     static let editLinksHelp = Localized(
         "Local only — this stays on this Mac and only affects what you see here. Leave a field blank to keep the automatically detected value.",
-        "Sadece yerel — bu ayar yalnızca bu Mac'te kalır ve sadece burada gördüğünüzü etkiler. Otomatik bulunan değeri korumak için alanı boş bırakın."
+        """
+        Sadece yerel — bu ayar yalnızca bu Mac'te kalır ve sadece burada gördüğünüzü etkiler. Otomatik bulunan değeri korumak \
+        için alanı boş bırakın.
+        """
     )
     static let officialWebsiteField = Localized("Official website", "Resmi site")
     static let githubRepoField = Localized("GitHub repository", "GitHub deposu")
@@ -565,11 +571,16 @@ extension UIStrings {
 extension UIStrings {
     static let runInTerminal = Localized("Run updates in Terminal", "Güncellemeleri Terminal'de çalıştır")
     static let runInTerminalHelp = Localized(
-        "Off by default: updates run in the background and show progress right here in the app. Turn this on to watch (and stop) them in a terminal window instead.",
-        "Varsayılan kapalı: güncellemeler arka planda çalışır, ilerleme burada, uygulama içinde gösterilir. Bunu açarsanız güncellemeleri bir terminal penceresinde izleyebilir (ve durdurabilir)siniz."
+        """
+        Off by default: updates run in the background and show progress right here in the app. Turn this on to watch (and \
+        stop) them in a terminal window instead.
+        """,
+        """
+        Varsayılan kapalı: güncellemeler arka planda çalışır, ilerleme burada, uygulama içinde gösterilir. Bunu açarsanız \
+        güncellemeleri bir terminal penceresinde izleyebilir (ve durdurabilir)siniz.
+        """
     )
 }
-
 
 // MARK: - Move to Homebrew page
 
@@ -580,10 +591,12 @@ extension UIStrings {
     )
     static let migrateExplain = Localized(
         """
-        Scanning only reads what is already on your Mac - the cask descriptions         Homebrew ships and each app's own version information. Nothing is         downloaded, installed or moved until you pick something.
+        Scanning only reads what is already on your Mac - the cask descriptions         Homebrew ships and each app's own \
+        version information. Nothing is         downloaded, installed or moved until you pick something.
         """,
         """
-        Tarama yalnızca Mac'inizde hâlihazırda bulunanları okur: Homebrew'in         getirdiği cask tanımlarını ve her uygulamanın kendi sürüm bilgisini.         Siz bir şey seçene kadar hiçbir şey indirilmez, kurulmaz veya taşınmaz.
+        Tarama yalnızca Mac'inizde hâlihazırda bulunanları okur: Homebrew'in         getirdiği cask tanımlarını ve her \
+        uygulamanın kendi sürüm bilgisini.         Siz bir şey seçene kadar hiçbir şey indirilmez, kurulmaz veya taşınmaz.
         """
     )
     static let migrateScanButton = Localized("Start Scan", "Taramayı Başlat")
@@ -645,10 +658,13 @@ extension UIStrings {
     )
     static let migrateConfirmBody = Localized(
         """
-        Homebrew will not take over a copy that differs from the version it         ships, so this downloads the cask's version and puts it in place of the         application you have. Your copy is moved aside first and put back if         the install fails.
+        Homebrew will not take over a copy that differs from the version it         ships, so this downloads the cask's \
+        version and puts it in place of the         application you have. Your copy is moved aside first and put back if         the \
+        install fails.
         """,
         """
-        Homebrew, getirdiği sürümden farklı bir kopyayı devralmaz; bu yüzden         cask'in sürümü indirilip elinizdeki uygulamanın yerine konur. Kopyanız         önce bir kenara alınır ve kurulum başarısız olursa geri konur.
+        Homebrew, getirdiği sürümden farklı bir kopyayı devralmaz; bu yüzden         cask'in sürümü indirilip elinizdeki \
+        uygulamanın yerine konur. Kopyanız         önce bir kenara alınır ve kurulum başarısız olursa geri konur.
         """
     )
     static let migrateConfirmDowngrade = Localized(

@@ -180,8 +180,7 @@ struct MigrateToHomebrewPage: View {
                             isSelected: Binding(
                                 get: { selection.contains(candidate.appName) },
                                 set: { on in
-                                    if on { selection.insert(candidate.appName) }
-                                    else { selection.remove(candidate.appName) }
+                                    if on { selection.insert(candidate.appName) } else { selection.remove(candidate.appName) }
                                 }
                             ),
                             action: {

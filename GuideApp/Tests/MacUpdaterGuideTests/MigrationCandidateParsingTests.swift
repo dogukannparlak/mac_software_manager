@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Cross-language format agreement for the `migration_candidates` cache entry
 /// (CACHE_FORMAT.md).

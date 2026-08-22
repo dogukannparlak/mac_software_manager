@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// Which settings page the sidebar is showing.
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {

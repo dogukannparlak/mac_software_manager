@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Phase logic of the progress watch (`ProgressWatch`), stepped against an
 /// injected clock rather than a live poll loop - the decisions here are pure,

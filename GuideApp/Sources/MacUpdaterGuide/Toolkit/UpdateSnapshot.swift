@@ -62,6 +62,10 @@ struct UpdateSnapshot: Sendable {
 
     var count: Int { items.count }
 
+    /// Paired with `count` so the call sites can say which question they are
+    /// asking. Everything that reads a snapshot wants one of the two.
+    var isEmpty: Bool { items.isEmpty }
+
     /// Pending app updates (everything but a formula), grouped by
     /// `InstallSource` - the same split the Installed Apps page uses
     /// (Homebrew / App Store / Installed manually).
