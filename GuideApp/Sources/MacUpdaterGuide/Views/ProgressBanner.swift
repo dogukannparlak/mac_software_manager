@@ -10,7 +10,7 @@ struct ProgressBanner: View {
     /// Only passed where there is a real process to stop (the full Updates
     /// page) - the menu bar's copy of this banner stays read-only, as
     /// documented on `MenuBarView`.
-    var onCancel: (() -> Void)? = nil
+    var onCancel: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {

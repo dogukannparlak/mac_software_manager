@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Tests for `ToolkitSettings.apply(key:value:)` - the `settings.conf`
 /// key/value mapping the shell engine's own strict `KEY="value"` writer and

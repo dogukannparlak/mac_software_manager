@@ -125,7 +125,7 @@ struct ContentView: View {
                     HStack {
                         Text(UIStrings.navUpdates[loc.language])
                         Spacer(minLength: 4)
-                        if toolkit.snapshot.count > 0 {
+                        if !toolkit.snapshot.isEmpty {
                             Text("\(toolkit.snapshot.count)")
                                 .font(.caption.monospacedDigit().weight(.semibold))
                                 .foregroundStyle(.white)

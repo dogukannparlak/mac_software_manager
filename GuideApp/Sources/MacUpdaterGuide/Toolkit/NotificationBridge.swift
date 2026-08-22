@@ -1,6 +1,6 @@
+import AppKit
 import Foundation
 import UserNotifications
-import AppKit
 
 /// One request file's worth of content - see CACHE_FORMAT.md ("Notification
 /// queue") for the format both this and the shell writer (`notify()` in

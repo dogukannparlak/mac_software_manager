@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Wording and classification for `ToolkitController.ActionFailure` - what
 /// the UI puts on screen when an action fails.

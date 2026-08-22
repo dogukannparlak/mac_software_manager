@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Tests for `PipeConfig.load`/`save` - the shared reader/writer behind
 /// `tracked_apps.conf` and `app_token_map.conf` (TrackedAppsStore,

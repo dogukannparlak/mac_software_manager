@@ -1,5 +1,5 @@
-import SwiftUI
 import AppKit
+import SwiftUI
 
 /// The two tabs the Updates page switches between - same split as the
 /// sidebar's Installed Apps / CLI Tools pages.
@@ -185,9 +185,9 @@ struct UpdatesView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             IconTile(
-                symbol: toolkit.snapshot.count > 0 ? "arrow.down.circle.fill" : "checkmark.circle.fill",
+                symbol: !toolkit.snapshot.isEmpty ? "arrow.down.circle.fill" : "checkmark.circle.fill",
                 size: 56,
-                tint: toolkit.snapshot.count > 0 ? .orange : .green
+                tint: !toolkit.snapshot.isEmpty ? .orange : .green
             )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -206,7 +206,7 @@ struct UpdatesView: View {
 
             Spacer(minLength: 0)
 
-            if toolkit.snapshot.count > 0 {
+            if !toolkit.snapshot.isEmpty {
                 Button {
                     toolkit.launchUpdate(scope: "all")
                 } label: {
@@ -219,7 +219,7 @@ struct UpdatesView: View {
     }
 
     private var headerTitle: String {
-        toolkit.snapshot.count == 0
+        toolkit.snapshot.isEmpty
             ? UIStrings.everythingUpToDate[loc.language]
             : String(format: UIStrings.updatesWaitingFormat[loc.language], toolkit.snapshot.count)
     }

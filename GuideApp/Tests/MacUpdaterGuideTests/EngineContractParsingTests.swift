@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Cross-language format agreement for the engine's contract record
 /// (CACHE_FORMAT.md, "Engine contract").

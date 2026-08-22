@@ -1,5 +1,5 @@
-import XCTest
 @testable import MacUpdaterGuide
+import XCTest
 
 /// Parsing tests for the four cache formats `UpdateSnapshot` turns into the
 /// main update list - `brew_outdated`, `mas_outdated`, `manual_updates`,

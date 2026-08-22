@@ -543,7 +543,6 @@ final class AppIconCache {
     }
 }
 
-
 /// Holds the scan result for the whole app.
 ///
 /// Each view used to scan `/Applications` itself, which meant a picker could

@@ -570,7 +570,6 @@ extension UIStrings {
     )
 }
 
-
 // MARK: - Move to Homebrew page
 
 extension UIStrings {

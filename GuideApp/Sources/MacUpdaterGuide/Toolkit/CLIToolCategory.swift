@@ -166,14 +166,14 @@ enum CLIToolCategorizer {
             "revision control", "version control", "source control",
             "git extension", "git client", "github command", "gitlab",
             "distributed scm", "mercurial", "subversion", "code review",
-            "diff and merge tool", "commit",
+            "diff and merge tool", "commit"
         ]),
         Rule(category: .languagesRuntimes, keywords: [
             "programming language", "scripting language", "runtime for",
             "runtime environment", "interpreter for", "language runtime",
             "compiler for the", "development kit for the java", "typescript",
             "static type checker", "bytecode", "virtual machine for",
-            "javascript engine",
+            "javascript engine"
         ]),
         Rule(category: .cloudDevOpsAI, keywords: [
             "amazon aws", " aws ", "google cloud", "microsoft azure",
@@ -183,14 +183,14 @@ enum CLIToolCategorizer {
             "continuous integration", "continuous deployment", "ci/cd",
             "serverless", "ai model", "machine learning", "artificial intelligence",
             "large language model", "language model", " llm ", "chatbot",
-            "generative ai", "openai", "anthropic",
+            "generative ai", "openai", "anthropic"
         ]),
         Rule(category: .databases, keywords: [
             "relational database", "database management", "database engine",
             "key-value store", "in-memory data structure store", " sql ",
             "sql database", "postgresql", "mysql", "sqlite", "mongodb",
             "time series database", "graph database", "search engine for",
-            "message broker", "cache server",
+            "message broker", "cache server"
         ]),
         Rule(category: .networkingSecurity, keywords: [
             "network protocol", "network library", "network tool",
@@ -199,34 +199,34 @@ enum CLIToolCategorizer {
             "proxy server", "reverse proxy", "load balancer", " dns ", " vpn ",
             "gnupg", "openpgp", "packet capture", "packet analyzer",
             "vulnerability scanner", "penetration testing", "secret management",
-            "password manager", "two-factor", "port scanner",
+            "password manager", "two-factor", "port scanner"
         ]),
         Rule(category: .buildPackaging, keywords: [
             "build system", "build tool", "build automation",
             "package manager", "dependency manager", "compiler collection",
             "task runner", "module bundler", "code formatter", "static analysis",
-            "linter", "makefile", "linker",
+            "linter", "makefile", "linker"
         ]),
         Rule(category: .mediaDocuments, keywords: [
             "image processing", "image manipulation", "video downloader",
             "audio/video", "graphics library", "font rendering", " pdf ",
             "optical character recognition", " ocr ", "photo", "screenshot",
             "screen recorder", "document converter", "ebook", "subtitle",
-            "media player", "transcoding",
+            "media player", "transcoding"
         ]),
         Rule(category: .shellText, keywords: [
             "shell", "terminal emulator", "text editor", "command-line tool",
             "text processing", "regular expression", "fuzzy finder",
             "pretty-print", "syntax highlight", "file manager",
             "directory listing", "process viewer", "system monitor",
-            "clipboard manager", "note-taking", "markdown", "spell check",
+            "clipboard manager", "note-taking", "markdown", "spell check"
         ]),
         Rule(category: .testing, keywords: [
             "test framework", "testing system", "testing framework",
             "unit test", " testing ", "mocking framework", "code coverage",
             "browser automation", "end-to-end testing", "load testing",
-            "fuzz testing",
-        ]),
+            "fuzz testing"
+        ])
     ]
 
     /// A separate, smaller vocabulary tuned for how Homebrew phrases C/C++
@@ -236,27 +236,27 @@ enum CLIToolCategorizer {
         Rule(category: .awsSDK, keywords: [" aws", "aws-", "amazon"]),
         Rule(category: .languageRuntimeSupport, keywords: [
             "programming language", "scripting language", "runtime for",
-            "runtime environment", "javascript", "syscall api", "wasi",
+            "runtime environment", "javascript", "syscall api", "wasi"
         ]),
         Rule(category: .graphicsMedia, keywords: [
             "graphics", "image", "font", "pixel", " gif", "codec",
             "color management", "text shaping", "layout and rendering",
-            "vector graphics", " ocr", "tiff", "video", "audio",
+            "vector graphics", " ocr", "tiff", "video", "audio"
         ]),
         Rule(category: .compression, keywords: [
             "compression", "archiving", "archive format", "huffman",
-            "checksum", "crc32", "lossless",
+            "checksum", "crc32", "lossless"
         ]),
         Rule(category: .networkingSecurity, keywords: [
             "http/2", "http/3", "quic", "dns", " tls", " ssl", "url parser",
-            "certificate", "cryptography", "http_parser", " http ",
+            "certificate", "cryptography", "http_parser", " http "
         ]),
         Rule(category: .textData, keywords: [
             "unicode", "json", "yaml", "internationalization", "localization",
-            "trie", "thai", "byte handling", "regular expression",
+            "trie", "thai", "byte handling", "regular expression"
         ]),
         Rule(category: .databases, keywords: ["database", "sqlite", " sql "]),
-        Rule(category: .windowing, keywords: ["x.org", "x11", "xorg"]),
+        Rule(category: .windowing, keywords: ["x.org", "x11", "xorg"])
     ]
 
     /// Parses `brew desc`'s own output format, one formula per line:
