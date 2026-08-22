@@ -8,6 +8,13 @@ change a format below, update the writer, every reader (shell and Swift), and
 this document in the same change** — nothing else will catch a mismatch for
 you.
 
+One reader is also a writer: GuideApp's Debug page (`Views/Debug/`, hidden
+unless enabled) can write fixtures in every format below to produce UI states
+without running brew or mas. It backs up whatever it displaces and its
+generators are round-tripped against the real parsers in
+`DebugFixturesTests.swift` - but it is still a second writer, so a format
+change has to reach `DebugFixtures.swift` along with everything else.
+
 All formats are pipe (`|`) delimited, one record per line, UTF-8, no header
 row unless noted. Fields never contain a literal `|` — every writer either
 controls the field's content directly (an epoch timestamp, a fixed token) or

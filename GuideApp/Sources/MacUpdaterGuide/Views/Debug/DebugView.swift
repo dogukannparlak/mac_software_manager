@@ -67,6 +67,8 @@ struct DebugView: View {
             case .engine:      DebugSectionEngine()
             case .cache:       DebugSectionCache()
             case .state:       DebugSectionState()
+            case .features:    DebugSectionFeatures()
+            case .localization: DebugSectionLocalization()
             }
         }
         .environment(log)
@@ -87,6 +89,8 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
     case engine
     case cache
     case state
+    case features
+    case localization
 
     var id: String { rawValue }
 
@@ -96,6 +100,8 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
         case .engine: return "Engine"
         case .cache: return "Cache"
         case .state: return "State"
+        case .features: return "Features"
+        case .localization: return "Strings"
         }
     }
 
@@ -109,6 +115,10 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
             return "Every file the engine writes, how old it is, and what is actually in it."
         case .state:
             return "Write fake state over the engine's files to produce any UI state, with the real files backed up beside them."
+        case .features:
+            return "One trigger per feature - migration, inventory, config files, the ignore round trip, self-update - each reporting to the console."
+        case .localization:
+            return "Every Localized pair, with the three things that go wrong: no translation, an identical one, and mismatched format specifiers."
         }
     }
 }
