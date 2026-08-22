@@ -26,6 +26,10 @@ struct DebugView: View {
     @State private var section: DebugSection = .environment
     /// One log for the whole page, not one per panel - see `DebugLog`.
     @State private var log = DebugLog()
+    /// Shared for the same reason the log is: the warning strip below has to
+    /// stay up while the user is looking at a different section, so the
+    /// injection state cannot belong to the panel that caused it.
+    @State private var stateStore = DebugStateStore()
 
     var body: some View {
         SettingsPage(
@@ -34,6 +38,13 @@ struct DebugView: View {
             title: "Debug",
             subtitle: "Manual test surface for every screen, state and engine output. Not shown to users."
         ) {
+            // Above the section picker, not inside the State panel: fake
+            // state outlives the panel that wrote it, and so must the
+            // warning about it.
+            if stateStore.isInjecting {
+                DebugInjectionBanner()
+            }
+
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     Picker("", selection: $section) {
@@ -55,9 +66,14 @@ struct DebugView: View {
             case .environment: DebugSectionEnvironment()
             case .engine:      DebugSectionEngine()
             case .cache:       DebugSectionCache()
+            case .state:       DebugSectionState()
             }
         }
         .environment(log)
+        .environment(stateStore)
+        // Anything left injected by an earlier launch has to raise the strip
+        // as soon as the page is opened, not once something is written.
+        .task { stateStore.rescan() }
     }
 }
 
@@ -70,6 +86,7 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
     case environment
     case engine
     case cache
+    case state
 
     var id: String { rawValue }
 
@@ -78,6 +95,7 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
         case .environment: return "Environment"
         case .engine: return "Engine"
         case .cache: return "Cache"
+        case .state: return "State"
         }
     }
 
@@ -89,6 +107,8 @@ enum DebugSection: String, CaseIterable, Identifiable, Hashable {
             return "Run update_system.*.sh by hand. Modes that install packages are marked and confirmed first."
         case .cache:
             return "Every file the engine writes, how old it is, and what is actually in it."
+        case .state:
+            return "Write fake state over the engine's files to produce any UI state, with the real files backed up beside them."
         }
     }
 }
