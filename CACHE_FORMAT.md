@@ -42,7 +42,7 @@ v1|state|phase|item|index|total
 |---|---|---|---|
 | 1 | version | `v1` | Bump on any incompatible change to the fields below |
 | 2 | state | `running` \| `done` \| `failed` | Closed set: the Swift reader rejects the whole line on any other token rather than guessing an outcome, so adding a state is an incompatible change - bump the version |
-| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `scan-migration`, `migrate`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), both held in memory by the Swift side only, never written by the shell |
+| 3 | phase | `starting`, `brew-update`, `analyze`, `brew-upgrade`, `mas-upgrade`, `cleanup`, `verify`, `install-app`, `single`, `scan-migration`, `migrate`, `complete`, `complete-with-failures`, `launch-failed`, `terminal-permission` | Free-form-ish but both sides only recognize this fixed set; `UpdateProgress.Phase` also has `process-error` (a process crash/non-zero exit was caught), `cancelled` (the user stopped this run from the app - `ToolkitController.cancelUpdate()`) and `not-started` (the run never wrote a line within `ProgressWatch.startupTimeout`), all three held in memory by the Swift side only, never written by the shell |
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
 | 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
@@ -522,17 +522,23 @@ v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
   "Updated" would be claiming an update only the user can perform.
 - **Writing them.** A record is written on every path that ends a run a row
   could be waiting on, including the early ones (`mas-disabled`,
-  `not-pending`). Two paths deliberately write none: a dry run (nothing was
-  going to be installed, and GuideApp runs those fire-and-forget with no item
-  attached), and `run install` with no application named at all, which has no
-  identity to file the record under. Within a run the record goes **after**
-  that item's cache refresh (a reader may take it as "now go look at the
-  list") and **before** the final `progress_write` (a terminal-mode run is
-  resolved off that line, and the record has to be there when it is).
+  `not-pending`). Two paths deliberately write none: a `run install` dry run
+  (nothing was going to be installed, and GuideApp fires those off with no
+  item attached), and `run install` with no application named at all, which
+  has no identity to file the record under. A **migration** dry run does
+  write one, unlike those two: it is itself the answer the user asked for,
+  and a row is waiting on it - see `migration_report()` in `lib/migrate.sh`,
+  which skips only the history entry (a dry run changed nothing, and the log
+  is a log of changes). Within a run the record goes **after** that item's
+  cache refresh (a reader may take it as "now go look at the list") and
+  **before** the final `progress_write` (a terminal-mode run is resolved off
+  that line, and the record has to be there when it is).
 - **Reading them.** Match on `kind`+`id`: `brew`/`cask` map to GuideApp's
-  `brew:<token>`, `app` to `app:<name>`, and `mas` to *either* `mas:<id>` or
-  `manual:<id>` - one shell kind covers both sources, since an Apple app the
-  `mas` CLI misses is still updated by the same command with the same id.
+  `brew:<token>`, `app` to `app:<name>`, `migrate` to `migrate:<token>` (the
+  cask the app was being moved *to* - `ToolkitController.migrationItemPrefix`
+  is the one place that prefix is spelled), and `mas` to *either* `mas:<id>`
+  or `manual:<id>` - one shell kind covers both sources, since an Apple app
+  the `mas` CLI misses is still updated by the same command with the same id.
   Then check the timestamp: a record older than the run asking belongs to an
   earlier run of the same item that nobody consumed (one started from a
   terminal window, one cancelled after it had already reported), and must not
@@ -558,13 +564,17 @@ v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
 - Shell writer: `result_write()` in `lib/cache.sh`; call sites are
   `run_mode_single()` and `run_mode_install()` in `lib/run_modes.sh` (the
   latter through its `install_result` helper, which is also what skips the
-  dry run).
+  dry run), and `migrate_to_cask()`/`migration_report()` in `lib/migrate.sh`
+  for the `migrate` kind.
 - Swift reader: `ItemRunResult.parse(raw:)` and `ItemRunResultStore.consume(itemID:since:)`
   in `GuideApp/Sources/MacUpdaterGuide/Toolkit/ItemRunResult.swift`, consumed
-  by `ToolkitController.finishActiveItem` (headless runs) and
-  `resolveActiveSingleItem` (terminal-mode runs). A missing or unrecognized
-  version, a short line, an undateable timestamp or an unknown `status` all
-  return `nil` - the same fail-closed rule `UpdateProgress` follows.
+  by `ToolkitController.finishActiveItem` (headless runs),
+  `finishMigration` (the headless `migrate_app` path, which resolves a
+  `migrate:<token>` row on the Move to Homebrew page) and
+  `resolveActiveSingleItem` (terminal-mode runs, `migrate_app_in_terminal`
+  included). A missing or unrecognized version, a short line, an undateable
+  timestamp or an unknown `status` all return `nil` - the same fail-closed
+  rule `UpdateProgress` follows.
 
 ## Explicitly out of scope
 

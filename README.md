@@ -46,6 +46,7 @@ Mac Software Manager is a targeted automation tool designed to bring order to yo
 * **Live Progress:** A progress bar in the app tracks every phase of an update — refreshing Homebrew, upgrading packages, cleaning up — and names the package currently being installed. Visible in the menu bar and on the Updates page, whether the update is running in the background or in a terminal.
 * **Official Links, Verified Automatically:** Detects each app's official website and GitHub repository from data it already has — a Homebrew cask's declared homepage and download URL, a GitHub repo's own homepage field — never guessed. Wrong or missing links can be corrected per app, purely locally.
 * **One Menu Per App:** Every row on the Installed Apps page has a "…" menu with everything for that app — open its links, correct them, fix how it is tracked for updates, remap it to a Homebrew cask, ignore it — no more hunting through separate settings pages.
+* **Move to Homebrew:** Finds applications you installed by hand that a Homebrew cask could keep up to date, tells you how sure each pairing is and exactly what moving would do, then hands them over in place. Scanning downloads, installs and moves nothing — it only reads cask descriptions and each app's own version info. Under **Settings → Move to Homebrew**.
 * **Manual Homebrew Check:** A dedicated "Check Homebrew" action pulls the latest Homebrew and tap metadata (`brew update`) on demand, the same way the Updates page lets you re-check individual apps.
 
 ## ⚙️ How It Works
@@ -66,6 +67,7 @@ Run via terminal, this script scans your `/Applications` folder to detect unmana
   * **[B]rew Cask:** Replaces the manual version with a Homebrew Cask (preserving settings).
   * **[L]eave:** Keeps the app exactly as it is.
 * **🛡️Safety First:** Before any migration, it creates a local backup (`.app.bak`). If the new installation fails (network error, hash mismatch) it automatically restores the original application. Only removes the backup if the installation was 100% successful.
+* **Not a one-off:** Answering **[L]eave** now costs nothing — the same migration is available later from the app under **Settings → Move to Homebrew** (see below), which is the same job without a terminal.
 
 ### 2. Update Engine (`update_system.x.sh`)
 
@@ -86,8 +88,77 @@ A native SwiftUI app that puts a face on all of it. Open the Xcode project and r
 * **Updates:** Everything waiting, grouped by source, with real app icons. Update one item or all of them, or hide something you want to stay behind on. A **Check Homebrew** button next to Refresh pulls the latest Homebrew metadata on demand. Updates run in the background with an in-app progress bar by default; a terminal window is opt-in.
 * **Installed Apps:** Every application with its icon, version and **where it came from** — Homebrew, App Store, Setapp, Apple, or installed by hand. Filter by source, search, and see the Homebrew command line tools underneath. Each row's **"…" menu** opens its official website or GitHub page, and edits how that one app is tracked, mapped or linked — all local corrections, applied instantly.
 * **History:** What was updated over the last 7 or 30 days, grouped by day, with failures marked rather than hidden.
-* **Settings:** Part of the same window, not a separate panel. Language, check interval, Dock icon, open at login, whether updates run in a terminal (and which one), App Store support, cleanup, automatic installation, update channel, ignored apps, cache, and the engine location — plus full editors for the tracking rules and Homebrew name mapping, so no configuration ever needs a text editor. Everything is written straight into the toolkit's config files, so the app and the terminal never disagree.
+* **Settings:** Part of the same window, not a separate panel. Language, check interval, Dock icon, open at login, whether updates run in a terminal (and which one), App Store support, cleanup, automatic installation, update channel, ignored apps, cache, and the engine location — plus the **Move to Homebrew** page described below and full editors for the tracking rules and Homebrew name mapping, so no configuration ever needs a text editor. Everything is written straight into the toolkit's config files, so the app and the terminal never disagree.
 * **Guide:** The whole feature guide built in, in English and Turkish, switchable without relaunching.
+
+#### Settings → Move to Homebrew
+
+The wizard's migration step, available at any time and without a terminal.
+
+**Scan** walks `/Applications` and `~/Applications`, skips everything already
+accounted for (Homebrew casks, App Store apps, Setapp's catalogue, Apple's own
+apps, anything you have ignored), and for each of the rest asks Homebrew
+whether a cask by that name exists. **Scanning changes nothing**: the verdict
+for every row is read off the cask's own JSON metadata and the installed
+bundle's `Info.plist`, so nothing is downloaded, installed or moved until you
+pick a row. It is never run in the background — one `brew info` per candidate
+per unmanaged app is too expensive for the hourly tick — so the list is a
+snapshot of whenever you last pressed the button.
+
+The results land in three groups:
+
+* **Ready to move** — Homebrew adopts the copy already on disk. Checkboxes and
+  a bulk button, because adopting is not destructive.
+* **Needs your confirmation** — the installed copy is not the version the cask
+  ships, so adopting is refused and moving means *replacing* the app with the
+  cask's version. One at a time, behind a confirmation sheet that shows both
+  versions and warns you when the move would be a downgrade.
+* **Cannot be moved** — listed with the reason rather than filtered out,
+  because "why is my app not in the list" is the question a filtered list
+  creates.
+
+**Why a failed move costs nothing.** The default is
+`brew install --cask --adopt`, which takes over the bundle that is already
+there instead of downloading a replacement. When Homebrew will not adopt it,
+it says so and **leaves the target completely untouched** — a refused adopt
+does not delete, move or overwrite your installation, so the worst case is
+that nothing happened. The destructive path (back up, reinstall, restore on
+failure) is only ever reached by asking for it explicitly in the
+"Needs your confirmation" group.
+
+**When moving is not possible at all.** Three cases, and the page names which
+one applies to each row:
+
+* **pkg / installer casks** (`logitech-g-hub` is the usual example) install a
+  package rather than an `.app`, so there is no bundle for Homebrew to adopt
+  and none to put back if anything went wrong.
+* **Casks that need an administrator** — an installer script declaring `sudo`,
+  or a target under `/Library`. The toolkit never runs `sudo` from a
+  background run, which would have nowhere to show a password prompt, so the
+  row shows you the `brew install --cask <token>` line to run yourself.
+* **A target mismatch** — usually an app in `~/Applications` for a cask that
+  installs to `/Applications`. Adopting does not *move* a bundle; it would
+  install a second copy at the cask's own target and leave yours where it is.
+
+Every row also says how the app was tied to its cask. A pairing backed by the
+cask's own metadata (its app file name or your app's exact bundle identifier)
+or by a line you wrote in `app_token_map.conf` is treated as verified;
+a pairing that is only a guess derived from the app's name is flagged
+**Unverified**, with a link to the cask's page so you can check before moving
+anything.
+
+**Its relationship to the installer's migration step.** They are the same job
+with two entry points: `setup_mac.sh` asks the question once, while you are
+installing, and this page asks it any time afterwards. The wizard runs
+*before* the toolkit exists — it is what creates `~/Library/Application
+Support/MacSoftwareUpdater/lib` in the first place — so it cannot `source`
+anything from `lib/` and carries its own copy of the token matching and the
+migration itself. That duplication is deliberate, not an oversight; when the
+matching rules change, both copies move together. Two differences follow from
+where each one runs: the wizard has a terminal, so it may escalate with
+`sudo` and it falls straight through from a refused adopt to a
+back-up-and-reinstall, whereas the page runs headless with nowhere to show a
+password prompt and never replaces an app unless you ask for it by name.
 
 ## 📸 Screenshots
 
@@ -282,6 +353,10 @@ cask name by hand, so it will match on the next run. Editable the same two
 ways as `tracked_apps.conf` above — the app list, or **Edit Homebrew
 Mapping…** on the one app.
 
+A mapping here counts as an `override` in the **Move to Homebrew** scan, which
+is the strongest match there is: you stated the answer, so nothing is guessed
+after it and no name-derived candidate can outrank it.
+
 ### `app_links.conf`
 
 Website and GitHub links are detected automatically (from a Homebrew cask's
@@ -315,7 +390,7 @@ Use `--local` for that case:
 ```
 
 With the flag, the download and checksum step is skipped entirely and
-`update_system.1h.sh`, all ten `lib/*.sh` files and `uninstall.sh` are copied
+`update_system.1h.sh`, all eleven `lib/*.sh` files and `uninstall.sh` are copied
 from the directory the script itself lives in. Everything else about the run —
 the migration wizard, the prompts, the SwiftBar setup — is unchanged.
 
