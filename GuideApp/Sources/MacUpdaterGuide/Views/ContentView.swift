@@ -8,6 +8,9 @@ enum SidebarItem: Hashable {
     case history
     case topic(GuideTopic.ID)
     case settings(SettingsSection)
+    /// The manual test surface. Only reachable when
+    /// `AppPreferences.showsDebugPage` says so - see `DebugView`.
+    case debug
 }
 
 /// Single window: navigation on the left, content on the right - the split
@@ -69,6 +72,15 @@ struct ContentView: View {
             }
         case .settings(let section):
             settingsPage(section)
+        case .debug:
+            // Checked here as well as in the sidebar: the selection survives
+            // in the navigation store, so turning the toggle off with the
+            // page open must take the page away too, not just its row.
+            if toolkit.preferences.showsDebugPage {
+                DebugView()
+            } else {
+                placeholder
+            }
         case nil:
             placeholder
         }
@@ -194,6 +206,20 @@ struct ContentView: View {
                 }
             }
 
+            // Last, and only when asked for: everything above is the app,
+            // this is the workbench for it.
+            if toolkit.preferences.showsDebugPage {
+                Section(UIStrings.sidebarDeveloperSection[loc.language]) {
+                    Label {
+                        Text(UIStrings.navDebug[loc.language])
+                    } icon: {
+                        Image(systemName: "ladybug")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .tag(SidebarItem.debug)
+                }
+            }
         }
         .listStyle(.sidebar)
     }
