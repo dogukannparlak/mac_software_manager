@@ -86,3 +86,5 @@ PORTFOLIO.md
 # VERSION and SHA256SUMS are deliberately NOT ignored: self-update refuses to
 # install anything that is not listed in the committed SHA256SUMS, and
 # tools/sync_version.sh reads VERSION as the single source of truth.
+# Release artifacts (uploaded to GitHub Releases, not tracked)
+dist/
