@@ -406,6 +406,57 @@ When you are ready to push, regenerate the checksums — see the **For
 contributors** note under [Notes](#-notes); installed copies refuse to
 self-update against a stale `SHA256SUMS`.
 
+### The Debug page
+
+The app ships a hidden page for driving every screen, state and engine output
+by hand, without waiting on `brew`, `mas` or the network. In a DEBUG build it is
+always in the sidebar. In a Release build you turn it on at the bottom of
+**Settings › Advanced** with **Show the Debug page**, which adds a **Developer**
+section to the sidebar. It is at the bottom of the last settings page
+deliberately — it is somewhere you go looking for, not somewhere you pass
+through — and some of what it offers starts real updates.
+
+Its State panel does not mock anything. It produces a UI state by writing the
+same files the app normally reads, under
+`~/Library/Application Support/MacSoftwareUpdater` — the cache, the
+notification queue, the run results and the hand-edited config files. What you
+see afterwards is the real code path reading real files; only the contents are
+fake.
+
+That is what makes the backup contract the important part. Nothing is ever
+overwritten without a backup landing beside it first, as a sidecar file rather
+than a copy held in memory — the failures worth testing are the ones where the
+app is quit or crashes mid-injection, and a restore that only works while the
+process that made the mess is still running is not a restore. There are two
+sidecars and never both, so *"there was no file here"* is recorded as
+explicitly as *"here is what was here"*:
+
+| Sidecar | Meaning | What restore does |
+| --- | --- | --- |
+| `<name>.debugbackup` | A real file was displaced | Copies it back |
+| `<name>.debugbackup.none` | There was no file here | Deletes the fake |
+
+The event directories (`notifications/`, `results/`) are never overwritten at
+all. Injection only ever *adds* a file there, named with a `.debug.` marker so
+cleanup deletes exactly what the page created and nothing a real run left
+behind. `CACHE_FORMAT.md` states outright that those file names carry no
+meaning and that readers must not parse them, which is what makes that safe.
+
+**Restore all real state** therefore works from the disk alone: it scans the
+four directories for sidecars and `.debug.` markers rather than consulting
+anything held in memory, so it recovers just as well after a relaunch — or
+after a crash — as it does a second after the injection. For the same reason
+the warning strip at the top of the page is driven by a disk scan, not by a
+flag set on write: state left injected by an earlier launch raises the warning
+the moment the page is opened. The failure this page has to avoid is somebody
+debugging fake state for an hour without knowing it is fake.
+
+Nothing inside the page is localized, on purpose. Its labels name Swift
+properties, cache keys and shell verbs — `brew_outdated`, `run single`,
+`EngineContract.supportsMigration` — each of which has exactly one spelling,
+here and in `CACHE_FORMAT.md`. The two strings a non-developer could meet, the
+sidebar entry and the settings toggle, are translated like everything else.
+
 ## 📝 Notes
 
 > **Important:** Since this script uses checksums to detect updates, modifying the code (e.g., changing icons) will trigger a "Plugin Update Available" alert. If you customize the script, please go to Preferences → Disable Self-Update to prevent your changes from being overwritten.
