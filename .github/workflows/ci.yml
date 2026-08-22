@@ -91,10 +91,14 @@ jobs:
             setup_mac.sh uninstall.sh update_system.1h.sh lib/*.sh tools/*.sh || true
 
   swiftlint:
-    name: SwiftLint (advisory)
+    name: SwiftLint
     runs-on: macos-latest
-    # Style/lint only - never blocks the build.
-    continue-on-error: true
+    # Blocks on errors only. The thresholds in .swiftlint.yml draw the line:
+    # a line over 200 characters or a type body over 400 lines fails the job,
+    # while the warning tier (150 / 300, file_length, identifier_name and the
+    # rest) is reported and passes. There are 30 such warnings outstanding and
+    # no --strict, so they do not gate a merge - but the error count is at zero
+    # and stays there.
 
     steps:
       - uses: actions/checkout@v4
