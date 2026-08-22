@@ -75,6 +75,12 @@ xcuserdata/
 
 
 # ==============================================================================
+# Personal
+# ==============================================================================
+# CV/portfolio copy generated from this repo's history - not part of the project.
+PORTFOLIO.md
+
+# ==============================================================================
 # Notes
 # ==============================================================================
 # VERSION and SHA256SUMS are deliberately NOT ignored: self-update refuses to
