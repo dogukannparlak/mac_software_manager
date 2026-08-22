@@ -182,6 +182,7 @@ final class AppPreferences {
     private static let runInTerminalKey = "com.macupdater.guide.runUpdatesInTerminal"
     private static let maxConcurrentUpdatesKey = "com.macupdater.guide.maxConcurrentUpdates"
     private static let autoTerminalKey = "com.macupdater.guide.autoOpenTerminalWhenRequired"
+    private static let debugModeKey = "com.macupdater.guide.debugMode"
 
     /// How often the menu bar data is rebuilt, in minutes.
     var refreshMinutes: Int {
@@ -223,6 +224,28 @@ final class AppPreferences {
         didSet { UserDefaults.standard.set(autoOpenTerminalWhenRequired, forKey: Self.autoTerminalKey) }
     }
 
+    /// Reveals the Debug page in Release builds. Off by default, and
+    /// deliberately not discoverable from anywhere but Settings › Advanced:
+    /// the page can start real updates.
+    var debugMode: Bool {
+        didSet { UserDefaults.standard.set(debugMode, forKey: Self.debugModeKey) }
+    }
+
+    /// Whether the sidebar shows the Debug page at all.
+    ///
+    /// Always on in DEBUG, because a page for testing the app by hand that
+    /// has to be switched on before it can be used is one more step between
+    /// a change and seeing it. In Release it is the toggle and nothing else -
+    /// the point of shipping it is that a user can be walked through
+    /// collecting diagnostics, not that anybody stumbles into it.
+    var showsDebugPage: Bool {
+        #if DEBUG
+        return true
+        #else
+        return debugMode
+        #endif
+    }
+
     static let maxConcurrentUpdatesChoices = [1, 2, 3, 4]
 
     /// Live in the menu bar only: no Dock icon, no app menu.
@@ -251,6 +274,8 @@ final class AppPreferences {
         // two apart.
         autoOpenTerminalWhenRequired =
             (UserDefaults.standard.object(forKey: Self.autoTerminalKey) as? Bool) ?? true
+
+        debugMode = UserDefaults.standard.bool(forKey: Self.debugModeKey)
 
         let storedConcurrency = UserDefaults.standard.integer(forKey: Self.maxConcurrentUpdatesKey)
         maxConcurrentUpdates = Self.maxConcurrentUpdatesChoices.contains(storedConcurrency) ? storedConcurrency : 2

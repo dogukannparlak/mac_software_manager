@@ -370,7 +370,9 @@ struct AdvancedSettingsPage: View {
     @State private var didResetCache = false
 
     var body: some View {
-        SettingsPage(
+        @Bindable var preferences = toolkit.preferences
+
+        return SettingsPage(
             symbol: "wrench.and.screwdriver",
             tint: .purple,
             title: UIStrings.tabAdvanced[loc.language],
@@ -460,6 +462,21 @@ struct AdvancedSettingsPage: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            // Bottom of the last settings page on purpose: this reveals a
+            // page that can start real updates, so it is somewhere you end
+            // up looking for rather than somewhere you pass through.
+            Card {
+                Toggle(isOn: $preferences.debugMode) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(UIStrings.debugMode[loc.language])
+                        Text(UIStrings.debugModeHelp[loc.language])
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }

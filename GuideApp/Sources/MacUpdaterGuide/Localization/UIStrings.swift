@@ -128,6 +128,23 @@ enum UIStrings {
     static let sectionFiles = Localized("Configuration files", "Yapılandırma dosyaları")
     static let revealSupportFolder = Localized("Reveal support folder in Finder", "Destek klasörünü Finder'da göster")
 
+    // MARK: - Developer
+
+    /// The only strings the Debug page contributes to `UIStrings`, and the
+    /// reason they are here rather than as literals: these two are how
+    /// somebody who is *not* a developer would meet the page - a section in
+    /// their sidebar and a switch in their settings - so they get the same
+    /// treatment every other user-facing string does. Everything inside the
+    /// page itself is an English literal; see the header of `DebugView.swift`
+    /// for why.
+    static let sidebarDeveloperSection = Localized("Developer", "Geliştirici")
+    static let navDebug = Localized("Debug", "Hata Ayıklama")
+    static let debugMode = Localized("Show the Debug page", "Hata Ayıklama sayfasını göster")
+    static let debugModeHelp = Localized(
+        "Adds a Developer section to the sidebar with tools for testing the app by hand. Some of them run real updates.",
+        "Kenar çubuğuna, uygulamayı elle test etmeye yarayan araçların bulunduğu bir Geliştirici bölümü ekler. Bazıları gerçek güncelleme çalıştırır."
+    )
+
     // MARK: - Sidebar
 
     static let sidebarStatus = Localized("Status", "Durum")
