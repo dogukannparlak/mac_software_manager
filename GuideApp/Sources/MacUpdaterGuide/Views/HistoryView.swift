@@ -139,6 +139,15 @@ private struct HistoryRow: View {
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.orange))
                     }
+
+                    if entry.isMigration {
+                        Text(UIStrings.migratedBadge[loc.language])
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.blue))
+                    }
                 }
 
                 HStack(spacing: 6) {
@@ -150,6 +159,12 @@ private struct HistoryRow: View {
                     Text(entry.newVersion)
                 }
                 .font(.callout.monospacedDigit())
+
+                if !entry.succeeded, let reasonLabel = failureReasonText {
+                    Text(reasonLabel[loc.language])
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
 
             Spacer(minLength: 8)
@@ -169,6 +184,17 @@ private struct HistoryRow: View {
         }
         .padding(.vertical, 5)
         .opacity(entry.succeeded ? 1 : 0.85)
+    }
+
+    /// `entry.reason.label` is `nil` for `.commandFailed` on purpose (see
+    /// `ItemRunResult.Reason`) - the live banner fills that gap with stderr,
+    /// which this row does not have. `.none` (no reason token was ever
+    /// recorded, e.g. entries from before this field existed) and `.unknown`
+    /// (a token this build does not recognize) stay silent instead of
+    /// guessing.
+    private var failureReasonText: Localized? {
+        if let label = entry.reason.label { return label }
+        return entry.reason == .commandFailed ? UIStrings.historyCommandFailed : nil
     }
 
     private var timeText: String {

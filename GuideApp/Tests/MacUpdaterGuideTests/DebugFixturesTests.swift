@@ -164,7 +164,7 @@ final class DebugFixturesTests: XCTestCase {
         let raw = DebugFixtures.progress(state: "running", phase: "cleanup")
         // Six fields either way: an absent item, index and total are three
         // empty fields, not three fields left off the end.
-        XCTAssertEqual(raw.trimmingCharacters(in: .whitespacesAndNewlines), "v1|running|cleanup|||")
+        XCTAssertEqual(raw.trimmingCharacters(in: .whitespacesAndNewlines), "v1|running|cleanup|||||")
 
         let parsed = UpdateProgress.parse(raw: raw, modified: Date())
         XCTAssertNil(parsed?.index)

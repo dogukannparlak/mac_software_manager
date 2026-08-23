@@ -143,9 +143,12 @@ final class OnboardingStore {
 
             // Homebrew appearing changes what the engine can do, and the app
             // caches where it resolved the script to - so both are refreshed
-            // here rather than at the next launch.
+            // here rather than at the next launch. A real scan follows so the
+            // casks and formulas Homebrew now sees show up right away instead
+            // of waiting for the periodic timer or a manual refresh.
             toolkit.relocateScript()
             toolkit.reload()
+            toolkit.refresh(force: true)
             await self.probe()
         }
     }

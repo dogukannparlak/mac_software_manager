@@ -409,3 +409,69 @@ load "test_helper"
     assert_contains "OUTDATED: stub" "$output"
     [ "${output##*WAITED: }" -lt 5 ]
 }
+
+# --- Cask download progress ---
+#
+# Real byte progress for a cask's download, watched from outside Homebrew
+# rather than parsed from its (tty-only) progress bar. brew and curl are both
+# stubbed - this suite must never make a real network call - so what is
+# actually under test is the file-size polling and the HEAD-derived total,
+# not Homebrew or the network.
+
+@test "cask_download_watch_start reports bytes against a HEAD-derived total" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cache_path="$BATS_TEST_TMPDIR/fake-cask.dmg"
+
+        brew() {
+            if [[ "$1 $2" == "info --cask" ]]; then
+                printf "%s" "{\"casks\":[{\"url\":\"https://example.invalid/fake.dmg\"}]}"
+            elif [[ "$1" == "--cache" ]]; then
+                print -r -- "$cache_path"
+            fi
+        }
+        curl() { print -r -- "content-length: 1000"; }
+
+        printf "%0.sX" {1..250} > "${cache_path}.incomplete"
+
+        cask_download_watch_start "fake-token" "FakeApp"
+        sleep 1.3
+        cat "$(cask_download_progress_file $$)"
+        echo "---"
+        cask_download_watch_stop
+        [[ -f "$(cask_download_progress_file $$)" ]] && echo "file remains" || echo "file cleaned up"
+    '
+    [ "$status" -eq 0 ]
+    assert_matches "250|1000*" "$output"
+    assert_contains "file cleaned up" "$output"
+}
+
+@test "cask_download_watch_start writes nothing when the cask has no resolvable url" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        brew() {
+            if [[ "$1 $2" == "info --cask" ]]; then
+                printf "%s" "{\"casks\":[{}]}"
+            fi
+        }
+
+        cask_download_watch_start "no-url-token" "FakeApp"
+        sleep 1.3
+        [[ -f "$(cask_download_progress_file $$)" ]] && echo "wrote a file" || echo "wrote nothing"
+        cask_download_watch_stop
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "wrote nothing" "$output"
+}
+
+@test "cask_download_watch_stop cleans up even when nothing was ever written" {
+    run run_zsh_snippet '
+        mkdir -p "$CACHE_DIR"
+        cask_download_watch_stop
+        echo "survived"
+        [[ -n "$CASK_DOWNLOAD_WATCH_PID" ]] && echo "pid left set" || echo "pid cleared"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "survived" "$output"
+    assert_contains "pid cleared" "$output"
+}

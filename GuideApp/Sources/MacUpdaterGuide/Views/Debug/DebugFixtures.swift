@@ -199,15 +199,19 @@ enum DebugFixtures {
         phase: String,
         item: String = "",
         index: Int? = nil,
-        total: Int? = nil
+        total: Int? = nil,
+        bytesDone: Int? = nil,
+        bytesTotal: Int? = nil
     ) -> String {
-        let fields = [
+        let fields: [String] = [
             UpdateProgress.formatVersion,
             state,
             phase,
             item,
             index.map(String.init) ?? "",
-            total.map(String.init) ?? ""
+            total.map(String.init) ?? "",
+            bytesDone.map(String.init) ?? "",
+            bytesTotal.map(String.init) ?? ""
         ]
         return fields.joined(separator: "|") + "\n"
     }

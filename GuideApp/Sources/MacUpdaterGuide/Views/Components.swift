@@ -88,8 +88,13 @@ struct FailureBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if headline != nil, !evidence.isEmpty {
+                    // No withAnimation: this banner also renders inside the
+                    // MenuBarExtra(.window) panel, and an animated height
+                    // change there crashes AppKit mid-transition. A plain
+                    // toggle still redraws instantly; it just skips the
+                    // slide.
                     Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { showsEvidence.toggle() }
+                        showsEvidence.toggle()
                     } label: {
                         HStack(spacing: 4) {
                             Image(systemName: "chevron.right")

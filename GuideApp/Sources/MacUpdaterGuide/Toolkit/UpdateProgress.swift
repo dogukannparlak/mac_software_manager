@@ -134,6 +134,15 @@ struct UpdateProgress: Equatable, Sendable {
     var item: String
     var index: Int?
     var total: Int?
+    /// Real byte progress for one cask's download (`cask_download_watch_start`,
+    /// lib/cache.sh) - `nil` whenever the shell has not reported one, which is
+    /// most of the time: a formula, a cask whose download URL or
+    /// Content-Length could not be resolved, or a download that has not
+    /// started writing yet. Distinct from `index`/`total` on purpose: those
+    /// already carry batch position for `brew-upgrade`/`mas-upgrade`, and a
+    /// single-item run has no batch to report.
+    var bytesDone: Int64? = nil
+    var bytesTotal: Int64? = nil
     /// When the line this was read from was last written, straight off the
     /// file's modification date. `ProgressWatch` needs it to tell an entry
     /// *this* run just wrote from one an earlier run left behind - reading a
@@ -228,6 +237,15 @@ struct UpdateProgress: Equatable, Sendable {
         return min(1.0, Double(index) / Double(total))
     }
 
+    /// Real download completion, when the shell has reported both halves.
+    /// Capped below 1.0 for the same reason the simulated per-row fraction
+    /// is (`ToolkitController.beginFractionSimulation`): only the row
+    /// actually resolving may claim "done".
+    var downloadFraction: Double? {
+        guard let bytesDone, let bytesTotal, bytesTotal > 0 else { return nil }
+        return min(0.99, Double(bytesDone) / Double(bytesTotal))
+    }
+
     // MARK: - Reading
 
     static func load() -> UpdateProgress? {
@@ -280,6 +298,8 @@ struct UpdateProgress: Equatable, Sendable {
             item: fields.count > 3 ? fields[3] : "",
             index: fields.count > 4 ? Int(fields[4]) : nil,
             total: fields.count > 5 ? Int(fields[5]) : nil,
+            bytesDone: fields.count > 6 ? Int64(fields[6]) : nil,
+            bytesTotal: fields.count > 7 ? Int64(fields[7]) : nil,
             modified: modified
         )
 

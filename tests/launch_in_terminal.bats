@@ -99,7 +99,7 @@ progress_entry() {
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "v1|failed|terminal-permission|Terminal||" ]
+    [ "${lines[0]}" = "v1|failed|terminal-permission|Terminal||||" ]
 }
 
 @test "an ordinary launch failure records launch-failed in the progress file" {
@@ -110,7 +110,7 @@ progress_entry() {
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "v1|failed|launch-failed|Terminal||" ]
+    [ "${lines[0]}" = "v1|failed|launch-failed|Terminal||||" ]
 }
 
 @test "a successful launch writes nothing to the progress file" {
@@ -136,7 +136,7 @@ progress_entry() {
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "v1|running|brew-upgrade|awscli|3|8" ]
+    [ "${lines[0]}" = "v1|running|brew-upgrade|awscli|3|8||" ]
 }
 
 # The other side of the same rule: an entry no heartbeat has touched in a long
@@ -152,7 +152,7 @@ progress_entry() {
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "${lines[0]}" = "v1|failed|terminal-permission|Terminal||" ]
+    [ "${lines[0]}" = "v1|failed|terminal-permission|Terminal||||" ]
 }
 
 # The regression itself, at the level the caller sees it: GuideApp decides
@@ -162,7 +162,7 @@ progress_entry() {
     run run_dispatch install_app Rectangle live
     [ "$status" -ne 0 ]
     assert_contains "System Settings > Privacy & Security > Automation" "$output"
-    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||" ]
+    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||||" ]
 }
 
 @test "update_app exits non-zero when no terminal opened" {
@@ -170,7 +170,7 @@ progress_entry() {
     run run_dispatch update_app brew awscli awscli 1.0 2.0
     [ "$status" -ne 0 ]
     assert_contains "System Settings > Privacy & Security > Automation" "$output"
-    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||" ]
+    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||||" ]
 }
 
 @test "launch_update exits non-zero when no terminal opened" {
@@ -178,7 +178,7 @@ progress_entry() {
     run run_dispatch launch_update all
     [ "$status" -ne 0 ]
     assert_contains "System Settings > Privacy & Security > Automation" "$output"
-    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||" ]
+    [ "$(progress_entry)" = "v1|failed|terminal-permission|Terminal||||" ]
 }
 
 # ------------------------------------------------------------------------------

@@ -235,7 +235,13 @@ run_mode_single() {
     update_reason=""
     case "$type" in
         "brew"|"cask")
+        # Formulae mostly install from a small pre-built bottle, where a byte
+        # counter would rarely have anything to show; casks are where the
+        # real, often multi-gigabyte downloads are, so only they get a
+        # watcher.
+        [[ "$type" == "cask" ]] && cask_download_watch_start "$id" "$name"
         brew upgrade "$id" || update_rc=$?
+        [[ "$type" == "cask" ]] && cask_download_watch_stop
         (( update_rc == 0 )) || update_reason="command-failed"
         # Exit code alone is not proof: verify the package left the outdated list
         if (( update_rc == 0 )) && brew_is_outdated "$id"; then
@@ -301,8 +307,8 @@ run_mode_single() {
     entry_status="ok"
     (( update_rc == 0 )) || entry_status="fail"
 
-    # Format: timestamp|source|name|old_ver|new_ver|id|status
-    if echo "$timestamp|$type|$name|$old_ver|$new_ver|$id|$entry_status" >> "$HISTORY_FILE"; then
+    # Format: timestamp|source|name|old_ver|new_ver|id|status|reason
+    if echo "$timestamp|$type|$name|$old_ver|$new_ver|$id|$entry_status|$update_reason" >> "$HISTORY_FILE"; then
         trim_history_log
         echo "📝 Added to history log ($entry_status)."
     fi
@@ -657,13 +663,15 @@ run_mode_system() {
 			esac
 			[[ -n "$map_key" && -n "${still_outdated[$map_key]}" ]] && entry_status="fail"
 
+			entry_reason=""
 			if [[ "$entry_status" == "fail" ]]; then
 				((++count_failed))
+				entry_reason="still-outdated"
 				echo "   ❌ $entry_name is still outdated - recording as failed."
 			fi
 
-			# Format: timestamp|source|name|old_ver|new_ver|id|status
-			verified_log+=("$entry|$entry_status")
+			# Format: timestamp|source|name|old_ver|new_ver|id|status|reason
+			verified_log+=("$entry|$entry_status|$entry_reason")
 		done
 
 		mkdir -p "$(dirname "$HISTORY_FILE")"

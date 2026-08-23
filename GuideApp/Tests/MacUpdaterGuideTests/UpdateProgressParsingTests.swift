@@ -13,7 +13,7 @@ final class UpdateProgressParsingTests: XCTestCase {
     /// asserts the shell's `progress_write` produces this same literal
     /// string, so this test and that one are the two halves of one
     /// producer/consumer agreement check.
-    static let canonicalLine = "v1|running|brew-upgrade|awscli|3|8"
+    static let canonicalLine = "v1|running|brew-upgrade|awscli|3|8||"
 
     func testParsesTheCanonicalExampleFromCacheFormatDoc() {
         let progress = UpdateProgress.parse(raw: Self.canonicalLine, modified: Date())
@@ -22,6 +22,42 @@ final class UpdateProgressParsingTests: XCTestCase {
         XCTAssertEqual(progress?.item, "awscli")
         XCTAssertEqual(progress?.index, 3)
         XCTAssertEqual(progress?.total, 8)
+        XCTAssertNil(progress?.bytesDone)
+        XCTAssertNil(progress?.bytesTotal)
+    }
+
+    /// One cask download in progress - `cask_download_watch_start`
+    /// (lib/cache.sh) reporting real bytes on a `single` line.
+    func testParsesRealDownloadBytes() {
+        let progress = UpdateProgress.parse(
+            raw: "v1|running|single|microsoft-word|||721700000|1400000000",
+            modified: Date()
+        )
+        XCTAssertEqual(progress?.bytesDone, 721_700_000)
+        XCTAssertEqual(progress?.bytesTotal, 1_400_000_000)
+        XCTAssertEqual(progress?.downloadFraction ?? 0, 0.5155, accuracy: 0.0001)
+    }
+
+    /// The watcher has seen bytes but the HEAD request never resolved a
+    /// total - no fraction can be claimed without one.
+    func testBytesDoneWithoutATotalYieldsNoFraction() {
+        let progress = UpdateProgress.parse(
+            raw: "v1|running|single|microsoft-word|||721700000|",
+            modified: Date()
+        )
+        XCTAssertEqual(progress?.bytesDone, 721_700_000)
+        XCTAssertNil(progress?.bytesTotal)
+        XCTAssertNil(progress?.downloadFraction)
+    }
+
+    /// Never claims 100% on its own - only the row actually resolving may,
+    /// the same rule the simulated per-row fraction follows.
+    func testDownloadFractionIsCappedBelowOne() {
+        let progress = UpdateProgress.parse(
+            raw: "v1|running|single|microsoft-word|||1400000000|1400000000",
+            modified: Date()
+        )
+        XCTAssertEqual(progress?.downloadFraction ?? 0, 0.99, accuracy: 0.0001)
     }
 
     func testMinimalThreeFieldLineParses() {

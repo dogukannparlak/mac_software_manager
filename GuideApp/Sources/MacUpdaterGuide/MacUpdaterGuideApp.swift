@@ -37,6 +37,12 @@ struct MacUpdaterGuideApp: App {
                     toolkit.reload()
                     toolkit.startScheduler()
                     await inventory.load()
+                    // No cache on disk yet means this app has never actually
+                    // scanned this Mac - run the real thing now instead of
+                    // waiting for the periodic timer or a manual click.
+                    if toolkit.snapshot.lastCheck == nil {
+                        toolkit.refresh(force: true)
+                    }
                     // Last, and only after the cheap local work: this stats a
                     // few files, and a first launch on a Mac that is fully set
                     // up must not wait on it to draw anything.

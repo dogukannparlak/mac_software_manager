@@ -46,7 +46,7 @@ Live status of the update currently running (or the last one that ran), read
 by the app roughly every 700ms while a run is in flight.
 
 ```
-v1|state|phase|item|index|total
+v1|state|phase|item|index|total|bytes_done|bytes_total
 ```
 
 | # | Field | Values | Notes |
@@ -57,10 +57,12 @@ v1|state|phase|item|index|total
 | 4 | item | any string, may be empty | package/app currently being worked on |
 | 5 | index | integer or empty | 1-based position in the current batch; on `complete-with-failures`, how many items failed |
 | 6 | total | integer or empty | size of the current batch; on `complete-with-failures`, how many were attempted |
+| 7 | bytes_done | integer or empty | Real bytes downloaded so far for one cask's download (`cask_download_watch_start`, `lib/cache.sh`) - empty for every phase but `single`, and empty there too until the watcher has actually seen the download's temp file. Distinct from `index`/`total`: those already carry batch position for `brew-upgrade`/`mas-upgrade`, and a single-item run has no batch to report |
+| 8 | bytes_total | integer or empty | The download's total size, HEAD-resolved from the cask's URL once, at the start of the watch - empty whenever that request failed or returned no `Content-Length` (formulae are never given a watcher at all: they mostly install from a small pre-built bottle, where a byte counter would rarely have anything to show) |
 
 Canonical example (used verbatim by both test suites):
 ```
-v1|running|brew-upgrade|awscli|3|8
+v1|running|brew-upgrade|awscli|3|8||
 ```
 
 - A run that reaches the end writes its last entry through

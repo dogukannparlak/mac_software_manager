@@ -3,9 +3,11 @@ import Foundation
 /// One recorded update attempt.
 ///
 /// The log is written by the shell toolkit as
-/// `timestamp|source|name|old|new|id|status`. Records written before status
-/// tracking existed have six fields or fewer and are treated as successes,
-/// which is what they were assumed to be at the time.
+/// `timestamp|source|name|old|new|id|status|reason`. Records written before
+/// status tracking existed have six fields or fewer and are treated as
+/// successes, which is what they were assumed to be at the time; records
+/// written before the reason field existed have exactly seven and are read
+/// with `reason == .none`.
 struct HistoryEntry: Identifiable, Hashable, Sendable {
     let id: String
     let date: Date
@@ -15,11 +17,23 @@ struct HistoryEntry: Identifiable, Hashable, Sendable {
     let newVersion: String
     let identifier: String
     let succeeded: Bool
+    /// Whether this row is a "Move to Homebrew" run rather than a regular
+    /// update - `lib/migrate.sh` logs those as source `migrate`, which reads
+    /// back as `.cask` (the closest fit: it is a cask afterwards) but is
+    /// tagged here so the row can say so and so `link` can use `identifier`
+    /// (the cask token) instead of `name` (the app's display name).
+    let isMigration: Bool
+    /// Reuses `ItemRunResult.Reason` - the shell writes the exact same
+    /// tokens into both the per-run result file and this log line.
+    let reason: ItemRunResult.Reason
 
     var link: URL? {
         switch source {
         case .formula: return URL(string: "https://formulae.brew.sh/formula/\(name)")
-        case .cask: return URL(string: "https://formulae.brew.sh/cask/\(name)")
+        case .cask:
+            let token = isMigration ? identifier : name
+            guard !token.isEmpty else { return nil }
+            return URL(string: "https://formulae.brew.sh/cask/\(token)")
         case .appStore, .manual:
             guard !identifier.isEmpty else { return nil }
             return URL(string: "https://apps.apple.com/app/id\(identifier)")
@@ -48,6 +62,7 @@ struct UpdateHistory: Sendable {
             guard !name.isEmpty else { continue }
 
             let status = fields.count >= 7 ? fields[6] : "ok"
+            let reasonToken = fields.count >= 8 ? fields[7] : ""
 
             result.append(
                 HistoryEntry(
@@ -58,7 +73,9 @@ struct UpdateHistory: Sendable {
                     oldVersion: fields[3],
                     newVersion: fields[4],
                     identifier: fields.count >= 6 ? fields[5] : "",
-                    succeeded: status != "fail"
+                    succeeded: status != "fail",
+                    isMigration: fields[1] == "migrate",
+                    reason: ItemRunResult.Reason(rawValue: reasonToken) ?? .none
                 )
             )
         }
@@ -68,7 +85,7 @@ struct UpdateHistory: Sendable {
 
     private static func source(from raw: String) -> UpdateSource {
         switch raw {
-        case "cask": return .cask
+        case "cask", "migrate": return .cask
         case "mas": return .appStore
         case "sparkle": return .sparkle
         case "github": return .github

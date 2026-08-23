@@ -154,6 +154,7 @@ PROGRESS_FORMAT_VERSION="v1"
 # entry dead (UpdateProgress.staleAfterQuick, 15 minutes).
 PROGRESS_HEARTBEAT_INTERVAL=${PROGRESS_HEARTBEAT_INTERVAL:-15}
 typeset -g PROGRESS_HEARTBEAT_PID=""
+typeset -g CASK_DOWNLOAD_WATCH_PID=""
 
 # Keeps the current "running" entry *fresh* for as long as this run is alive.
 #
@@ -229,8 +230,14 @@ progress_write() {
     [[ -n "$GUIDEAPP_NO_SHARED_PROGRESS" ]] && return 0
 
     local state="$1" phase="$2" item="${3:-}" index="${4:-}" total="${5:-}"
+    # Real byte progress for one cask download (cask_download_watch_start,
+    # below) - empty for every other call site, which is the same "nothing to
+    # show" every other optional field here already means. Appended rather
+    # than reusing index/total: those already carry batch position for
+    # brew-upgrade/mas-upgrade, and a single-item run has no batch to report.
+    local bytes_done="${6:-}" bytes_total="${7:-}"
     local tmp="$PROGRESS_FILE.$$"
-    print -r -- "${PROGRESS_FORMAT_VERSION}|${state}|${phase}|${item}|${index}|${total}" > "$tmp" 2>/dev/null || return 0
+    print -r -- "${PROGRESS_FORMAT_VERSION}|${state}|${phase}|${item}|${index}|${total}|${bytes_done}|${bytes_total}" > "$tmp" 2>/dev/null || return 0
     mv -f "$tmp" "$PROGRESS_FILE" 2>/dev/null || rm -f "$tmp"
 
     # A run is "alive" from its first running entry until it records an
@@ -243,6 +250,94 @@ progress_write() {
     else
         progress_heartbeat_stop
     fi
+}
+
+# Where the watcher started for the run identified by pid $1 (normally $$,
+# the calling run_mode_single's own PID) reports what it has seen so far:
+# "bytes_done|bytes_total" once a total is known, "bytes_done|" before that,
+# and no file at all before a download has started. One file per PID rather
+# than a shared name, so several concurrent headless single-item runs
+# (Settings -> "Aynı anda güncelleme sayısı") never overwrite each other's
+# number - GuideApp already tracks each of those by its own Process handle
+# and knows the PID to read back (a headless run skips the shared progress
+# file entirely, GUIDEAPP_NO_SHARED_PROGRESS above, so this is the only
+# channel it has for this).
+cask_download_progress_file() {
+    print -r -- "$CACHE_DIR/download_progress.$1"
+}
+
+# Real byte progress for one cask's download - not a parse of Homebrew's own
+# progress bar (a tty animation that prints nothing at all once stdout is a
+# pipe, which is exactly what a headless single-item run redirects it to).
+# What is real regardless of tty is the file curl is writing to:
+# Homebrew always stages a download at "<final cache path>.incomplete" and
+# renames it into place on completion
+# (download_strategy/abstract_file_download_strategy.rb), so its size on disk
+# is genuine progress no matter who is watching.
+#
+# Best-effort end to end: the cask's `url` field can be missing, the HEAD
+# request can time out, the server can omit Content-Length - none of that is
+# an error, it just means no total is ever known, and the two readers of this
+# (progress_write below, GuideApp's own poll of cask_download_progress_file)
+# already treat "no bytes yet" as "nothing to show", the same as any other
+# run that never reports one.
+#
+# Call right before 'brew upgrade'/'brew install --cask' for one cask token,
+# call cask_download_watch_stop right after - scoped to that one command, not
+# to the whole run.
+cask_download_watch_start() {
+    local token="$1" name="$2" owner=$$
+    local progress_file
+    progress_file="$(cask_download_progress_file "$owner")"
+    rm -f "$progress_file" 2>/dev/null
+
+    (
+        local json_file cached incomplete url total="" bytes
+        json_file="$(mktemp "${TMPDIR:-/tmp}/msu_dlsize.XXXXXX")" || exit 0
+        trap 'rm -f "$json_file"' EXIT
+
+        brew info --cask --json=v2 "$token" > "$json_file" 2>/dev/null || exit 0
+        url=$(migration_json_field "$json_file" "casks.0.url")
+        cached=$(brew --cache --cask "$token" 2>/dev/null) || exit 0
+        incomplete="${cached}.incomplete"
+
+        # One HEAD request, not one per tick: the total does not change while
+        # this download runs, and a redirect chain (GitHub releases, most
+        # cask URLs) makes this slow enough that doing it every second would
+        # be its own kind of bug. curl -L follows it; the LAST
+        # Content-Length is the one for the file actually being downloaded,
+        # not an intermediate redirect response.
+        if [[ -n "$url" ]]; then
+            total=$(curl -sIL --max-time 6 "$url" 2>/dev/null \
+                | grep -i '^content-length:' | tail -n 1 | tr -dc '0-9')
+        fi
+
+        while kill -0 "$owner" 2>/dev/null; do
+            if [[ -f "$incomplete" ]]; then
+                bytes=$(stat -f%z "$incomplete" 2>/dev/null) || bytes=""
+                if [[ -n "$bytes" ]]; then
+                    print -r -- "${bytes}|${total}" > "$progress_file.tmp" 2>/dev/null \
+                        && mv -f "$progress_file.tmp" "$progress_file" 2>/dev/null
+                    progress_write "running" "single" "$name" "" "" "$bytes" "$total"
+                fi
+            elif [[ -f "$cached" ]]; then
+                # The download finished (or this version was already cached)
+                # and Homebrew has moved on to installing it - nothing left
+                # to watch.
+                break
+            fi
+            sleep 1
+        done
+    ) >/dev/null 2>&1 &!
+    CASK_DOWNLOAD_WATCH_PID=$!
+}
+
+cask_download_watch_stop() {
+    [[ -n "$CASK_DOWNLOAD_WATCH_PID" ]] || return 0
+    kill "$CASK_DOWNLOAD_WATCH_PID" 2>/dev/null
+    CASK_DOWNLOAD_WATCH_PID=""
+    rm -f "$(cask_download_progress_file "$$")" 2>/dev/null
+    return 0
 }
 
 # Is some other run using the progress file right now?

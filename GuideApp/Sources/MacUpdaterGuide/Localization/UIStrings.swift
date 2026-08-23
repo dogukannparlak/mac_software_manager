@@ -321,6 +321,15 @@ extension UIStrings {
     static let historySucceededFormat = Localized("%d updated", "%d güncellendi")
     static let historyFailedFormat = Localized("%d failed", "%d başarısız")
     static let failedBadge = Localized("FAILED", "BAŞARISIZ")
+    static let migratedBadge = Localized("MOVED TO HOMEBREW", "HOMEBREW'E TAŞINDI")
+    /// `ItemRunResult.Reason.commandFailed` has no `label` of its own - that
+    /// text is filled in by the live failure banner from the run's stderr.
+    /// The history log keeps no stderr, so the most common failure token
+    /// falls back to this generic line there instead.
+    static let historyCommandFailed = Localized(
+        "The update command exited with an error.",
+        "Güncelleme komutu hata ile sonuçlandı."
+    )
     static let historyEmpty = Localized("No updates recorded yet", "Henüz kayıtlı güncelleme yok")
     static let historyEmptyDetail = Localized(
         "Once you install updates they are listed here, including the ones that failed.",

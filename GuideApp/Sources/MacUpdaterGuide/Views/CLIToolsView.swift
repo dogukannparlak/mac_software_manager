@@ -70,6 +70,16 @@ struct CLIToolsView: View {
         .navigationTitle(UIStrings.navCLITools[loc.language])
         .searchable(text: $searchText, prompt: Text(UIStrings.searchCLITools[loc.language]))
         .task(id: toolkit.snapshot.lastCheck) { await inventory.load() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    toolkit.refresh(force: true)
+                } label: {
+                    Label(UIStrings.refreshNow[loc.language], systemImage: "arrow.clockwise")
+                }
+                .disabled(toolkit.isRefreshing)
+            }
+        }
     }
 
     // MARK: - Header

@@ -58,6 +58,17 @@ enum ToolkitPaths {
         cacheDirectory.appending(path: name)
     }
 
+    /// Where a headless single-item run's cask download watcher
+    /// (`cask_download_watch_start`, lib/cache.sh) reports real byte
+    /// progress for the run with this PID. That run skips the shared
+    /// progress file entirely (`GUIDEAPP_NO_SHARED_PROGRESS`), so this is
+    /// the only channel it has - one file per PID rather than a shared name,
+    /// so several concurrent single-item runs never overwrite each other's
+    /// number.
+    static func downloadProgressFile(pid: Int32) -> URL {
+        cacheFile("download_progress.\(pid)")
+    }
+
     static var isInstalled: Bool {
         FileManager.default.fileExists(atPath: supportDirectory.path(percentEncoded: false))
     }

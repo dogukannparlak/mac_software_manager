@@ -853,8 +853,8 @@ migration_report() {
 
     if [[ "$mode" != "dry" ]]; then
         timestamp=$(date +%s)
-        # Format: timestamp|source|name|old_ver|new_ver|id|status
-        if echo "$timestamp|migrate|$app_name|${old_ver:-?}|${new_ver:-?}|$token|$state" >> "$HISTORY_FILE"; then
+        # Format: timestamp|source|name|old_ver|new_ver|id|status|reason
+        if echo "$timestamp|migrate|$app_name|${old_ver:-?}|${new_ver:-?}|$token|$state|$reason" >> "$HISTORY_FILE"; then
             trim_history_log
             echo "📝 Added to history log ($state)."
         fi

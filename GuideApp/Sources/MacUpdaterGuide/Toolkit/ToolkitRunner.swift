@@ -276,13 +276,16 @@ final class ToolkitController {
     /// needs the item's data to render while its "Updated" badge is showing.
     var recentItemsByID: [String: UpdateItem] = [:]
 
-    /// Simulated 0...1 completion for a row's own progress bar, per
-    /// `UpdateItem.id`. Neither `brew` nor `mas` expose a real per-package
-    /// percentage the way a single download does, so this eases toward ~92%
-    /// over a plausible duration instead - a smooth, one-directional fill
-    /// with a number on it, rather than the bouncing indeterminate
-    /// animation `ProgressView()` draws with no `value` at all. It only
-    /// ever reaches 100% when the row actually resolves.
+    /// 0...1 completion for a row's own progress bar, per `UpdateItem.id`.
+    /// Real byte progress when a cask download watcher
+    /// (`cask_download_watch_start`, lib/cache.sh) has reported one -
+    /// neither `brew` nor `mas` otherwise expose a real per-package
+    /// percentage, and formulae/mas rows never get one at all - so this
+    /// eases toward ~92% over a plausible duration instead as the fallback:
+    /// a smooth, one-directional fill with a number on it, rather than the
+    /// bouncing indeterminate animation `ProgressView()` draws with no
+    /// `value` at all. It only ever reaches 100% when the row actually
+    /// resolves.
     var itemFractions: [String: Double] = [:]
     var fractionTasks: [String: Task<Void, Never>] = [:]
 

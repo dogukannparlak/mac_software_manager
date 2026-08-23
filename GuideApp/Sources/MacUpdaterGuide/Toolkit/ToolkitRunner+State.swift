@@ -170,6 +170,17 @@ extension ToolkitController {
                             state: .failed, phase: .notStarted, item: "", index: nil, total: nil
                         )
                     }
+
+                    // A terminal-mode single-item run's own row has no
+                    // Process of ours to poll (see beginFractionSimulation) -
+                    // this shared file, which the cask download watcher also
+                    // writes real bytes into for exactly this run, is the
+                    // only account of it this app has.
+                    if let active = self.activeSingleItem,
+                       latest?.phase == .single,
+                       let fraction = latest?.downloadFraction {
+                        self.itemFractions[active.id] = fraction
+                    }
                 }
 
                 switch step {

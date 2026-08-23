@@ -66,6 +66,16 @@ struct InstalledAppsView: View {
         .navigationTitle(UIStrings.navInstalled[loc.language])
         .searchable(text: $searchText, prompt: Text(UIStrings.searchApps[loc.language]))
         .task(id: toolkit.snapshot.lastCheck) { await reload() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    toolkit.refresh(force: true)
+                } label: {
+                    Label(UIStrings.refreshNow[loc.language], systemImage: "arrow.clockwise")
+                }
+                .disabled(toolkit.isRefreshing)
+            }
+        }
     }
 
     private func reload() async {

@@ -278,9 +278,11 @@ extension ToolkitController {
         scheduleStatusClear(for: active.id)
     }
 
-    /// Starts (or restarts) the simulated fill for one row. `0` immediately,
-    /// then eased upward on a timer - see `itemFractions` for why this is
-    /// simulated rather than real.
+    /// Starts (or restarts) the fill for one row. `0` immediately, then
+    /// either the cask download watcher's real byte count
+    /// (`cask_download_watch_start`, lib/cache.sh) once it has one, or - for
+    /// everything else, and until then - eased upward on a timer. See
+    /// `itemFractions` for why the fallback is simulated rather than real.
     private func beginFractionSimulation(for id: String) {
         fractionTasks[id]?.cancel()
         itemFractions[id] = 0
@@ -288,15 +290,37 @@ extension ToolkitController {
         fractionTasks[id] = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
-                guard !Task.isCancelled else { return }
-                let elapsed = Date().timeIntervalSince(start)
-                // Approaches 92%, slowing down as it gets there - never
-                // claims "done" on its own; only `endFractionSimulation`
-                // (called once the row's real outcome is known) does that.
-                let fraction = 0.92 * (1 - exp(-elapsed / 6))
-                await MainActor.run { self?.itemFractions[id] = fraction }
+                guard !Task.isCancelled, let self else { return }
+
+                let pid = await MainActor.run { self.activeProcesses[id]?.processIdentifier }
+                let fraction: Double
+                if let pid, let real = Self.realDownloadFraction(pid: pid) {
+                    fraction = real
+                } else {
+                    // Approaches 92%, slowing down as it gets there - never
+                    // claims "done" on its own; only `endFractionSimulation`
+                    // (called once the row's real outcome is known) does that.
+                    let elapsed = Date().timeIntervalSince(start)
+                    fraction = 0.92 * (1 - exp(-elapsed / 6))
+                }
+                await MainActor.run { self.itemFractions[id] = fraction }
             }
         }
+    }
+
+    /// Real byte progress for a headless run's own cask download, read
+    /// straight off the small per-PID file the shell watcher writes - `nil`
+    /// whenever it has not written one (a formula, no Content-Length, the
+    /// download has not started), which keeps the simulated ease-curve above
+    /// as the fallback it always was.
+    private static func realDownloadFraction(pid: Int32) -> Double? {
+        guard let raw = try? String(contentsOf: ToolkitPaths.downloadProgressFile(pid: pid), encoding: .utf8) else {
+            return nil
+        }
+        let fields = raw.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "|")
+        guard let done = Double(fields.first ?? ""), done > 0,
+              fields.count > 1, let total = Double(fields[1]), total > 0 else { return nil }
+        return min(0.99, done / total)
     }
 
     func endFractionSimulation(for id: String) {

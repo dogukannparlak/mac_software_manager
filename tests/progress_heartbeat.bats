@@ -35,7 +35,7 @@ setup() {
     [ "${lines[0]}" = "re-stamped" ]
     # Only the modification time moves - the entry itself is untouched, so
     # this can never race with a real progress_write.
-    [ "${lines[1]}" = "v1|running|mas-upgrade|||" ]
+    [ "${lines[1]}" = "v1|running|mas-upgrade|||||" ]
 }
 
 @test "the stamper stops as soon as the run records an ending" {
@@ -52,7 +52,7 @@ setup() {
     '
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "left alone" ]
-    [ "${lines[1]}" = "v1|done|complete|||" ]
+    [ "${lines[1]}" = "v1|done|complete|||||" ]
 }
 
 @test "progress_finalize stops the stamper" {
@@ -67,7 +67,7 @@ setup() {
     '
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "left alone" ]
-    [ "${lines[1]}" = "v1|failed|brew-upgrade|awscli|3|8" ]
+    [ "${lines[1]}" = "v1|failed|brew-upgrade|awscli|3|8||" ]
 }
 
 @test "the stamper does not outlive the run it belongs to" {

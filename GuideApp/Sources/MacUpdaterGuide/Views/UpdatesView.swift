@@ -435,8 +435,9 @@ private struct UpdateDetailRow: View {
             // Directly under this row, not the whole page - the App Store way
             // of showing "this one is the one currently installing". A
             // determinate fill with a percentage, not the bouncing
-            // indeterminate animation - see `itemFractions` for why it is
-            // simulated rather than a real measurement.
+            // indeterminate animation - real for a cask's own download when
+            // the shell watcher has one to report, simulated otherwise; see
+            // `itemFractions`.
             if rowStatus == .updating, let fraction = toolkit.itemFractions[item.id] {
                 HStack(spacing: 8) {
                     ProgressView(value: fraction)

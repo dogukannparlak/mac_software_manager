@@ -7,7 +7,7 @@ load "test_helper"
 # to the shell writer or the Swift reader ever drifts from CACHE_FORMAT.md,
 # whichever side is now wrong fails its own test, regardless of which side
 # changed.
-CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
+CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8||"
 
 @test "progress_write produces the exact canonical example from CACHE_FORMAT.md" {
     run run_zsh_snippet '
@@ -43,7 +43,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|done|complete|||" ]
+    [ "$output" = "v1|done|complete|||||" ]
 }
 
 @test "progress_write_completion records a run with failed items as failed, not done" {
@@ -55,7 +55,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|failed|complete-with-failures||5|12" ]
+    [ "$output" = "v1|failed|complete-with-failures||5|12||" ]
 }
 
 @test "progress_write_completion defaults to a clean completion when called with no counts" {
@@ -64,7 +64,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|done|complete|||" ]
+    [ "$output" = "v1|done|complete|||||" ]
 }
 
 @test "progress_finalize leaves a completion with failures alone" {
@@ -76,7 +76,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|failed|complete-with-failures||5|12" ]
+    [ "$output" = "v1|failed|complete-with-failures||5|12||" ]
 }
 
 @test "progress_finalize recognises its own versioned output and promotes running to done" {
@@ -86,7 +86,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|done|complete|||" ]
+    [ "$output" = "v1|done|complete|||||" ]
 }
 
 @test "progress_finalize records a non-zero exit status as failed, not done" {
@@ -98,7 +98,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|failed|brew-upgrade|awscli|3|8" ]
+    [ "$output" = "v1|failed|brew-upgrade|awscli|3|8||" ]
 }
 
 @test "progress_finalize propagates the exit status a real EXIT trap catches" {
@@ -112,7 +112,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         )
         cat "$PROGRESS_FILE"
     '
-    [ "$output" = "v1|failed|install-app|Rectangle||" ]
+    [ "$output" = "v1|failed|install-app|Rectangle||||" ]
 }
 
 @test "progress_finalize does nothing to a state that is already done" {
@@ -122,7 +122,7 @@ CANONICAL_LINE="v1|running|brew-upgrade|awscli|3|8"
         cat "$PROGRESS_FILE"
     '
     [ "$status" -eq 0 ]
-    [ "$output" = "v1|done|complete|||" ]
+    [ "$output" = "v1|done|complete|||||" ]
 }
 
 @test "progress_finalize leaves an unversioned (pre-marker) line alone rather than misreading it" {
