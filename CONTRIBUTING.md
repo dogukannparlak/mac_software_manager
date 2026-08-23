@@ -90,6 +90,26 @@ asserts an exact count of two there, so a half-updated project file cannot look
 in sync. If you move or reword those badges, update the matching `apply` call in
 the same commit or the CI version step fails.
 
+## Building a release
+
+```bash
+./tools/build_release.sh          # dist/ gets the .dmg, the .zip and SHA256SUMS.txt
+./tools/build_release.sh --clean  # empty dist/ first
+```
+
+It refuses to build a tree whose version strings or `SHA256SUMS` are out of
+date (the two `--check` runs above), builds Release for `arm64 x86_64` and
+fails if `lipo` says the result is not universal, then packages the same `.app`
+twice: a `.dmg` with an `/Applications` symlink to drag onto, and a `.zip` for
+the smaller download. `ditto` does both, because `zip` breaks the code
+signature and an app with a broken signature will not open.
+
+The signature is ad-hoc (`CODE_SIGN_IDENTITY = "-"`), not a Developer ID, which
+is why the README tells people to right-click → Open the first time.
+
+`dist/` is gitignored. Its contents are uploaded to the GitHub release, never
+committed.
+
 ## CI
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) runs on pushes to `main`
