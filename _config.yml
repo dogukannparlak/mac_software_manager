@@ -1,5 +1,5 @@
 title: Mac Software Manager
-description: Free, open-source replacement for MacUpdater (CLI + SwiftBar)
+description: Free, open-source replacement for MacUpdater - a native macOS app over a zsh + Homebrew engine
 theme: jekyll-theme-slate
 plugins:
   - jekyll-seo-tag

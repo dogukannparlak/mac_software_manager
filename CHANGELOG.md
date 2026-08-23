@@ -1,0 +1,211 @@
+# Changelog
+
+All notable changes to this project are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+Nothing yet.
+
+## [1.5.0] - 2026-08-23
+
+The release that turned a SwiftBar plugin into a two-layer toolkit: a zsh
+engine split across `lib/*.sh`, and a native SwiftUI app that reads its cache
+and drives it. SwiftBar is no longer required.
+
+### Added
+
+- **Native companion app** (`GuideApp/`) with its own menu bar item, update
+  list, installed-app inventory, history and settings, bilingual in English and
+  Turkish (`650306a`, `49fd1fb`, `79ff7da`).
+- **Move to Homebrew page** under Settings: finds hand-installed apps a
+  Homebrew cask could manage, states how sure each pairing is and what moving
+  would do, and hands them over in place (`a477259`, `5259c83`, `d572086`).
+- **Hidden Debug page** for driving every screen, state and engine output by
+  hand without waiting on brew, mas or the network. It injects fixtures by
+  writing the same files the app normally reads, with a sidecar backup contract
+  so a crash mid-injection is still recoverable (`4b6a5c5`, `9ffc26d`,
+  `0ed7a2a`, `24d120c`).
+- **`--local` flag for `setup_mac.sh`**, which installs the checkout it was run
+  from instead of downloading and verifying the published copy over your
+  unpushed changes (`8b74ceb`).
+- **Single-item run results** (`results/`): a run files its own verdict, so a
+  row is resolved by what the run reported rather than by a reader re-reading
+  the outdated list and guessing (`b68cb05`, `6dc983d`, `3a0266b`).
+- **CLI Tools as its own sidebar page**, with a category taxonomy built from
+  `brew leaves` and `brew desc` (`db848cf`, `cbdf466`, `52a5a18`, `e05ef67`).
+- **Concurrent single-item updates** with per-row status and a cancellable bulk
+  run, plus the concurrency setting and cancel control in the UI (`22fe95f`,
+  `ca87cdc`, `8e19725`, `3192266`).
+- **Engine library** `lib/*.sh`: the monolithic plugin became a bootstrap and
+  dispatcher that sources its functions at runtime (`4c17107`).
+- **Verified self-update tooling**: `VERSION` as the single source of truth,
+  `tools/sync_version.sh` and `tools/generate_checksums.sh` (`ceb008a`), later
+  extended to sync the Xcode project's `MARKETING_VERSION` (`4424da7`).
+- **CI**: shell syntax, version-sync and checksum checks (`b26a15b`), a
+  bats-core suite for the engine (`6f3056e`), a SwiftLint job (`50e0841`,
+  `b97184c`), runs on feature and fix branches (`be3b0ac`), and a localization
+  audit (`facec02`).
+- **Native notifications** routed through `UNUserNotificationCenter` via a
+  file-based queue the engine drops events into (`2bb1bf4`).
+- **Uninstaller coverage for the app**: bundle, login item and preferences
+  (`5cb04ed`).
+- A **real bundle identifier** for the app, and release artifacts added to
+  `.gitignore` (`35dcc4b`).
+
+### Changed
+
+- Project renamed to **Mac Software Manager** (`6d28afb`).
+- The update engine was rebuilt around a cache: the menu render never shells out
+  to brew, mas or curl (`7dbcb20`).
+- The installer now verifies its Homebrew downloads, sets up the Codeberg
+  mirror and installs `lib/` (`ae7952d`, `2439a1a`).
+- A single update refreshes only that item's cache entries, not all of them
+  (`22851e3`).
+- Self-update detection scans one level of `/Applications` subfolders
+  (`27a4cb0`).
+- `ToolkitController` and `GuideContent` were split across files by
+  responsibility (`8f7e89f`, `46ad1ba`).
+- SwiftLint moved off advisory: it now blocks on errors (`46ad1ba`), after the
+  auto-fixable violations were cleared (`da45375`).
+
+### Fixed
+
+- A failed run is recorded as failed instead of a green tick, and a run with
+  failed items no longer reports as finished (`15ab929`, `711cf22`).
+- An unreadable progress state no longer reads as success (`0505f38`).
+- A quiet run is no longer read as dead, nor a dead one as running (`a652200`),
+  and the progress watch no longer fails a run that has not started
+  (`e00cef6`).
+- A terminal that never opened is reported instead of exiting `0` over it
+  (`ca3f5ec`), and the About dialog no longer needs an Automation grant the
+  user never gave (`55d2258`).
+- A missing SwiftBar no longer drowns out the real error (`e13afb4`).
+- Every `mas` call is behind a timeout, with the query timeout separated from
+  the download timeout (`abbe9c0`, `aa99dab`).
+- A found App Store app no longer reads as missing (`cd37930`).
+- One unrefreshable cache entry no longer kills the whole run (`cf5ff3b`).
+- Cask migration install and uninstall failures are surfaced rather than
+  silenced (`29f218b`, `9aefa29`, `493420b`).
+- `uninstall.sh` no longer crashes when no SwiftBar plugin scripts remain
+  (`557ea01`).
+- A run's stderr is read while it runs, not once it is over (`f25b0d4`).
+- Premature exit in the brew update retry loop (`0bd0384`).
+
+## [1.4.3] - 2026-03-24
+
+### Changed
+
+- Version bump and comment cleanup (`34f31fd`, `3d32c8e`).
+
+## [1.4.2] - 2026-03-23
+
+### Added
+
+- Retry logic for `brew update`, with improved App Store app handling
+  (`3991f98`).
+- Final Cut Pro and Logic Pro App Store IDs (`371ef3a`).
+
+### Fixed
+
+- Opening the About dialog no longer launches Terminal (`f769a48`).
+- Running an update no longer opens multiple terminal windows (`7d97493`,
+  `b3127dc`), and Ghostty no longer starts a second instance (`e3ab3b0`).
+- Homebrew formula versions are captured in the update history (`019be11`).
+- Ignored apps detection and history logging (`2f94e3b`, `c3d9f31`).
+- awk record variables mistakenly replaced during a path refactor (`b6f3301`).
+
+### Changed
+
+- Migrated to `$SCRIPT_FILE` with tighter shell quoting (`6ebcc62`).
+- Hybrid SwiftBar autostart toggle (`37533be`).
+
+## [1.4.0] - 2026-02-16
+
+### Added
+
+- **Update channel switching** between stable and beta (`a53f83b`).
+- **App Store toggle** in both setup and the SwiftBar menu (`0337b32`).
+- **Per-app ignore/update actions** with persistent storage (`2dbe11c`), and
+  ignored apps surfaced in the statistics submenu (`eb331a7`).
+- Direct Mac App Store links by app ID (`f7ebfe6`).
+
+### Changed
+
+- Sourced settings replaced with strict key parsing; validation warnings moved
+  to a submenu (`af51bf1`).
+- Ignore filtering optimized and the security posture hardened (`3bb588f`).
+- UI/UX refinements (`06c2048`).
+
+### Fixed
+
+- Ignored casks are excluded from the bulk `brew upgrade` (`f49f6cb`), and
+  ignored App Store apps from bulk updates (`c7fc76a`).
+- Ghost app updates are gated by `MAS_ENABLED` (`4dc4236`).
+- `mas upgrade` is used for a single app during a full update, avoiding the
+  "already installed" warning (`48dacd9`).
+- Cask version display strips commit hashes (`a2603af`).
+- The `mas` Spotlight auto-indexing warning is suppressed, and the app name is
+  shown instead of the ID in terminal output (`8a2ccde`).
+
+## [1.3.8] - 2026-02-04
+
+### Changed
+
+- `mas` parsing overhauled and `brew` output streamed (`338919d`).
+
+## [1.3.7] - 2026-02-04
+
+### Fixed
+
+- `mas outdated` parsing, corrupted history display, and a zsh pattern error
+  (`ee3039a`).
+
+## [1.3.6] - 2026-02-01
+
+### Added
+
+- Auto-migration for renamed casks (`9fef3b8`).
+- Detailed update logging with a date-grouped history view (`f94c9f9`).
+
+### Fixed
+
+- Silent script exit caused by zsh arithmetic evaluation (`bd12583`).
+- Statistics counting (`9fef3b8`).
+
+## [1.3.4] - 2026-01-30
+
+### Added
+
+- Granular update modes — system versus plugin — with UI improvements
+  (`150183e`).
+- Creator Studio support, and a more reliable version check (`e251910`).
+
+## [1.3.2] - 2026-01-28
+
+### Added
+
+- **Terminal app selection** (iTerm2, Warp, Alacritty) in setup and preferences
+  (`3d13707`).
+- SwiftBar autostart via Login Items (`0041cae`), and launching SwiftBar when
+  it is not already running (`39c98fa`).
+- A custom Quit button in the plugin menu (`85d8c8f`).
+- Intelligent sudo permission detection for app migration (`b233c0c`).
+- Local app version scanning (`be0dbe1`), with a progress bar during the setup
+  scan (`88c6996`).
+
+### Fixed
+
+- Cask detection using token variations and smart prefix validation
+  (`8c9246b`).
+- App Store update counting when `mas` output carries leading whitespace
+  (`61b93a9`, `6304930`).
+- Script termination during app migration caused by osascript and brew failures
+  (`11ecfca`).
+- A `defaults` fallback for local app version scanning (`df97816`).
+
+## [1.3.0] - 2026-01-22
+
+Earliest release covered by this changelog.

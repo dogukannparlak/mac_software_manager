@@ -9,9 +9,13 @@ this document in the same change** — nothing else will catch a mismatch for
 you.
 
 One reader is also a writer: GuideApp's Debug page (`Views/Debug/`, hidden
-unless enabled) can write fixtures in every format below to produce UI states
-without running brew or mas. It backs up whatever it displaces and its
-generators are round-tripped against the real parsers in
+unless enabled) can write fixtures to produce UI states without running brew or
+mas. It covers `brew_outdated`, `mas_outdated`, `manual_updates`,
+`app_updates`, `progress`, the result records, the notification queue and
+`engine` - not every format here (`migration_candidates`, `brew_status`,
+`cask_homepages` and `github_homepages` have no generator; the migration panel
+reads whatever the last real scan left). The page backs up whatever it
+displaces, and its generators are round-tripped against the real parsers in
 `DebugFixturesTests.swift` - but it is still a second writer, so a format
 change has to reach `DebugFixtures.swift` along with everything else.
 
@@ -79,9 +83,14 @@ v1|running|brew-upgrade|awscli|3|8
 - Readers must therefore treat a `running` entry as dead once it is older
   than `UpdateProgress.staleAfter(for:)` - 15 minutes for the phases that
   write as they step through work (`starting`, `brew-update`, `analyze`,
-  `cleanup`, `verify`), 2h15m for the ones that wait on a single download or
-  build (`brew-upgrade`, `mas-upgrade`, `install-app`, `single`, and any
-  phase the reader does not recognize). The longer window only ever comes
+  `cleanup`, `verify`, `scan-migration`, `migrate`), 2h15m for the ones that
+  wait on a single download or build (`brew-upgrade`, `mas-upgrade`,
+  `install-app`, `single`, and any phase the reader does not recognize). Both
+  migration phases take the short window deliberately: the scan steps from app
+  to app and a migration is one `brew install --cask --adopt` that Homebrew
+  reports on, so neither sits silent on a long download. Before they were
+  named they fell through to `unknown` and inherited the 2h15m window, which
+  left a dead scan looking live for hours. The longer window only ever comes
   into play for a toolkit installed before the heartbeat existed; with it, a
   dead run is caught within the short one whatever phase it died in. This is
   not cosmetic: GuideApp also holds its per-item update queue behind any
@@ -310,11 +319,11 @@ independent shell-side consumers of the raw field positions in addition to
 the writer, so adding a version field means updating all of the following in
 lockstep, not just the writer:
 
-- Writer: `brew_outdated_normalized()` (~line 531)
-- `brew_outdated_tokens()` (~line 591) - `${${(s:|:)line}[2]}`
-- The "run all" update flow (~line 2884-2890) - `outdated_fields[1..5]`
-- The menu-render filtering pass (~line 3148-3150) - `entry_fields[1..5]`
-- The menu-render display pass (~line 3400-3403) - `entry_fields[1..4]`
+- Writer: `brew_outdated_normalized()` (`lib/updaters.sh`)
+- `brew_outdated_tokens()` (`lib/updaters.sh`) - `${${(s:|:)line}[2]}`
+- The system update flow (`run_mode_system`, `lib/run_modes.sh`) - `outdated_fields[1..5]`
+- The menu-render filtering pass (`render_menu`, `lib/menu.sh`) - `entry_fields[1..5]`
+- The menu-render display pass (`lib/menu.sh`, the monitored-items submenu) - `entry_fields[1..4]`
 - Swift reader: `UpdateSnapshot.homebrewItems()` in `UpdateSnapshot.swift`
 
 ### `brew_outdated`
@@ -327,7 +336,7 @@ formula has multiple versions installed; `pinned` is `0`/`1`. Example:
 ```
 cask|alt-tab|11.4.3|11.4.4|0
 ```
-- Writer: `brew_outdated_normalized()`, `update_system.1h.sh` (~line 531).
+- Writer: `brew_outdated_normalized()`, `lib/updaters.sh`.
 - Swift reader: `UpdateSnapshot.homebrewItems()`, `UpdateSnapshot.swift`.
 
 ### `brew_status`
@@ -341,7 +350,7 @@ repo, `git log` failed) - not a valid timestamp, callers must treat `0` as
 ```
 Homebrew 4.7.0|1755400000
 ```
-- Writer: `collect_brew_status()`, `update_system.1h.sh` (~line 1666).
+- Writer: `collect_brew_status()`, `lib/updaters.sh`.
 - Swift reader: `HomebrewStatus.load()`,
   `GuideApp/Sources/MacUpdaterGuide/Toolkit/LaunchAtLogin.swift`.
 
@@ -356,7 +365,7 @@ Example:
 ```
 Keynote|13.2|13.3|361285480
 ```
-- Writer: `collect_manual_updates()`, `update_system.1h.sh` (~line 1039).
+- Writer: `collect_manual_updates()`, `lib/updaters.sh`.
 - Swift reader: `UpdateSnapshot.manualItems()`, `UpdateSnapshot.swift`.
 
 ### `app_updates`
@@ -371,7 +380,7 @@ otherwise. Example:
 ```
 sparkle|AltTab|6.18.0|6.19.0|https://github.com/lwouis/alt-tab-macos/releases/tag/v6.19.0|
 ```
-- Writer: `collect_app_updates()`, `update_system.1h.sh` (~line 1570).
+- Writer: `collect_app_updates()`, `lib/selfupdate_apps.sh`.
 - Swift reader: `UpdateSnapshot.selfUpdatingItems()`, `UpdateSnapshot.swift`.
 
 ### `cask_homepages`
@@ -384,7 +393,7 @@ release asset - never guessed. Example:
 ```
 alt-tab|https://alt-tab-macos.netlify.app/|lwouis/alt-tab-macos
 ```
-- Writer: `collect_cask_homepages()`, `update_system.1h.sh` (~line 1429).
+- Writer: `collect_cask_homepages()`, `lib/selfupdate_apps.sh`.
 - Swift reader: `InstalledInventory.caskMetadataByToken()`,
   `GuideApp/Sources/MacUpdaterGuide/Toolkit/InstalledApps.swift`.
 
@@ -399,7 +408,7 @@ Example:
 ```
 SomeApp|https://example.com
 ```
-- Writer: `collect_github_homepages()`, `update_system.1h.sh` (~line 1482).
+- Writer: `collect_github_homepages()`, `lib/selfupdate_apps.sh`.
 - Swift reader: `InstalledInventory.websiteMap()`, `InstalledApps.swift`.
 
 ## Notification queue (`notifications/`)
