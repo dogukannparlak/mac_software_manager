@@ -136,11 +136,13 @@ unexpected line in it cannot execute.
 
 ### Third-party installers
 
-`setup_mac.sh` and `uninstall.sh` can install or remove Homebrew itself, which
-means running a script from `raw.githubusercontent.com`. Homebrew publishes no
-checksum to pin against, so the baseline applied instead is: HTTPS with TLS 1.2
-enforced, the download must be non-empty, and it must parse as bash (`bash -n`)
-before it is executed.
+`setup_mac.sh` can install Homebrew itself, which means running a script from
+`raw.githubusercontent.com`. Homebrew publishes no checksum to pin against, so
+the baseline applied instead is: HTTPS with TLS 1.2 enforced, the download must
+be non-empty, and it must parse as bash (`bash -n`) before it is executed.
+
+`uninstall.sh` runs no remote script at all. It never removes Homebrew, so it
+has nothing to download.
 
 ## Scope
 

@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [1.6.0] - 2026-08-23
+
+Uninstalling stopped being a terminal-only job.
+
+### Added
+
+- **Uninstall page** in the app (Settings > Uninstall): every item the toolkit
+  put on this Mac as a tick box with the exact path beside it, a dry run that
+  reports without removing, and one confirmation for the whole set. It drives
+  the same `uninstall.sh` the terminal does. The login item and the in-memory
+  preferences are cleared in Swift instead, because only the running app can
+  make either stick. When `uninstall.sh` is not installed at all — the app came
+  straight from the disk image — the page moves the app to the Trash and clears
+  its preferences, which is all there is to remove in that case.
+- `uninstall.sh` gained a non-interactive mode: `--list`, per-step flags
+  (`--plugin`, `--app`, `--login-item`, `--data`, `--prefs`, `--mas`,
+  `--swiftbar`), `--all`, `--dry-run`, `--app-path`, `--quiet` and `--help`.
+  Naming any step turns the `[y/N]` questions off and prints one
+  `RESULT|step|outcome|detail` line per step. With no arguments it is the same
+  walkthrough it has always been.
+- `tools/build_release.sh` builds the `dist/` artifacts: a universal Release
+  build, checked with `lipo` and `codesign`, packaged as both a `.dmg` and a
+  `.zip` with a matching `SHA256SUMS.txt`. It refuses to run against a tree
+  whose version strings or `SHA256SUMS` are out of date.
+
+### Changed
+
+- `uninstall.sh` no longer offers to uninstall Homebrew. It now removes only
+  what this toolkit installed, and prints where to find Homebrew's own
+  uninstall instructions instead. The script consequently downloads and runs no
+  remote code at all.
+
+### Fixed
+
+- `uninstall.sh` re-execs from a temporary copy when it is about to delete the
+  folder it lives in. zsh reads a script as it runs it, so removing
+  `~/Library/Application Support/MacSoftwareUpdater` mid-run could truncate the
+  rest of the uninstall.
+- The preferences step now sticks when run from the app. `defaults delete`
+  reaches the file on disk, but a running app writes its own copy back out on
+  quit, which silently restored what had just been removed.
+
 ## [1.5.0] - 2026-08-23
 
 The release that turned a SwiftBar plugin into a two-layer toolkit: a zsh

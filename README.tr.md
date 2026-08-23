@@ -1,7 +1,7 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
 
 ![Engine](https://img.shields.io/badge/engine-zsh%20%2B%20Homebrew-blue?logo=homebrew&logoColor=white)
 ![App](https://img.shields.io/badge/app-macOS%2014.0%2B-blue?logo=apple&logoColor=white)
@@ -142,7 +142,7 @@ denemede açmayı reddeder. Ya:
 
 Yalnızca bir kez.
 
-> 1.5.0 release'i bu satırlar yazılırken hâlâ **taslak** durumda, dolayısıyla
+> 1.6.0 release'i bu satırlar yazılırken hâlâ **taslak** durumda, dolayısıyla
 > varlıkları henüz herkese açık olarak indirilebilir değil. Yayımlanana kadar
 > uygulamayı kaynaktan derleyin — bkz. [Geliştirme](#geliştirme).
 
@@ -616,13 +616,37 @@ sunar.
 
 ## Kaldırma
 
+Bunun iki yolu var ve ikisi de aynı kodu çalıştırır.
+
+### Uygulamadan
+
+**Ayarlar › Kaldır** sayfası, aracın bu Mac'e bıraktığı her şeyi ögesi başına
+bir onay kutusuyla listeler; her satırda tam olarak hangi yolun silineceği
+yazar. Gitmesini istediklerinizi işaretleyin, **Seçilenleri Kaldır**'a basın,
+bir kez onaylayın. Aracın her yerinde olduğu gibi burada da bir **Kuru
+çalıştırma** var: işaretli her ögenin neyi kaldıracağını bildirir, hiçbir şeyi
+kaldırmaz.
+
+Sayfa, `uninstall.sh`'yi işaretlenen adımları bayrak olarak vererek çalıştırır;
+bu da betiğin sorularını tamamen kapatır — seçim zaten arayüzde yapılmıştır.
+İki şeyi betik yerine Swift tarafında yapar, çünkü bunları yalnızca çalışan
+uygulama kalıcı kılabilir: `SMAppService` giriş ögesini kapatmak ve
+tercihlerin bellekteki, kapanışta diske geri yazılacak kopyasını düşürmek.
+
+Mac'te `uninstall.sh` hiç yoksa — uygulama disk imajından sürüklenmiş ve
+`setup_mac.sh` hiç çalışmamışsa — sayfa bunu söyler ve uygulamayı Çöp
+Kutusu'na taşıyıp tercihlerini temizlemeyi önerir; o durumda kaldırılacak
+başka bir şey zaten yoktur.
+
+### Terminalden
+
 `setup_mac.sh` application support klasörüne bir kaldırma betiği bırakır:
 
 ```zsh
 ~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
 ```
 
-Altı adımın her birinden önce sorar:
+Argümansız çalıştırıldığında altı adımın her birinden önce sorar:
 
 1. **SwiftBar eklentisi** — SwiftBar'ın kendi tercihlerinden okuduğu eklenti
    dizinindeki `update_system.*.sh` dosyalarını siler.
@@ -636,9 +660,24 @@ Altı adımın her birinden önce sorar:
    `~/Library/Application Support/MacSoftwareUpdater` dizinini siler.
 5. **Uygulama tercihleri** — 2. adımda okunan bundle tanımlayıcısı için
    `defaults delete`.
-6. **İsteğe bağlı bağımlılıklar** — `mas`, SwiftBar ve son olarak Homebrew'un
-   kendisini kaldırmayı önerir; her biri kendi onayının arkasında. Homebrew
-   adımı, brew ile kurulmuş her paketi sileceği konusunda uyarır.
+6. **İsteğe bağlı bağımlılıklar** — `mas` ve SwiftBar'ı kaldırmayı önerir; her
+   biri kendi onayının arkasında. Bu ikisi, araç setinin kendisi için kurduğu
+   tek paketlerdir. Homebrew'a dokunulmaz: ilgisiz yazılımları da barındıran
+   sistem geneli bir paket yöneticisidir, onu kaldırmak bu betiğin işi değildir.
+   Betik bunu söyler ve Homebrew'un kendi yönergelerine yönlendirir.
+
+Adı verilen adımlar hiçbir şey sormadan çalışır; uygulama betiği böyle sürer:
+
+```zsh
+uninstall.sh --list                  # neler var, adım başına bir satır
+uninstall.sh --plugin --data         # yalnızca bu ikisini kaldır, soru sorma
+uninstall.sh --all --dry-run         # her şeyi bildir, hiçbir şeyi kaldırma
+uninstall.sh --help                  # tüm bayraklar
+```
+
+Adı verilen her adım bir `RESULT|adım|sonuç|ayrıntı` satırı, `--list` ise bir
+`ITEM|adım|yes|no|ayrıntı` satırı basar; böylece çağıran taraf çıkış kodundan
+tahmin yürütmek yerine adım adım sonuç bildirebilir.
 
 ## SwiftBar eklentisi (opsiyonel)
 

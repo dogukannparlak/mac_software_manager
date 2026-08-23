@@ -1,7 +1,7 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
 
 ![Engine](https://img.shields.io/badge/engine-zsh%20%2B%20Homebrew-blue?logo=homebrew&logoColor=white)
 ![App](https://img.shields.io/badge/app-macOS%2014.0%2B-blue?logo=apple&logoColor=white)
@@ -139,7 +139,7 @@ to open it on the first try. Either:
 
 Once only.
 
-> The 1.5.0 release is still a **draft** at the time of writing, so its assets
+> The 1.6.0 release is still a **draft** at the time of writing, so its assets
 > are not publicly downloadable yet. Until it is published, build the app from
 > source — see [Development](#development).
 
@@ -593,13 +593,37 @@ download and all signature checks without modifying anything.
 
 ## Uninstalling
 
+There are two ways to do this, and they run the same code.
+
+### From the app
+
+**Settings › Uninstall** lists everything the toolkit put on this Mac, one
+tick box per item, with the exact path each one would remove. Tick what should
+go, press **Remove Selected**, confirm once. There is a **Dry run** first, the
+same as everywhere else in the toolkit: it reports what each ticked item would
+remove and removes nothing.
+
+The page runs `uninstall.sh` with the ticked steps as flags, which turns its
+questions off — the choosing already happened in the UI. Two things it does in
+Swift rather than through the script, because only the running app can make
+them stick: switching off the `SMAppService` login item, and dropping the
+in-memory copy of the preferences that would otherwise be written back out on
+quit.
+
+If `uninstall.sh` is not on the Mac at all — the app was dragged out of the
+disk image and `setup_mac.sh` never ran — the page says so and offers to move
+the app to the Trash and clear its preferences, which is all there is to
+remove in that case.
+
+### From the terminal
+
 `setup_mac.sh` places an uninstaller in the application support folder:
 
 ```zsh
 ~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
 ```
 
-It asks before each of six steps:
+Run with no arguments it asks before each of six steps:
 
 1. **SwiftBar plugin** — deletes `update_system.*.sh` from the plugin
    directory it reads out of SwiftBar's own preferences.
@@ -613,9 +637,24 @@ It asks before each of six steps:
    `~/Library/Application Support/MacSoftwareUpdater`.
 5. **App preferences** — `defaults delete` for the bundle identifier read in
    step 2.
-6. **Optional dependencies** — offers to uninstall `mas`, SwiftBar, and
-   finally Homebrew itself, each behind its own confirmation. The Homebrew
-   step warns that it removes every brew-installed package.
+6. **Optional dependencies** — offers to uninstall `mas` and SwiftBar, each
+   behind its own confirmation. These are the only two packages the toolkit
+   installs for itself. Homebrew is left alone: it is a system-wide package
+   manager holding unrelated software, so removing it is not this uninstaller's
+   job. The script says so and points at Homebrew's own instructions.
+
+Named steps run without any questions, which is how the app drives it:
+
+```zsh
+uninstall.sh --list                  # what is present, one line per step
+uninstall.sh --plugin --data         # remove exactly these two, ask nothing
+uninstall.sh --all --dry-run         # report everything, remove nothing
+uninstall.sh --help                  # every flag
+```
+
+Each named step prints one `RESULT|step|outcome|detail` line, and `--list`
+prints one `ITEM|step|yes|no|detail` line, so a caller can report per-step
+results rather than guessing from an exit code.
 
 ## SwiftBar plugin (optional)
 

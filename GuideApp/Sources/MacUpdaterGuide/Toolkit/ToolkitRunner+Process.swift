@@ -269,7 +269,11 @@ extension ToolkitController {
 /// banner, where what matters is how the run ended - not every line it
 /// printed on the way there - and an unbounded buffer would be one more way
 /// for a chatty script to take the app down.
-private final class StderrDrain: @unchecked Sendable {
+/// Internal rather than private to this file: `UninstallPlan` runs a process
+/// of its own that has nothing to do with the progress banner, and a second
+/// hand-rolled pipe drain is exactly the kind of thing that gets one of the
+/// two bug fixes above and not the other.
+final class StderrDrain: @unchecked Sendable {
 
     /// Far more than a failure needs to explain itself, and small enough to
     /// hand to a text view without a second thought.

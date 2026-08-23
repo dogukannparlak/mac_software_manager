@@ -10,6 +10,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
     case migrate
     case ignored
     case advanced
+    case uninstall
     case about
 
     var id: String { rawValue }
@@ -23,6 +24,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .migrate: return UIStrings.tabMigrate
         case .ignored: return UIStrings.tabIgnored
         case .advanced: return UIStrings.tabAdvanced
+        case .uninstall: return UIStrings.tabUninstall
         case .about: return UIStrings.tabAbout
         }
     }
@@ -36,6 +38,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable, Sendable {
         case .migrate: return "arrow.right.doc.on.clipboard"
         case .ignored: return "eye.slash"
         case .advanced: return "wrench.and.screwdriver"
+        case .uninstall: return "trash"
         case .about: return "info.circle"
         }
     }

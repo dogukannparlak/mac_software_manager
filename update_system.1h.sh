@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 # <bitbar.title>macOS Software Update & Migration Toolkit</bitbar.title>
-# <bitbar.version>v1.5.0</bitbar.version>
+# <bitbar.version>v1.6.0</bitbar.version>
 # <bitbar.author>Dogukan Parlak</bitbar.author>
 # <bitbar.author.github>dogukannparlak</bitbar.author.github>
 # <bitbar.desc>Monitors Homebrew and App Store updates, tracks history and stats.</bitbar.desc>

@@ -96,6 +96,7 @@ struct ContentView: View {
         case .migrate:  MigrateToHomebrewPage()
         case .ignored:  IgnoredAppsPage()
         case .advanced: AdvancedSettingsPage()
+        case .uninstall: UninstallPage()
         case .about:    AboutPage()
         }
     }

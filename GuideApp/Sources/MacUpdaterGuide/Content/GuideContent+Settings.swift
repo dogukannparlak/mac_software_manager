@@ -198,12 +198,64 @@ extension GuideContent {
                 id: "maintenance.body",
                 blocks: [
                     .paragraph(Localized(
-                        "There is a separate uninstall script. It removes the toolkit, its settings and its records.",
-                        "Ayrı bir kaldırma betiği vardır. Aracı, ayarlarını ve kayıtlarını temizler."
+                        """
+                        Settings > Uninstall lists everything the toolkit put on this Mac with a tick box each: the \
+                        SwiftBar plugin, the app itself, any leftover launch agent, the \
+                        ~/Library/Application Support/MacSoftwareUpdater folder with the settings and history in it, \
+                        and the app's own preferences. Tick what should go and press Remove once.
+                        """,
+                        """
+                        Ayarlar > Kaldır sayfası, aracın bu Mac'e bıraktığı her şeyi birer onay kutusuyla listeler: \
+                        SwiftBar eklentisi, uygulamanın kendisi, varsa artık kalmış launch agent, ayarların ve \
+                        geçmişin durduğu ~/Library/Application Support/MacSoftwareUpdater klasörü ve uygulamanın kendi \
+                        tercihleri. Gitmesini istediklerinizi işaretleyip bir kez Kaldır'a basın.
+                        """
+                    )),
+                    .paragraph(Localized(
+                        """
+                        The page runs the same uninstall.sh a terminal would, with your ticks passed in as the steps \
+                        to take - so nothing asks you anything and nothing you left unticked is touched. Running the \
+                        script yourself instead gives you the walkthrough it has always had, one [y/N] question per \
+                        step. There is a dry run either way that reports what would go without removing it.
+                        """,
+                        """
+                        Sayfa, terminalin çalıştıracağı uninstall.sh'nin aynısını, işaretleriniz yapılacak adımlar \
+                        olarak verilmiş hâlde çalıştırır: size hiçbir şey sorulmaz ve işaretlemediğiniz hiçbir şeye \
+                        dokunulmaz. Betiği kendiniz çalıştırırsanız her zamanki adım adım yürüyüşü verir; adım başına \
+                        bir [y/N] sorusu. Her iki yolda da neyin gideceğini kaldırmadan bildiren bir kuru çalıştırma var.
+                        """
+                    )),
+                    .paragraph(Localized(
+                        """
+                        It then offers to uninstall mas and SwiftBar as well, each as its own question. Those are the \
+                        only two packages the toolkit installs for itself.
+                        """,
+                        """
+                        Ardından mas ve SwiftBar'ı da kaldırmayı teklif eder; her biri ayrı bir soru olarak. Bu ikisi, \
+                        araç setinin kendisi için kurduğu tek paketlerdir.
+                        """
                     )),
                     .note(Localized(
-                        "It does not touch the applications you installed, and it does not touch Homebrew.",
-                        "Kurduğunuz uygulamalara dokunmaz, Homebrew'a da dokunmaz."
+                        """
+                        Homebrew itself is left installed, along with every other package it manages. Removing a \
+                        system-wide package manager is not this uninstaller's job, so the script says so and points at \
+                        Homebrew's own instructions instead.
+                        """,
+                        """
+                        Homebrew'un kendisine ve onun yönettiği diğer paketlere dokunulmaz. Sistem geneli bir paket \
+                        yöneticisini kaldırmak bu betiğin işi değildir; betik bunu söyler ve Homebrew'un kendi \
+                        yönergelerine yönlendirir.
+                        """
+                    )),
+                    .note(Localized(
+                        """
+                        Nothing is removed that you did not tick or say yes to, so you can leave any part of it in \
+                        place and keep using that part on its own.
+                        """,
+                        """
+                        İşaretlemediğiniz ya da onaylamadığınız hiçbir şey silinmez; istediğiniz kısmı olduğu gibi \
+                        bırakıp yalnızca onu kullanmaya devam edebilirsiniz.
+                        """
                     ))
                 ]
             )

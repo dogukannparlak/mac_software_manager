@@ -693,3 +693,92 @@ extension UIStrings {
         "Bunu Terminal'de kendiniz çalıştırın: brew install --cask %@"
     )
 }
+
+// MARK: - Uninstall page
+
+extension UIStrings {
+    static let tabUninstall = Localized("Uninstall", "Kaldır")
+    static let uninstallIntro = Localized(
+        "Remove the toolkit, or just the parts of it you no longer want.",
+        "Aracı tamamen ya da yalnızca artık istemediğiniz parçalarını kaldırın."
+    )
+    static let uninstallExplain = Localized(
+        """
+        Tick what should go and press Remove. This runs the same uninstall.sh the terminal walkthrough runs, with \
+        your choices already made - so nothing asks you anything and nothing you left unticked is touched.
+        """,
+        """
+        Gitmesini istediklerinizi işaretleyip Kaldır'a basın. Bu, terminaldeki adım adım kaldırmanın çalıştırdığı \
+        uninstall.sh'nin aynısını, seçimleriniz önceden yapılmış hâlde çalıştırır: size hiçbir şey sorulmaz ve \
+        işaretlemediğiniz hiçbir şeye dokunulmaz.
+        """
+    )
+    static let uninstallNothingToRemove = Localized("nothing to remove", "kaldırılacak bir şey yok")
+    static let uninstallSelectAll = Localized("Select All", "Tümünü Seç")
+    static let uninstallSelectNone = Localized("Select None", "Hiçbirini Seçme")
+    static let uninstallDryRun = Localized("Dry run (change nothing)", "Kuru çalıştırma (hiçbir şeyi değiştirme)")
+    static let uninstallDryRunHelp = Localized(
+        "Report what each ticked item would remove, without removing it.",
+        "İşaretli her ögenin neyi kaldıracağını, kaldırmadan bildirir."
+    )
+    static let uninstallLoginItemToggle = Localized("Turn off Open at Login", "Girişte Açılmayı Kapat")
+    static let uninstallLoginItemHelp = Localized(
+        """
+        The app registers itself through macOS, which only the app itself can undo - a script cannot. This does it \
+        before anything else is removed.
+        """,
+        """
+        Uygulama kendini macOS üzerinden kaydeder; bunu yalnızca uygulamanın kendisi geri alabilir, bir betik \
+        alamaz. Bu seçenek, başka hiçbir şey kaldırılmadan önce onu geri alır.
+        """
+    )
+    static let uninstallRemoveSelected = Localized("Remove Selected", "Seçilenleri Kaldır")
+    static let uninstallRunning = Localized("Removing…", "Kaldırılıyor…")
+    static let uninstallConfirmTitle = Localized("Remove the ticked items?", "İşaretli ögeler kaldırılsın mı?")
+    static let uninstallConfirmBodyFormat = Localized(
+        "%d item(s) will be removed. This cannot be undone.",
+        "%d öge kaldırılacak. Bu işlem geri alınamaz."
+    )
+    static let uninstallConfirmAction = Localized("Remove", "Kaldır")
+    static let uninstallResults = Localized("Result", "Sonuç")
+    static let uninstallOutcomeRemoved = Localized("Removed", "Kaldırıldı")
+    static let uninstallOutcomeSkipped = Localized("Nothing to do", "Yapılacak bir şey yok")
+    static let uninstallOutcomeFailed = Localized("Failed", "Başarısız")
+    static let uninstallOutcomeDryRun = Localized("Would be removed", "Kaldırılacaktı")
+    static let uninstallQuitting = Localized(
+        "The app has been removed and will close in a moment.",
+        "Uygulama kaldırıldı ve birazdan kapanacak."
+    )
+    static let uninstallQuitNow = Localized("Quit Now", "Şimdi Kapat")
+    static let uninstallHomebrewNote = Localized(
+        """
+        Homebrew itself is never removed here. It is a system-wide package manager holding software that has nothing \
+        to do with this toolkit - see brew.sh if you want it gone.
+        """,
+        """
+        Homebrew'un kendisi burada hiçbir zaman kaldırılmaz. Bu araçla ilgisi olmayan yazılımları da barındıran, \
+        sistem geneli bir paket yöneticisidir; kaldırmak isterseniz brew.sh adresine bakın.
+        """
+    )
+
+    // Shown when setup_mac.sh was never run, so there is no uninstall.sh to
+    // drive - the app was installed straight from the disk image.
+    static let uninstallNoScript = Localized("The engine is not installed", "Motor kurulu değil")
+    static let uninstallNoScriptDetail = Localized(
+        """
+        This Mac has no uninstall.sh, which means setup_mac.sh never ran here and the toolkit's plugin, settings and \
+        cache were never created. Only the app itself is on disk. Removing it below moves it to the Trash and clears \
+        the preferences it stored.
+        """,
+        """
+        Bu Mac'te uninstall.sh yok; yani setup_mac.sh burada hiç çalışmamış, aracın eklentisi, ayarları ve önbelleği \
+        hiç oluşmamış. Diskte yalnızca uygulamanın kendisi var. Aşağıdan kaldırmak onu Çöp Kutusu'na taşır ve \
+        sakladığı tercihleri temizler.
+        """
+    )
+    static let uninstallRemoveApp = Localized("Remove This Application", "Bu Uygulamayı Kaldır")
+    static let uninstallTrashFailedFormat = Localized(
+        "Could not move the app to the Trash: %@",
+        "Uygulama Çöp Kutusu'na taşınamadı: %@"
+    )
+}
