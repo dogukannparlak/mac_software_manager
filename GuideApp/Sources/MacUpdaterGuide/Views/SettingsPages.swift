@@ -368,6 +368,7 @@ struct IgnoredAppsPage: View {
 struct AdvancedSettingsPage: View {
     @Environment(LocalizationStore.self) private var loc
     @Environment(ToolkitController.self) private var toolkit
+    @Environment(OnboardingStore.self) private var onboarding
 
     @State private var cacheSize = ""
     @State private var didResetCache = false
@@ -403,6 +404,24 @@ struct AdvancedSettingsPage: View {
                     }
 
                     Text(UIStrings.engineHelp[loc.language])
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Divider()
+
+                    // The sheet opens itself at launch when something required
+                    // is missing, and never again once it has been dismissed
+                    // for this version. This is the way back to it - for the
+                    // user who pressed "Later" and changed their mind, and for
+                    // one whose engine broke after setup rather than during it.
+                    Button {
+                        onboarding.present()
+                    } label: {
+                        Label(UIStrings.onboardingOpenWizard[loc.language], systemImage: "sparkles")
+                    }
+
+                    Text(UIStrings.onboardingWizardHelp[loc.language])
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

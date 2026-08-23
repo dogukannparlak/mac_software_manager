@@ -11,6 +11,7 @@ struct MacUpdaterGuideApp: App {
     @State private var iconCache = AppIconCache()
     @State private var navigation = NavigationStore()
     @State private var inventory = InventoryStore()
+    @State private var onboarding = OnboardingStore()
 
     init() {
         let preferences = AppPreferences()
@@ -30,11 +31,22 @@ struct MacUpdaterGuideApp: App {
                 .environment(iconCache)
                 .environment(navigation)
                 .environment(inventory)
+                .environment(onboarding)
                 .frame(minWidth: 920, minHeight: 600)
                 .task {
                     toolkit.reload()
                     toolkit.startScheduler()
                     await inventory.load()
+                    // Last, and only after the cheap local work: this stats a
+                    // few files, and a first launch on a Mac that is fully set
+                    // up must not wait on it to draw anything.
+                    await onboarding.presentIfNeeded()
+                }
+                .sheet(isPresented: sheetBinding) {
+                    OnboardingSheet()
+                        .environment(localization)
+                        .environment(toolkit)
+                        .environment(onboarding)
                 }
         }
         .windowResizability(.contentMinSize)
@@ -69,11 +81,21 @@ struct MacUpdaterGuideApp: App {
                 .environment(iconCache)
                 .environment(navigation)
                 .environment(inventory)
+                .environment(onboarding)
         } label: {
             MenuBarLabel(pending: toolkit.snapshot.count, isRefreshing: toolkit.isRefreshing)
         }
         .menuBarExtraStyle(.window)
 
+    }
+
+    /// `@Observable` state is not `@Bindable` from a `Scene`, so the sheet
+    /// gets its binding built by hand rather than through `$onboarding`.
+    private var sheetBinding: Binding<Bool> {
+        Binding(
+            get: { onboarding.isPresented },
+            set: { onboarding.isPresented = $0 }
+        )
     }
 }
 

@@ -141,12 +141,19 @@ struct UninstallResult: Identifiable, Sendable {
 
 enum UninstallPlan {
 
-    /// Where `setup_mac.sh` installs the uninstaller. Nil when the engine was
-    /// never installed - see `UninstallPage` for what the app does then.
+    /// The uninstaller to drive.
+    ///
+    /// An installed copy wins when there is one: it is the script that matches
+    /// whatever that installation put on disk, including layouts predating
+    /// this app. Otherwise the app's own copy is used, which is what makes the
+    /// Uninstall page work on a Mac where `setup_mac.sh` never ran - the
+    /// common case now that the engine ships inside the app.
     static var scriptURL: URL? {
-        let url = ToolkitPaths.supportDirectory.appending(path: "uninstall.sh")
-        guard FileManager.default.isReadableFile(atPath: url.path(percentEncoded: false)) else { return nil }
-        return url
+        let installed = ToolkitPaths.supportDirectory.appending(path: "uninstall.sh")
+        if FileManager.default.isReadableFile(atPath: installed.path(percentEncoded: false)) {
+            return installed
+        }
+        return BundledEngine.uninstallScriptURL
     }
 
     /// Asks the script what is present.
@@ -235,6 +242,11 @@ enum UninstallPlan {
             let process = Process()
             process.executableURL = URL(filePath: "/bin/zsh")
             process.arguments = [script.path(percentEncoded: false)] + arguments
+            let environment = BundledEngine.environment
+            if !environment.isEmpty {
+                process.environment = ProcessInfo.processInfo.environment
+                    .merging(environment) { _, new in new }
+            }
             // The script asks nothing in this mode, but a read on an inherited
             // descriptor would hang forever if one ever slipped through.
             // /dev/null turns that into an instant end of file instead.

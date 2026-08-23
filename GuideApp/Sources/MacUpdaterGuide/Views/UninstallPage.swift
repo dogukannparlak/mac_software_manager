@@ -19,6 +19,8 @@ import SwiftUI
 ///   defaults back out on quit.
 struct UninstallPage: View {
     @Environment(LocalizationStore.self) private var loc
+    @Environment(OnboardingStore.self) private var onboarding
+    @Environment(ToolkitController.self) private var toolkit
 
     /// What `--list` found. Empty until the first load finishes.
     @State private var items: [UninstallItem] = []
@@ -265,6 +267,18 @@ struct UninstallPage: View {
 
                 Text(UIStrings.uninstallNoScriptDetail[loc.language])
                     .fixedSize(horizontal: false, vertical: true)
+
+                // This card is where someone lands after the engine turns out
+                // not to be installed, and until now it offered exactly one
+                // way forward: remove the app. Installing the thing that is
+                // missing is the more likely intent, and it goes first.
+                Button {
+                    onboarding.present()
+                } label: {
+                    Label(UIStrings.onboardingOpenWizard[loc.language], systemImage: "sparkles")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isQuitting)
 
                 Button(role: .destructive) { removeAppOnly() } label: {
                     Label(UIStrings.uninstallRemoveApp[loc.language], systemImage: "trash")

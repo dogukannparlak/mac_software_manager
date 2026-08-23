@@ -87,6 +87,12 @@ Cache biçimi ikisi arasındaki sözleşmedir ve
   bırakır; uygulama bunların her birini **Aç** eylemli gerçek bir
   `UNUserNotificationCenter` bildirimine çevirir. Uygulama çalışmıyorsa motor
   `osascript`'e düşer.
+* **Kurulacak hiçbir şey yok.** Motor **uygulamanın içinde** gelir ve oradan
+  çalışır — kurulum adımı yok, indirme yok, sürüm uyuşmazlığı yok, uygulamanın
+  kendi durum klasörü dışına hiçbir şey yazılmaz. Yalnızca Homebrew ya da
+  `mas` eksikse bir kurulum sayfası bu ikisini önerir; ikisi de varsa sayfa
+  hiç görünmez. Uygulama parolanızı asla istemez: yönetici gerektiren tek adım
+  (Homebrew'un kendi kurulum betiği) Terminal'de açılır, uygulama sonucu izler.
 * **İki dil.** İngilizce ve Türkçe, yeniden başlatmadan değiştirilebilir.
 
 ## Menü çubuğu durumları
@@ -148,9 +154,24 @@ Yalnızca bir kez.
 
 ### 2. Motor ve geçiş sihirbazı
 
-`curl` ile indirilecek bir kurulum arşivi yok. Depoyu klonlayın (ya da Releases
-sayfasından kaynak arşivini indirin) ve sihirbazı çalışma kopyasından
-çalıştırın:
+**Uygulamadan: yapılacak bir şey yok.** `MacUpdaterGuide.app` motorun tamamını
+— `update_system.1h.sh`, `lib/*.sh` ve `uninstall.sh` — kendi içinde taşır ve
+doğrudan paketin içinden çalıştırır. Kurulum adımı, indirme ve "motor bulunamadı"
+durumu yoktur: uygulama ile motor tek bir sürümdür, birbirinin ne yazdığı
+konusunda anlaşmazlığa düşemezler.
+
+Bu mümkün, çünkü motor kendi yanına hiçbir şey yazmaz. Sakladığı her şey
+`~/Library/Application Support/MacSoftwareUpdater/` altına gider; bu klasörü her
+çalışmasında kendisi oluşturur ve `settings.conf` yokken varsayılanlarla
+çalışır. Uygulama `MSU_LIB_DIR`'i kendi kaynaklarına yöneltip motoru çağırır.
+
+Uygulamanın yanında getiremediği tek şey Homebrew ve `mas`. Biri eksikse kurulum
+sayfası onları önerir — Homebrew'u resmî kurulum betiğini Terminal'de açarak
+(uygulama içinde asla: yönetici parolası ister), `mas`'ı `brew install mas` ile.
+İkisi de varsa sayfa hiç görünmez.
+
+**Terminalden.** Depoyu klonlayın (ya da Releases sayfasından kaynak arşivini
+indirin) ve sihirbazı çalışma kopyasından çalıştırın:
 
 ```bash
 git clone https://github.com/dogukannparlak/mac_software_manager.git
@@ -163,8 +184,22 @@ cd mac_software_manager
 dosyasını yazar ve aşağıda anlatılan geçiş adımında size yol gösterir.
 `--local` olmadan kurduğu her dosyayı indirir ve yerine koymadan önce
 yayımlanmış `SHA256SUMS` ile doğrular; yalnızca doğrulanmış hiçbir uzak kaynağa
-ulaşılamadığında kurulumun yanındaki kopyaya düşer. `./setup_mac.sh --help` iki
-bayrağı da anlatır.
+ulaşılamadığında kurulumun yanındaki kopyaya düşer. `./setup_mac.sh --help`
+bütün bayrakları anlatır.
+
+`--unattended`, uygulamanın kurulum sayfasının kullandığı moddur ve terminalden
+de çalışır — sıfırdan bir Mac'i betikle kurmak için kullanışlıdır. Her soruyu
+güvenli varsayılanıyla yanıtlar (varsa mevcut yapılandırma, yoksa Terminal.app
+ve açık App Store güncellemeleri), geçiş sihirbazını atlar, ne SwiftBar ne de
+giriş ögesi kurar ve normal çıktısının yanında makine tarafından okunabilir
+`STEP|<id>|<durum>|<metin>` satırları basar. Homebrew'u asla kurmaz: kurulu
+olmayan bir Mac'te tek satır sebep basıp **3** ile çıkar. Çıkış kodları: `0`
+başarı, `2` hatalı kullanım, `3` Homebrew yok, `1` diğer.
+
+SwiftBar yapılandırılmamışsa `--unattended`, hiçbir şeyin okumayacağı bir eklenti
+klasörü yaratmak yerine motoru doğrudan
+`~/Library/Application Support/MacSoftwareUpdater/` altına kurar. Uygulama oraya
+da baktığı için her iki durumda da motoru bulur.
 
 Kurulum sırasında yedek mirror için bir **Codeberg kullanıcı adı** sorar. Atlamak
 için boş bırakın: indirmeler yine çalışır ve yalnızca GitHub'a karşı doğrulanır;

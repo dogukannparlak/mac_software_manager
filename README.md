@@ -85,6 +85,13 @@ The cache format is the contract between them, documented in
   `notifications/`; the app turns each into a real `UNUserNotificationCenter`
   alert with an **Open** action. When the app is not running, the engine falls
   back to `osascript`.
+* **Nothing to install.** The engine ships **inside the app** and runs from
+  there — no setup step, no download, no version mismatch, and nothing written
+  outside the app's own state folder. On a Mac that is only missing Homebrew or
+  `mas`, a setup sheet offers those two and nothing else; when both are present
+  it never appears. The app never asks for your password: the one step that
+  needs an administrator (Homebrew's own installer) is opened in Terminal, and
+  the app watches for the result.
 * **Two languages.** English and Turkish, switchable without relaunching.
 
 ## Menu bar states
@@ -145,8 +152,25 @@ Once only.
 
 ### 2. The engine and the migration wizard
 
-There is no installer archive to `curl`. Clone the repository (or download the
-source archive from the Releases page) and run the wizard from the checkout:
+**From the app: nothing to do.** `MacUpdaterGuide.app` carries the whole engine
+inside it — `update_system.1h.sh`, `lib/*.sh` and `uninstall.sh` — and runs it
+straight out of the bundle. There is no install step, no download, and no
+"engine not found" state: the app and the engine are one release, so they can
+never disagree about what the other writes.
+
+That works because the engine never writes beside itself. Everything it stores
+goes to `~/Library/Application Support/MacSoftwareUpdater/`, which it creates on
+its own on every run, and it runs on defaults when there is no `settings.conf`.
+The app points `MSU_LIB_DIR` at its own resources and calls it.
+
+The only things the app cannot bring with it are Homebrew and `mas`. If either
+is missing, a setup sheet offers them — Homebrew by opening its official
+installer in Terminal (never in the app: it asks for an administrator
+password), `mas` with `brew install mas`. With both present the sheet never
+appears at all.
+
+**From a terminal.** Clone the repository (or download the source archive from
+the Releases page) and run the wizard from the checkout:
 
 ```bash
 git clone https://github.com/dogukannparlak/mac_software_manager.git
@@ -160,7 +184,21 @@ and walks you through the migration step described below. Without `--local` it
 downloads each file it installs and verifies it against the published
 `SHA256SUMS` before putting it in place, falling back to the copy next to the
 installer only when no verified remote source can be reached.
-`./setup_mac.sh --help` lists both flags.
+`./setup_mac.sh --help` lists every flag.
+
+`--unattended` is the mode the app's setup sheet drives, and it works from a
+terminal too — useful for scripting a fresh Mac. It answers every question with
+its safe default (existing configuration where there is one, otherwise
+Terminal.app and App Store updates on), skips the migration wizard, installs
+neither SwiftBar nor a login item, and prints machine-readable
+`STEP|<id>|<state>|<text>` lines alongside its normal output. It never installs
+Homebrew: a Mac without it exits **3** with a single line saying so. Exit codes
+are `0` success, `2` bad usage, `3` no Homebrew, `1` anything else.
+
+With no SwiftBar configured, `--unattended` installs the engine into
+`~/Library/Application Support/MacSoftwareUpdater/` rather than creating a
+plugin folder nothing would read. The app looks there, so it finds it either
+way.
 
 During setup it asks for a **Codeberg username** for a backup mirror. Leave it
 blank to skip: downloads still work and are verified against GitHub alone, and

@@ -181,11 +181,16 @@ extension ToolkitController {
         let stdoutPipe: Pipe? = captureStandardOutput ? Pipe() : nil
         process.standardOutput = stdoutPipe ?? FileHandle.nullDevice
         let stdoutDrain = stdoutPipe.map { StderrDrain(draining: $0) }
-        if !extraEnvironment.isEmpty {
+        // MSU_LIB_DIR points the engine at the library this build ships, so a
+        // bundled engine sources its own `lib/*.sh` rather than whatever an
+        // older `setup_mac.sh` left in the support folder. Empty, and
+        // therefore a no-op, when there is no bundled engine.
+        let environment = BundledEngine.environment.merging(extraEnvironment) { _, new in new }
+        if !environment.isEmpty {
             // Setting `environment` at all replaces the inherited one, not
             // merges with it - has to start from the real one (PATH, HOME,
             // ...) or the script cannot find `brew`/`mas`/etc.
-            process.environment = ProcessInfo.processInfo.environment.merging(extraEnvironment) { _, new in new }
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
         }
         let stderrPipe = Pipe()
         process.standardError = stderrPipe
@@ -225,6 +230,11 @@ extension ToolkitController {
             let process = Process()
             process.executableURL = URL(filePath: "/bin/zsh")
             process.arguments = [script.path(percentEncoded: false)] + arguments
+            let environment = BundledEngine.environment
+            if !environment.isEmpty {
+                process.environment = ProcessInfo.processInfo.environment
+                    .merging(environment) { _, new in new }
+            }
             process.standardOutput = FileHandle.nullDevice
             let stderrPipe = Pipe()
             process.standardError = stderrPipe

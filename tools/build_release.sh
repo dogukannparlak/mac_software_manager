@@ -50,6 +50,10 @@ fi
 echo "${fg[blue]}▸ Checking version strings and checksums${reset_color}"
 "$REPO_ROOT/tools/sync_version.sh" --check
 "$REPO_ROOT/tools/generate_checksums.sh" --check
+# The app ships the engine inside itself now, so a release built from a tree
+# whose bundled copy is stale installs an engine older than the one this tag
+# publishes - and nothing downstream would catch it.
+"$REPO_ROOT/tools/sync_engine_resources.sh" --check
 
 echo "${fg[blue]}▸ Building $APP_NAME $VERSION (Release, universal)${reset_color}"
 rm -rf "$DERIVED"

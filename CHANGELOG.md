@@ -7,7 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+The app stopped asking to install itself.
+
+### Changed
+
+- **The engine ships inside the app and runs from there.** No install step, no
+  download, no "the engine is not installed" state. `MacUpdaterGuide.app`
+  carries `update_system.1h.sh`, `lib/*.sh` and `uninstall.sh` as resources and
+  runs them in place with `MSU_LIB_DIR` pointed at its own bundle.
+
+  Three properties of the engine make this work, and all three were already
+  true: it writes nothing beside itself, it creates its own state directory on
+  every run (`mkdir -p "$APP_DIR" "$CACHE_DIR" "$LOCK_DIR"`), and it runs on
+  defaults when there is no `settings.conf`. Copying those files into
+  `~/Library/Application Support` and calling it "setting up" was the app
+  installing itself in front of the user — an extra step, an extra thing to go
+  wrong, and a prerequisite-shaped warning before a single update had been
+  checked.
+
+  `ToolkitPaths.locateScript()` prefers the bundled engine over any installed
+  copy, so the two can never disagree about what the other writes. An existing
+  `setup_mac.sh` installation keeps working for SwiftBar; the app just no
+  longer needs it to be there. The Uninstall page falls back to the bundled
+  `uninstall.sh` the same way.
+
+- **The setup sheet now lists only what the app cannot bring with it**:
+  Homebrew, and the optional `mas`. It appears only when Homebrew is missing
+  and never otherwise. `Dependency` has no `engine` case, and there is nothing
+  left in the app that installs an engine.
+
+- `tools/sync_engine_resources.sh` copies the engine into the app target and
+  `--check`s it; `build_release.sh` runs that check next to the version and
+  checksum guards, so a release cannot ship an engine older than the tree it
+  was built from.
+
+### Added
+
+- **`setup_mac.sh --unattended`**: installs the engine with no questions asked,
+  every answer taken from the existing configuration or a safe default. It
+  prints machine-readable `STEP|<id>|<state>|<text>` progress lines alongside
+  its normal output, skips the migration wizard, and installs neither SwiftBar
+  nor a login item. Exit codes are `0` success, `2` bad usage, `3` no Homebrew,
+  `1` anything else. Works together with `--local`.
+
+  This is now the *terminal* path — for scripting a fresh Mac, and for anyone
+  who wants the SwiftBar plugin. The app does not use it.
+
+  With no SwiftBar configured it installs into
+  `~/Library/Application Support/MacSoftwareUpdater/` instead of creating a
+  plugin folder nothing would read, and it does not write SwiftBar's
+  preferences on its behalf.
+
+### Security
+
+- **The app never asks for your password, and never runs `sudo`.** Homebrew's
+  installer needs an administrator, so that one row opens Terminal.app with
+  Homebrew's official command and then polls for `brew` to appear — the prompt
+  comes from macOS, in a window the user opened, with the command visible
+  before it runs. A GUI application that asks for an administrator password is
+  indistinguishable from one phishing for it, and this app declines to teach
+  that habit.
+- Shipping the engine in the bundle removes the download-and-verify path from
+  the app entirely: there is no longer a remote script that has to be checked
+  before it can be run, because there is no remote script.
+
+### Fixed
+
+- `setup_mac.sh` no longer deletes `setup_mac.sh` and `uninstall.sh` out of its
+  own support folder when that folder is also the plugin directory. Only
+  reachable through the new `--unattended` path, where the two can coincide.
 
 ## [1.6.0] - 2026-08-23
 

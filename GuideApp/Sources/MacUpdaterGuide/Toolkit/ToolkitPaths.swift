@@ -157,13 +157,24 @@ enum ToolkitPaths {
 
     /// The `update_system.*.sh` script that does the actual work.
     ///
-    /// Looked for in three places, in order: an explicit override, the SwiftBar
-    /// plugin folder (where existing installations put it), and the toolkit's
-    /// own support directory.
+    /// The app's own copy comes first, right after an explicit override. It
+    /// ships in the same build as the code reading its output, so it is the
+    /// one engine that cannot be older than what the app expects - see
+    /// `BundledEngine` and `EngineContract` for why that used to be a real
+    /// problem and not a theoretical one.
+    ///
+    /// The installed locations are still searched behind it, for a Mac that
+    /// ran `setup_mac.sh` before this app existed and for anyone who pointed
+    /// the override somewhere deliberately. Their copy keeps working for
+    /// SwiftBar; this app just no longer depends on it being there.
     static func locateScript() -> URL? {
         if let override = scriptOverride,
            FileManager.default.isExecutableFile(atPath: override.path(percentEncoded: false)) {
             return override
+        }
+
+        if let bundled = BundledEngine.scriptURL {
+            return bundled
         }
 
         for directory in candidateDirectories() {
