@@ -136,8 +136,59 @@ extension GuideContent {
                         """
                     )),
                     .note(Localized(
-                        "The \"Last check\" line tells you when that data was collected. \"Refresh now\" rebuilds it immediately.",
-                        "\"Last check\" satırı verinin ne zaman toplandığını söyler. \"Refresh now\" hemen yeniden toplar."
+                        "The \"Last checked\" line tells you when that data was collected. \"Refresh Now\" rebuilds it immediately.",
+                        "\"Son kontrol\" satırı verinin ne zaman toplandığını söyler. \"Şimdi Yenile\" hemen yeniden toplar."
+                    ))
+                ]
+            ),
+            GuideSection(
+                id: "menubar.rows",
+                heading: Localized("The rows in the panel", "Paneldeki satırlar"),
+                blocks: [
+                    .bullets([
+                        Localized(
+                            """
+                            \"Pending Updates (N)\" opens a submenu listing everything that is waiting, with \"Open Full \
+                            App\" at the bottom to jump to the Updates page.
+                            """,
+                            """
+                            \"Bekleyen Güncellemeler (N)\", bekleyen her şeyi listeleyen bir alt menü açar; en altında \
+                            Güncellemeler sayfasına atlayan \"Tüm Uygulamayı Aç\" bulunur.
+                            """
+                        ),
+                        Localized(
+                            """
+                            \"Refresh Now\" collects the data again, \"Open Guide\" opens this window, \"Settings…\" \
+                            goes straight to General, and \"Quit\" closes the app.
+                            """,
+                            """
+                            \"Şimdi Yenile\" veriyi yeniden toplar, \"Rehberi Aç\" bu pencereyi açar, \"Ayarlar…\" \
+                            doğruca Genel'e gider ve \"Çık\" uygulamayı kapatır.
+                            """
+                        )
+                    ]),
+                    .note(Localized(
+                        "In the window itself, ⌘, opens Settings and ⌘R refreshes the list.",
+                        "Pencerenin kendisinde ⌘, Ayarlar'ı açar, ⌘R listeyi yeniler."
+                    ))
+                ]
+            ),
+            GuideSection(
+                id: "menubar.notifications",
+                heading: Localized("Notifications", "Bildirimler"),
+                blocks: [
+                    .paragraph(Localized(
+                        """
+                        The engine has no way to call a running app directly, so it drops a request file into \
+                        ~/Library/Application Support/MacSoftwareUpdater/notifications/ and the app turns each one into a \
+                        native macOS notification. Clicking a notification brings the window to the front.
+                        """,
+                        """
+                        Motorun çalışan bir uygulamayı doğrudan çağırma yolu yok; bu yüzden \
+                        ~/Library/Application Support/MacSoftwareUpdater/notifications/ klasörüne bir istek dosyası \
+                        bırakır ve uygulama bunların her birini native bir macOS bildirimine çevirir. Bildirime tıklamak \
+                        pencereyi öne getirir.
+                        """
                     ))
                 ]
             )

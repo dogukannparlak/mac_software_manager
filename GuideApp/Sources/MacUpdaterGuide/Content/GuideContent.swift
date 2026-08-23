@@ -25,6 +25,7 @@ enum GuideContent {
         menuBar,
         updating,
         history,
+        inventory,
         ignoring,
         migration,
         selfUpdating,

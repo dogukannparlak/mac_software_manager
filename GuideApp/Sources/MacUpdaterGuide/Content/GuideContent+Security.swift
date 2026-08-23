@@ -72,22 +72,38 @@ extension GuideContent {
                     .paragraph(Localized(
                         """
                         When a new version of the toolkit is available it tells you in the menu. Before installing, the \
-                        download is compared against the published checksum on both the main server and the backup one. \
-                        If they disagree, or the file is damaged, the update does not happen and your working version stays \
-                        as it is.
+                        download is compared against the checksum published on GitHub. If the file is damaged or the two \
+                        disagree, the update does not happen and your working version stays as it is.
                         """,
                         """
-                        Aracın yeni sürümü çıktığında menüde bildirir. Kurmadan önce indirilen dosya, hem ana sunucudaki \
-                        hem yedek sunucudaki yayınlanmış kontrol toplamıyla karşılaştırılır. İkisi uyuşmazsa veya dosya \
-                        bozuksa güncelleme yapılmaz, çalışan sürümünüz olduğu gibi kalır.
+                        Aracın yeni sürümü çıktığında menüde bildirir. Kurmadan önce indirilen dosya, GitHub'da yayınlanmış \
+                        kontrol toplamıyla karşılaştırılır. Dosya bozuksa veya ikisi uyuşmazsa güncelleme yapılmaz, çalışan \
+                        sürümünüz olduğu gibi kalır.
+                        """
+                    )),
+                    .paragraph(Localized(
+                        """
+                        The second server is optional. If a Codeberg mirror is set up - the CODEBERG_USERNAME line in \
+                        settings.conf, which setup_mac.sh asks for and Settings › About shows as \"Mirror\" - the \
+                        checksum it publishes has to agree as well, so one tampered or half-pushed server is caught. \
+                        If the main server cannot be reached, the mirror is used instead.
+                        """,
+                        """
+                        İkinci sunucu isteğe bağlıdır. Bir Codeberg yansısı kurulmuşsa — setup_mac.sh'nin sorduğu, \
+                        settings.conf'taki CODEBERG_USERNAME satırı; Ayarlar › Hakkında'da \"Yansı\" olarak görünür — \
+                        onun yayınladığı kontrol toplamının da tutması gerekir; böylece kurcalanmış ya da yarım \
+                        yüklenmiş tek bir sunucu yakalanır. Ana sunucuya erişilemezse onun yerine yansı kullanılır.
                         """
                     )),
                     .note(Localized(
                         """
-                        If the main server cannot be reached the toolkit switches to the backup automatically, so one service \
-                        being down does not block you.
+                        With no mirror configured, downloads are verified against GitHub alone and there is nothing to \
+                        fall back to when GitHub is unreachable.
                         """,
-                        "Ana sunucuya erişilemezse araç otomatik olarak yedeğe geçer; tek bir servisin çökmesi sizi engellemez."
+                        """
+                        Yansı yapılandırılmamışsa indirmeler yalnızca GitHub'a karşı doğrulanır ve GitHub'a \
+                        erişilemediğinde geçilecek bir yedek olmaz.
+                        """
                     ))
                 ]
             )

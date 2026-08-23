@@ -177,19 +177,6 @@ struct ContentView: View {
                 .tag(SidebarItem.history)
             }
 
-            Section(GuideContent.sidebarHeading[loc.language]) {
-                ForEach(GuideContent.topics) { topic in
-                    Label {
-                        Text(topic.title[loc.language])
-                    } icon: {
-                        Image(systemName: topic.symbol)
-                            .symbolRenderingMode(.hierarchical)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                    .tag(SidebarItem.topic(topic.id))
-                }
-            }
-
             // Settings are part of this window rather than a separate
             // preferences panel: one place to look, and the rules editors need
             // the room anyway.
@@ -203,6 +190,19 @@ struct ContentView: View {
                             .foregroundStyle(Color.accentColor)
                     }
                     .tag(SidebarItem.settings(section))
+                }
+            }
+
+            Section(GuideContent.sidebarHeading[loc.language]) {
+                ForEach(GuideContent.topics) { topic in
+                    Label {
+                        Text(topic.title[loc.language])
+                    } icon: {
+                        Image(systemName: topic.symbol)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .tag(SidebarItem.topic(topic.id))
                 }
             }
 

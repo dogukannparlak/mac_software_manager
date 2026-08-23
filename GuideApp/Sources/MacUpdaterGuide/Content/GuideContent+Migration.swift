@@ -22,12 +22,14 @@ extension GuideContent {
                 blocks: [
                     .paragraph(Localized(
                         """
-                        On first run it scans your Applications folder and sorts every application: did it come from Homebrew, \
-                        from the App Store, or did you download it yourself and drag it in?
+                        setup_mac.sh, the assistant you run once from the terminal, scans your Applications folder on that \
+                        first run and sorts every application: did it come from Homebrew, from the App Store, or did you \
+                        download it yourself and drag it in?
                         """,
                         """
-                        İlk çalıştırmada Uygulamalar klasörünüzü tarar ve her uygulamayı sınıflandırır: Homebrew'dan mı \
-                        geldi, App Store'dan mı, yoksa siz mi indirip sürükleyip bıraktınız?
+                        Terminalden bir kez çalıştırdığınız sihirbaz setup_mac.sh, o ilk çalıştırmada Uygulamalar \
+                        klasörünüzü tarar ve her uygulamayı sınıflandırır: Homebrew'dan mı geldi, App Store'dan mı, \
+                        yoksa siz mi indirip sürükleyip bıraktınız?
                         """
                     )),
                     .paragraph(Localized(
@@ -39,6 +41,16 @@ extension GuideContent {
                         """
                         Elle kurduklarınız için size seçenek sunar: Homebrew'un yönettiği sürüme mi geçirelim, App Store \
                         sürümüne mi, yoksa olduğu gibi mi kalsın? Geçirdikleriniz bundan sonra otomatik takip edilir.
+                        """
+                    )),
+                    .note(Localized(
+                        """
+                        The app has the same thing on a page of its own, Settings › \"Move to Homebrew\", for whenever \
+                        you want to look again. Unlike the first run, it never scans by itself: press \"Start Scan\".
+                        """,
+                        """
+                        Aynısı uygulamada da kendi sayfasında var — Ayarlar › \"Homebrew'e Taşı\" — ne zaman tekrar \
+                        bakmak isterseniz. İlk çalıştırmanın aksine kendiliğinden asla taramaz: \"Taramayı Başlat\" deyin.
                         """
                     ))
                 ]
@@ -80,11 +92,15 @@ extension GuideContent {
                     .paragraph(Localized(
                         """
                         Sometimes an application's name is nothing like its Homebrew name - \"lghub\" is really \"logitech-g-hub\". \
-                        When that happens the assistant asks you, then remembers your answer and never asks again.
+                        setup_mac.sh asks you when it hits one of those, then remembers your answer and never asks again. \
+                        In the app you add the pair yourself, under Settings › \"Name Mapping\". Both write the same \
+                        file, app_token_map.conf.
                         """,
                         """
                         Bazen uygulamanın adı Homebrew'daki adıyla hiç ilgisiz olur — \"lghub\" aslında \"logitech-g-hub\". \
-                        Böyle bir durumda sihirbaz size sorar, cevabınızı kaydeder ve bir daha sormaz.
+                        setup_mac.sh böyle biriyle karşılaşınca size sorar, cevabınızı kaydeder ve bir daha sormaz. \
+                        Uygulamada eşlemeyi kendiniz eklersiniz: Ayarlar › \"İsim Eşlemesi\". İkisi de aynı dosyaya, \
+                        app_token_map.conf'a yazar.
                         """
                     ))
                 ]
@@ -119,8 +135,14 @@ extension GuideContent {
                         """
                     )),
                     .paragraph(Localized(
-                        "When a new version turns up it appears under \"Manual Update Required\" with a link to the download.",
-                        "Yeni sürüm çıkınca \"Manual Update Required\" başlığı altında, indirme bağlantısıyla birlikte görünür."
+                        """
+                        When a new version turns up the application appears in Updates, on the \"Installed Apps\" tab \
+                        under \"Installed manually\", with a link to the download.
+                        """,
+                        """
+                        Yeni sürüm çıkınca uygulama, Güncellemeler'deki \"Yüklü Uygulamalar\" sekmesinde \"Elle \
+                        kurulmuş\" grubunda, indirme bağlantısıyla birlikte görünür.
+                        """
                     )),
                     .note(Localized(
                         "Beta and preview releases are filtered out, so you are never quietly moved onto a test channel.",
@@ -134,12 +156,26 @@ extension GuideContent {
                 blocks: [
                     .paragraph(Localized(
                         """
-                        If you turn it on in settings, you can install these updates straight from the menu. It is off \
-                        by default, because replacing a running application is the riskiest thing the toolkit can do.
+                        Turn on \"Install self-updating apps automatically\" under Settings › Updates and each of these \
+                        gets an \"Update\" button on its row in Updates, plus an entry in the menu bar's \"Pending \
+                        Updates (N)\" flyout. It is off by default, because replacing a running application is the \
+                        riskiest thing the toolkit can do.
                         """,
                         """
-                        Ayarlardan açarsanız bu güncellemeleri doğrudan menüden kurabilirsiniz. Varsayılan olarak kapalıdır, \
-                        çünkü çalışan bir uygulamayı değiştirmek aracın yapabileceği en riskli iştir.
+                        Ayarlar › Güncellemeler altındaki \"Kendi kendini güncelleyen uygulamaları kur\" seçeneğini \
+                        açarsanız bunların her biri Güncellemeler'deki satırında bir \"Güncelle\" butonu kazanır; ayrıca \
+                        menü çubuğundaki \"Bekleyen Güncellemeler (N)\" alt menüsünde de yer alır. Varsayılan olarak \
+                        kapalıdır, çünkü çalışan bir uygulamayı değiştirmek aracın yapabileceği en riskli iştir.
+                        """
+                    )),
+                    .note(Localized(
+                        """
+                        The menu bar panel's own list is read-only - the rows there open the download page. Installing \
+                        happens from the Updates page or from that flyout.
+                        """,
+                        """
+                        Menü çubuğu panelindeki listenin kendisi salt okunurdur; oradaki satırlar indirme sayfasını açar. \
+                        Kurulum, Güncellemeler sayfasından ya da o alt menüden yapılır.
                         """
                     )),
                     .paragraph(Localized(
@@ -154,12 +190,16 @@ extension GuideContent {
                 blocks: [
                     .paragraph(Localized(
                         """
-                        Each app also offers a \"Dry run\": it downloads and runs every security check, shows you the result, \
-                        and changes nothing at all. Use it to see what would happen before you trust it.
+                        Apps followed through Sparkle - the update channel built into the app itself - offer \"Dry run \
+                        (no changes)\" in the row's \"…\" menu: it downloads and runs every security check, shows you \
+                        the result, and changes nothing at all. Use it to see what would happen before you trust it. \
+                        Apps followed through their GitHub releases have no dry run.
                         """,
                         """
-                        Her uygulamada bir de \"Dry run\" seçeneği vardır: indirir, tüm güvenlik kontrollerini yapar, sonucu \
-                        gösterir ve hiçbir şeyi değiştirmez. Güvenmeden önce ne olacağını görmek için kullanın.
+                        Sparkle üzerinden — yani uygulamanın kendi içindeki güncelleme kanalından — takip edilenlerde, \
+                        satırın \"…\" menüsünde \"Kuru çalıştırma (değişiklik yok)\" seçeneği vardır: indirir, tüm \
+                        güvenlik kontrollerini yapar, sonucu gösterir ve hiçbir şeyi değiştirmez. Güvenmeden önce ne \
+                        olacağını görmek için kullanın. GitHub sürümlerinden takip edilenlerde kuru çalıştırma yoktur.
                         """
                     ))
                 ]

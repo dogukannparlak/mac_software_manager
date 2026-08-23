@@ -23,17 +23,33 @@ extension GuideContent {
                     .steps([
                         Localized(
                             "Choose \"Update Everything\" to update all of them in order.",
-                            "Hepsini sırayla güncellemek için \"Update Everything\" seçin."
+                            "Hepsini sırayla güncellemek için \"Hepsini Güncelle\" seçin."
                         ),
                         Localized(
-                            "A terminal window opens so you can watch each step as it happens.",
-                            "Bir terminal penceresi açılır, her adımı olurken izleyebilirsiniz."
+                            """
+                            The run happens in the background and reports back inside the app: a progress bar on the row \
+                            being updated, and a percentage next to it.
+                            """,
+                            """
+                            Çalıştırma arka planda olur ve uygulama içinden bildirir: güncellenen satırda bir ilerleme \
+                            çubuğu, yanında da yüzdesi.
+                            """
                         ),
                         Localized(
                             "To update a single application instead, use the \"Update\" option on its own row.",
-                            "Tek bir uygulamayı güncellemek için kendi satırındaki \"Update\" seçeneğini kullanın."
+                            "Tek bir uygulamayı güncellemek için kendi satırındaki \"Güncelle\" seçeneğini kullanın."
                         )
-                    ])
+                    ]),
+                    .note(Localized(
+                        """
+                        A terminal window is not involved unless you ask for one: Settings › General › \"Run updates in \
+                        Terminal\" moves every run into your terminal of choice instead.
+                        """,
+                        """
+                        Siz istemedikçe terminal penceresi açılmaz: Ayarlar › Genel › \"Güncellemeleri Terminal'de \
+                        çalıştır\" her çalıştırmayı seçtiğiniz terminale taşır.
+                        """
+                    ))
                 ]
             ),
             GuideSection(
@@ -58,12 +74,71 @@ extension GuideContent {
             ),
             GuideSection(
                 id: "updating.concurrent",
-                heading: Localized("One run at a time", "Aynı anda tek çalıştırma"),
+                heading: Localized("Several at once, the rest queued", "Aynı anda birkaç tane, kalanı kuyrukta"),
                 blocks: [
                     .paragraph(Localized(
-                        "If an update is already running, starting a second one waits for the first to finish instead of competing with it.",
-                        "Zaten bir güncelleme çalışıyorsa, ikincisini başlatmak onunla yarışmak yerine ilkinin bitmesini bekler."
+                        """
+                        Single-application updates run in the background side by side, as many at a time as Settings › \
+                        General › \"Simultaneous Updates\" allows - two, unless you change it. Anything started beyond \
+                        that shows a \"Queued\" badge and begins on its own as soon as a slot frees up.
+                        """,
+                        """
+                        Tek uygulamalık güncellemeler arka planda yan yana çalışır — aynı anda kaç tane olacağını Ayarlar › \
+                        Genel › \"Aynı Anda Yapılabilecek Güncelleme Sayısı\" belirler; değiştirmezseniz iki. Bunun \
+                        ötesinde başlatılanlar \"Sırada\" rozetiyle görünür ve bir yer açılır açılmaz kendiliğinden başlar.
+                        """
+                    )),
+                    .note(Localized(
+                        """
+                        Only two things run alone: an update in Terminal, and \"Update Everything\". While the bulk run \
+                        is going, single updates you start are queued behind it.
+                        """,
+                        """
+                        Yalnızca iki şey tek başına çalışır: Terminal'deki bir güncelleme ve \"Hepsini Güncelle\". Toplu \
+                        çalıştırma sürerken başlattığınız tek uygulama güncellemeleri onun arkasında kuyruğa girer.
+                        """
                     ))
+                ]
+            ),
+            GuideSection(
+                id: "updating.page",
+                heading: Localized("On the Updates page", "Güncellemeler sayfasında"),
+                blocks: [
+                    .bullets([
+                        Localized(
+                            "Cancel a single row, or the whole run from the progress banner. Both ask before stopping.",
+                            "Tek bir satırı ya da ilerleme şeridinden çalıştırmanın tamamını iptal edebilirsiniz. İkisi de durdurmadan önce sorar."
+                        ),
+                        Localized(
+                            "When something fails, the reason Homebrew or the App Store printed appears under its row.",
+                            "Bir şey başarısız olursa Homebrew'un veya App Store'un yazdığı sebep, o satırın altında görünür."
+                        ),
+                        Localized(
+                            """
+                            A package that needs your password cannot be asked for one in the background, so it offers \
+                            \"Update in Terminal\" - the same update, rerun where you can type it.
+                            """,
+                            """
+                            Parola gerektiren bir paket bunu arka planda soramaz; bu yüzden \"Terminal'de Güncelle\" \
+                            butonunu sunar — aynı güncelleme, parolanızı yazabileceğiniz yerde yeniden çalıştırılır.
+                            """
+                        ),
+                        Localized(
+                            "A mistake in settings.conf would otherwise change behaviour silently, so it is listed in a \"Configuration warnings\" card at the top.",
+                            "settings.conf'taki bir hata davranışı sessizce değiştirirdi; bu yüzden sayfanın üstündeki \"Yapılandırma uyarıları\" kartında listelenir."
+                        ),
+                        Localized(
+                            """
+                            \"Check Homebrew\" in the toolbar refreshes Homebrew's own catalogue (\"brew update\"). \
+                            It upgrades no package - it only makes the next check see the latest versions.
+                            """,
+                            """
+                            Araç çubuğundaki \"Homebrew'u Denetle\", Homebrew'un kendi kataloğunu tazeler \
+                            (\"brew update\"). Hiçbir paketi güncellemez — sadece sonraki kontrolün en son sürümleri \
+                            görmesini sağlar.
+                            """
+                        )
+                    ])
                 ]
             )
         ]
@@ -86,11 +161,14 @@ extension GuideContent {
                     .paragraph(Localized(
                         """
                         You can see which application went from which version to which, grouped by day, for the last 7 \
-                        days and the last 30 days. Selecting an entry opens its page.
+                        days and the last 30 days. Homebrew and App Store entries carry an arrow button on the right \
+                        that opens their page; entries for self-updating apps have no page to open, so they have no button.
                         """,
                         """
                         Son 7 gün ve son 30 gün içinde hangi uygulamanın hangi sürümden hangi sürüme geçtiğini günlere \
-                        göre gruplanmış şekilde görebilirsiniz. Bir kayda tıklayınca sayfası açılır.
+                        göre gruplanmış şekilde görebilirsiniz. Homebrew ve App Store kayıtlarının sağında sayfalarını \
+                        açan bir ok butonu vardır; kendi kendini güncelleyenlerin açılacak bir sayfası, dolayısıyla \
+                        butonu da yoktur.
                         """
                     )),
                     .bullets([
@@ -124,12 +202,15 @@ extension GuideContent {
                 blocks: [
                     .paragraph(Localized(
                         """
-                        If you want to stay on an older version of something, choose \"Ignore\" and it stops appearing \
-                        in the update list. You can bring it back at any time from \"Manage Ignored Apps\".
+                        If you want to stay on an older version of something, choose \"Ignore this app\" from its row \
+                        in Updates - or \"Ignore\" from the right-click menu in Installed Apps - and it stops appearing \
+                        in the update list. Settings › Ignored lists everything you hid, each with a \"Restore\" button.
                         """,
                         """
-                        Bir uygulamada eski sürümde kalmak isterseniz \"Ignore\" deyin, güncelleme listesinde görünmez \
-                        olur. İstediğiniz zaman \"Manage Ignored Apps\" menüsünden geri alabilirsiniz.
+                        Bir uygulamada eski sürümde kalmak isterseniz Güncellemeler'deki satırından \"Bu uygulamayı \
+                        yoksay\" — ya da Yüklü Uygulamalar'da sağ tık menüsünden \"Yoksay\" — deyin; güncelleme \
+                        listesinde görünmez olur. Gizlediklerinizin tamamı Ayarlar › Yoksayılanlar sayfasında, her \
+                        birinin yanında bir \"Geri al\" butonuyla listelenir.
                         """
                     )),
                     .note(Localized(
