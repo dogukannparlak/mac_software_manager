@@ -25,9 +25,10 @@ setopt extended_glob
 SCRIPT_DIR="${0:A:h}"
 SCRIPT_NAME="${0:t}"
 LOCAL_MODE=0
+UNATTENDED=0
 
 show_help() {
-    print -r -- "Usage: ${SCRIPT_NAME} [--local] [-h|--help]
+    print -r -- "Usage: ${SCRIPT_NAME} [--local] [--unattended] [-h|--help]
 
 Installs the mac_software_manager update engine and runs the migration wizard.
 
@@ -40,7 +41,19 @@ Options:
               pushed yet: without it, an unpushed local fix is replaced by the
               older published copy, which verifies fine and therefore wins.
               Every file installed this way is reported as unverified.
+  --unattended
+              Install the engine without asking anything. Every question is
+              answered with the safe default: the existing configuration where
+              there is one, otherwise Terminal.app, App Store updates on, and
+              no migration wizard. SwiftBar is neither installed nor added to
+              your login items, and Homebrew is never installed - a Mac
+              without it exits 3 instead. Progress is printed as machine
+              readable STEP|<id>|<state>|<text> lines alongside the normal
+              output; <state> is one of start, ok, fail, skip.
+              This is what MacUpdaterGuide.app runs from its setup sheet.
   -h, --help  Show this help and exit.
+
+Exit codes: 0 success, 2 bad usage, 3 Homebrew is missing, 1 anything else.
 
 Without --local nothing changes: each file is downloaded and verified against
 SHA256SUMS (GitHub first, Codeberg as failover), and the copy next to this
@@ -53,6 +66,10 @@ while (( $# > 0 )); do
             LOCAL_MODE=1
             shift
             ;;
+        --unattended)
+            UNATTENDED=1
+            shift
+            ;;
         -h|--help)
             show_help
             exit 0
@@ -60,11 +77,31 @@ while (( $# > 0 )); do
         *)
             print -r -- "Unknown option: $1" >&2
             print -r -- "Run '${SCRIPT_NAME} --help' to see the available options." >&2
-            exit 1
+            exit 2
             ;;
     esac
 done
 
+# One line of progress a caller can parse, for the app driving this script
+# from a setup sheet with no terminal to read.
+#
+# Deliberately a separate channel from the prose above and below it: that text
+# is written for a person watching a terminal and changes whenever the wording
+# improves, which would make any UI parsing it break on a copy edit. These
+# lines are the contract - id and state are stable, the trailing text is the
+# sentence to show and may change freely.
+#
+# Silent outside --unattended: an interactive run has nobody parsing it, and
+# the prose already says the same thing better.
+step() {
+    (( UNATTENDED )) || return 0
+    print -r -- "STEP|$1|$2|$3"
+}
+
+# The banner is forty lines of decoration for a person. Under --unattended
+# the reader is a progress list in a sheet, which shows the STEP lines and
+# keeps the rest as a log nobody opens unless something goes wrong.
+if (( ! UNATTENDED )); then
 echo ""
 echo "${fg[blue]}███╗   ███╗ █████╗  ██████╗ ██████╗ ███████╗${reset_color}"
 echo "${fg[blue]}████╗ ████║██╔══██╗██╔════╝██╔═══██╗██╔════╝${reset_color}"
@@ -82,6 +119,7 @@ echo "1. Install necessary missing tools (Homebrew, SwiftBar and optionally mas)
 echo "2. Check and Migrate your applications to managed versions"
 echo "3. Configure real-time update monitoring"
 echo ""
+fi
 if (( LOCAL_MODE )); then
     echo "${fg[yellow]}⚠️  --local: installing from ${SCRIPT_DIR}${reset_color}"
     echo "${fg[yellow]}    Download and SHA256 verification are deliberately disabled for this${reset_color}"
@@ -432,6 +470,17 @@ ask_confirmation() {
     local prompt="$1"
     local default="${2:-n}"
 
+    # Under --unattended nobody is there to answer. Every call site that leads
+    # somewhere irreversible is skipped outright further down rather than
+    # answered here, so this is the backstop: a question that does slip
+    # through takes its own default instead of blocking on a read that would
+    # never return, or - worse, with stdin closed - reading EOF and silently
+    # counting as "no" in one place and "yes" in another.
+    if (( UNATTENDED )); then
+        [[ "$default" == "y" ]] && return 0
+        return 1
+    fi
+
     if [[ "$default" == "y" ]]; then
         echo -n "$prompt [Y/n] "
     else
@@ -641,6 +690,7 @@ migrate_app_to_cask() {
 # 3. CORE LOGIC FUNCTIONS
 # ==============================================================================
 echo "Starting environment configuration..."
+step preflight start "Preparing"
 
 # --- Preserve an existing installation's settings -----------------------------
 # Re-running setup must never silently reset the update channel, the autostart
@@ -682,15 +732,21 @@ fi
 # the README describes. Not a hard requirement, but left blank on purpose
 # rather than guessed, and the toolkit warns about it in the menu when unset.
 CODEBERG_USERNAME="$EXISTING_CODEBERG_USERNAME"
-echo "Failover mirror: downloads normally come from GitHub, with an optional"
-echo "Codeberg mirror as a second, independent source for integrity checks."
-echo -n "Codeberg username for the mirror (leave blank to skip) [${CODEBERG_USERNAME:-none}]: "
-read -r codeberg_input
-if [[ -n "$codeberg_input" ]]; then
-    if [[ "$codeberg_input" =~ ^[A-Za-z0-9](-?[A-Za-z0-9])*$ ]]; then
-        CODEBERG_USERNAME="$codeberg_input"
-    else
-        echo "${fg[yellow]}'$codeberg_input' doesn't look like a valid Codeberg username - ignoring it.${reset_color}"
+# Unattended keeps whatever an earlier run configured and asks for nothing:
+# a mirror is one person's account name, which no default can guess, and
+# leaving it unset only means downloads are verified against GitHub alone -
+# the same as answering the prompt with a blank line.
+if (( ! UNATTENDED )); then
+    echo "Failover mirror: downloads normally come from GitHub, with an optional"
+    echo "Codeberg mirror as a second, independent source for integrity checks."
+    echo -n "Codeberg username for the mirror (leave blank to skip) [${CODEBERG_USERNAME:-none}]: "
+    read -r codeberg_input
+    if [[ -n "$codeberg_input" ]]; then
+        if [[ "$codeberg_input" =~ ^[A-Za-z0-9](-?[A-Za-z0-9])*$ ]]; then
+            CODEBERG_USERNAME="$codeberg_input"
+        else
+            echo "${fg[yellow]}'$codeberg_input' doesn't look like a valid Codeberg username - ignoring it.${reset_color}"
+        fi
     fi
 fi
 
@@ -721,28 +777,55 @@ fi
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # Check for Homebrew installation
+step homebrew start "Checking Homebrew"
 if ! command -v brew &> /dev/null; then
+    # Homebrew's installer asks for an administrator password on a terminal it
+    # owns. Under --unattended there is no terminal and no way to answer, so
+    # this stops with its own exit code instead of hanging on a prompt nobody
+    # can see: the caller's job is to get Homebrew installed some other way
+    # and run this again.
+    if (( UNATTENDED )); then
+        step homebrew fail "Homebrew is not installed"
+        print -r -- "Homebrew is not installed. Install it from https://brew.sh and run this again." >&2
+        exit 3
+    fi
     echo "${fg[yellow]}Homebrew not found in PATH. Starting installation...${reset_color}"
     echo "Homebrew is required to manage your packages and updates."
     echo "Note: If you believe Homebrew is already installed, please cancel (Ctrl+C) and add it to your PATH."
     run_homebrew_script "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh" "install" || exit 1
     if [[ -f /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)";
     elif [[ -f /usr/local/bin/brew ]]; then eval "$(/usr/local/bin/brew shellenv)"; fi
+    step homebrew ok "Homebrew installed"
 else
     echo "${fg[green]}Homebrew is already installed.${reset_color}"
+    step homebrew ok "Homebrew is installed"
 fi
 
 # Check for the mas CLI tool (if enabled)
 if [[ "$MAS_ENABLED" == "1" ]]; then
     if ! command -v mas &> /dev/null; then
+        step mas start "Installing mas"
         echo "${fg[yellow]}Installing mas via Homebrew...${reset_color}"
+        # A formula, not a cask: it lands in the Homebrew prefix the current
+        # user already owns, so there is nothing here to ask a password for.
         brew install mas
+        step mas ok "mas installed"
     else
         echo "${fg[green]}mas tool is present.${reset_color}"
+        step mas ok "mas is installed"
     fi
+else
+    step mas skip "App Store updates are off"
 fi
 
-if ! brew list --cask swiftbar &> /dev/null; then
+# SwiftBar hosts the menu bar plugin. Under --unattended it is left alone:
+# installing a cask copies an application into /Applications and can ask for
+# an administrator password, which is exactly the prompt this mode exists to
+# avoid - and the app driving it draws its own menu bar item, so nothing here
+# needs SwiftBar to be present.
+if (( UNATTENDED )); then
+    step swiftbar skip "SwiftBar not installed - the app has its own menu bar item"
+elif ! brew list --cask swiftbar &> /dev/null; then
     echo "${fg[yellow]}Installing SwiftBar...${reset_color}"
     brew install --cask swiftbar
 else
@@ -752,7 +835,16 @@ fi
 echo ""
 
 # Migration Process
-if ask_confirmation "Do you want to run the application migration? (Scanning and linking to Brew/AppStore)" y; then
+#
+# Never under --unattended. The wizard is a per-application conversation -
+# it uninstalls, reinstalls and restarts applications one at a time on the
+# strength of an answer - and there is no safe default for "replace this app
+# with a cask": both answers are wrong for somebody. The app offers the same
+# thing later on its own Move to Homebrew page, where the user can see what
+# is being proposed.
+if (( UNATTENDED )); then
+    step migration skip "Migration wizard skipped"
+elif ask_confirmation "Do you want to run the application migration? (Scanning and linking to Brew/AppStore)" y; then
 
     if [[ "$MAS_ENABLED" == "1" ]]; then
         echo
@@ -1194,28 +1286,49 @@ echo "${fg[green]}=== SWIFTBAR CONFIGURATION ===${reset_color}"
 # Handle SwiftBar configuration safely
 EXISTING_DIR=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "")
 
-if [[ -n "$EXISTING_DIR" ]]; then
-    # Expand tilde if present
-    EXPANDED_EXISTING="${EXISTING_DIR/#\~/$HOME}"
-    echo "SwiftBar is already configured to use: ${fg[cyan]}$EXPANDED_EXISTING${reset_color}"
-    if ask_confirmation "Use this existing directory for the plugin?"; then
-        PLUGIN_DIR="$EXPANDED_EXISTING"
-    fi
-fi
-
-if [[ -z "$PLUGIN_DIR" ]]; then
-    DEFAULT_DIR="$HOME/Documents/SwiftBarPlugins"
-    if ask_confirmation "Use default directory $DEFAULT_DIR?"; then
-        PLUGIN_DIR="$DEFAULT_DIR"
+if (( UNATTENDED )); then
+    # Two cases, and neither of them invents a SwiftBar installation.
+    #
+    # A machine that already runs SwiftBar keeps its plugin folder, so the
+    # menu it has been drawing goes on working and no second copy of the
+    # plugin appears beside the one it runs.
+    #
+    # A machine without SwiftBar gets the engine in $APP_DIR instead of a
+    # ~/Documents/SwiftBarPlugins that nothing would ever read. That folder is
+    # already where locateScript() looks (see ToolkitPaths.swift), so the app
+    # finds the engine straight away - and this run neither creates a stray
+    # directory nor writes SwiftBar's own preferences on its behalf.
+    if [[ -n "$EXISTING_DIR" ]]; then
+        PLUGIN_DIR="${EXISTING_DIR/#\~/$HOME}"
+        echo "Using the configured SwiftBar plugin folder: ${fg[cyan]}$PLUGIN_DIR${reset_color}"
     else
-        echo "Enter full path for plugins:"
-        read -r user_path
-        PLUGIN_DIR="${user_path/#\~/$HOME}"
+        PLUGIN_DIR="$APP_DIR"
+        echo "SwiftBar is not configured - installing the engine into ${fg[cyan]}$APP_DIR${reset_color}"
     fi
-    # Only update global setting if it's different or missing
-    # Use quotes for variables that might contain spaces in paths
-    if [[ "$PLUGIN_DIR" != "$EXPANDED_EXISTING" ]]; then
-        defaults write com.ameba.SwiftBar PluginDirectory -string "$PLUGIN_DIR"
+else
+    if [[ -n "$EXISTING_DIR" ]]; then
+        # Expand tilde if present
+        EXPANDED_EXISTING="${EXISTING_DIR/#\~/$HOME}"
+        echo "SwiftBar is already configured to use: ${fg[cyan]}$EXPANDED_EXISTING${reset_color}"
+        if ask_confirmation "Use this existing directory for the plugin?"; then
+            PLUGIN_DIR="$EXPANDED_EXISTING"
+        fi
+    fi
+
+    if [[ -z "$PLUGIN_DIR" ]]; then
+        DEFAULT_DIR="$HOME/Documents/SwiftBarPlugins"
+        if ask_confirmation "Use default directory $DEFAULT_DIR?"; then
+            PLUGIN_DIR="$DEFAULT_DIR"
+        else
+            echo "Enter full path for plugins:"
+            read -r user_path
+            PLUGIN_DIR="${user_path/#\~/$HOME}"
+        fi
+        # Only update global setting if it's different or missing
+        # Use quotes for variables that might contain spaces in paths
+        if [[ "$PLUGIN_DIR" != "$EXPANDED_EXISTING" ]]; then
+            defaults write com.ameba.SwiftBar PluginDirectory -string "$PLUGIN_DIR"
+        fi
     fi
 fi
 
@@ -1291,7 +1404,10 @@ if [[ -n "$EXISTING_TERMINAL" ]]; then
 fi
 SELECTED_TERMINAL="${detected_terminals[$DEFAULT_TERMINAL_INDEX]}"
 
-if [[ ${#detected_terminals[@]} -gt 1 ]]; then
+# Unattended keeps DEFAULT_TERMINAL_INDEX, which is the previously configured
+# terminal when it is still installed and Apple's Terminal otherwise - the one
+# choice that is always present and therefore the only safe default.
+if (( ! UNATTENDED )) && [[ ${#detected_terminals[@]} -gt 1 ]]; then
     echo ""
     echo "Select your preferred terminal app for running updates:"
     for i in {1..${#detected_terminals[@]}}; do
@@ -1361,6 +1477,7 @@ EOF
 
 chmod 600 "$CONFIG_FILE" 2>/dev/null || true
 echo "Configuration saved to: ${fg[cyan]}$CONFIG_FILE${reset_color}"
+step config ok "Configuration written"
 
 
 # Install/Update the Engine Library (lib/*.sh)
@@ -1372,6 +1489,7 @@ echo "Configuration saved to: ${fg[cyan]}$CONFIG_FILE${reset_color}"
 # Directory" further down for the bug that taught this project that lesson.
 # This list MUST match LIB_NAMES in update_system.1h.sh exactly.
 echo "Fetching engine library..."
+step lib start "Installing the engine library"
 typeset -a LIB_NAMES
 LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes menu)
 
@@ -1391,11 +1509,14 @@ for lib_name in "${LIB_NAMES[@]}"; do
 done
 if [[ "$LIB_INSTALL_FAILED" == "1" ]]; then
     echo "${fg[red]}❌ One or more engine library files could not be installed. The plugin will not run correctly until this is fixed - re-run this installer.${reset_color}"
+    step lib fail "The engine library could not be installed"
     exit 1
 fi
+step lib ok "Engine library installed"
 
 # Install/Update the Main Plugin (Only this goes to SwiftBar folder)
 echo "Fetching latest monitor plugin..."
+step plugin start "Installing the update engine"
 
 # A previous install may use a different refresh interval (update_system.6h.sh).
 # Reuse that exact file name, otherwise SwiftBar would run two copies of the
@@ -1426,9 +1547,11 @@ elif (( ! LOCAL_MODE )) && [[ -f "./update_system.1h.sh" ]]; then
     cp "./update_system.1h.sh" "$TARGET_PLUGIN"
 else
     echo "${fg[red]}❌ Critical Error: No verified source found for plugin.${reset_color}"
+    step plugin fail "No verified source found for the update engine"
     exit 1
 fi
 chmod +x "$TARGET_PLUGIN"
+step plugin ok "Update engine installed"
 
 # Install Uninstaller to App Support (Not Plugin Dir)
 echo "Updating Uninstaller..."
@@ -1436,6 +1559,7 @@ if ! install_project_file "uninstall.sh" "$APP_DIR/uninstall.sh"; then
     (( ! LOCAL_MODE )) && [[ -f "./uninstall.sh" ]] && cp "./uninstall.sh" "$APP_DIR/uninstall.sh"
 fi
 chmod +x "$APP_DIR/uninstall.sh"
+step uninstaller ok "Uninstaller installed"
 
 # Backup Setup Script to App Support
 echo "Backing up Setup Wizard..."
@@ -1443,29 +1567,48 @@ cp "$0" "$APP_DIR/setup_mac.sh"
 chmod +x "$APP_DIR/setup_mac.sh"
 
 # Remove utility scripts from SwiftBar Plugin Directory if they exist (bug in previous version)
-echo "Cleaning up SwiftBar Plugin Directory..."
-rm -f "$PLUGIN_DIR/setup_mac.sh"
-rm -f "$PLUGIN_DIR/uninstall.sh"
-
-# Restart SwiftBar application to apply changes
-echo "Refreshing SwiftBar..."
-open -g "swiftbar://refreshallplugins"
-
-# Enable autostart for SwiftBar
-echo "Ensuring SwiftBar autostarts at login..."
-if ! osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "SwiftBar"; then
-    echo "Adding SwiftBar to Login Items..."
-    osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/SwiftBar.app", hidden:false}' >/dev/null 2>&1
-    echo "${fg[green]}✓ SwiftBar added to Login Items.${reset_color}"
-else
-    echo "${fg[green]}✓ SwiftBar is already in Login Items.${reset_color}"
+#
+# Skipped when the plugin folder *is* $APP_DIR - the --unattended case where
+# SwiftBar is not configured. Those two files are meant to live in $APP_DIR and
+# were installed there moments ago; deleting them here would undo that.
+if [[ "$PLUGIN_DIR" != "$APP_DIR" ]]; then
+    echo "Cleaning up SwiftBar Plugin Directory..."
+    rm -f "$PLUGIN_DIR/setup_mac.sh"
+    rm -f "$PLUGIN_DIR/uninstall.sh"
 fi
 
-# Launch SwiftBar if not already running
-if ! pgrep -x "SwiftBar" >/dev/null; then
-    echo "Starting SwiftBar..."
-    open -a SwiftBar
-    sleep 2  # Give SwiftBar time to start before refreshing plugins
+# Everything below reaches outside this script's own files: it talks to
+# SwiftBar, edits the login items through System Events and launches an
+# application. Under --unattended none of it happens.
+#
+# The login item edit is the reason. `System Events` is scripting another
+# process, so macOS puts up an Automation consent dialog the first time - in
+# front of whichever app happens to be running this script, with no way for
+# it to answer. Adding an application to someone's login items is also not a
+# side effect to have while they were asking for the engine to be installed.
+if (( UNATTENDED )); then
+    step login-item skip "Login items left alone"
+else
+    # Restart SwiftBar application to apply changes
+    echo "Refreshing SwiftBar..."
+    open -g "swiftbar://refreshallplugins"
+
+    # Enable autostart for SwiftBar
+    echo "Ensuring SwiftBar autostarts at login..."
+    if ! osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "SwiftBar"; then
+        echo "Adding SwiftBar to Login Items..."
+        osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/SwiftBar.app", hidden:false}' >/dev/null 2>&1
+        echo "${fg[green]}✓ SwiftBar added to Login Items.${reset_color}"
+    else
+        echo "${fg[green]}✓ SwiftBar is already in Login Items.${reset_color}"
+    fi
+
+    # Launch SwiftBar if not already running
+    if ! pgrep -x "SwiftBar" >/dev/null; then
+        echo "Starting SwiftBar..."
+        open -a SwiftBar
+        sleep 2  # Give SwiftBar time to start before refreshing plugins
+    fi
 fi
 
 echo ""
@@ -1474,3 +1617,4 @@ echo "1. Plugin installed in: ${fg[cyan]}$PLUGIN_DIR${reset_color}"
 echo "2. System files moved to: ${fg[cyan]}$APP_DIR${reset_color}"
 echo ""
 echo "You can now safely delete the Installer folder from your Downloads."
+step done ok "Setup complete"
