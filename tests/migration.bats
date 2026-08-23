@@ -853,7 +853,7 @@ cask_body() {
 @test "migration_candidates is not a member of any background cache tier" {
     # The scan costs one 'brew info' round trip per candidate token across
     # every unmanaged app on the machine. Adding the key to a tier would put
-    # that on SwiftBar's timer.
+    # that on the background refresh timer.
     run run_zsh_snippet '
         print -l -- "${CACHE_KEYS_UPDATES[@]}" "${CACHE_KEYS_INSTALLED[@]}" \
                     "${CACHE_KEYS_APPS[@]}" "${CACHE_KEYS_WEBSITES[@]}"
@@ -893,9 +893,9 @@ cask_body() {
     [ "$output" = "rc=1" ]
 }
 
-@test "the migrate action is dispatched and does not fall through to the menu draw" {
+@test "the migrate action is dispatched and does not fall through to the usage banner" {
     # A real invocation: an unknown cask fails, and the run must report that
-    # failure rather than printing a SwiftBar menu.
+    # failure rather than printing the usage banner.
     run bash -c '
         HOME="'"$TEST_HOME"'" MSU_LIB_DIR="'"$REPO_LIB_DIR"'" \
             zsh "'"$REPO_SCRIPT"'" migrate_app "Nothing" "no-such-cask-xyz" dry 2>&1

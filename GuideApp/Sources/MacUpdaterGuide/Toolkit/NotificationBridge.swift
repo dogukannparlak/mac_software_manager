@@ -31,7 +31,7 @@ struct NotificationRequest: Equatable, Sendable {
 /// Turns notification requests dropped by the shell engine into native
 /// UNUserNotificationCenter alerts.
 ///
-/// The shell engine can run headless - cron, SwiftBar, a terminal - with no
+/// The shell engine can run headless - cron, a terminal - with no
 /// guarantee this app is even running, so it cannot call into a specific
 /// process directly. Instead it drops one file per notification into
 /// ToolkitPaths.notificationsDirectory, the same file-based handoff the rest

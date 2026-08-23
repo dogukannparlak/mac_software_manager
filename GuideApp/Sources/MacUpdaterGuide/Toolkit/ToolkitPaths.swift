@@ -163,10 +163,10 @@ enum ToolkitPaths {
     /// `BundledEngine` and `EngineContract` for why that used to be a real
     /// problem and not a theoretical one.
     ///
-    /// The installed locations are still searched behind it, for a Mac that
-    /// ran `setup_mac.sh` before this app existed and for anyone who pointed
-    /// the override somewhere deliberately. Their copy keeps working for
-    /// SwiftBar; this app just no longer depends on it being there.
+    /// The support folder is still searched behind it, for a Mac that ran
+    /// `setup_mac.sh` before this app existed and for anyone who pointed the
+    /// override somewhere deliberately. This app no longer depends on an
+    /// installed copy being there.
     static func locateScript() -> URL? {
         if let override = scriptOverride,
            FileManager.default.isExecutableFile(atPath: override.path(percentEncoded: false)) {
@@ -187,26 +187,11 @@ enum ToolkitPaths {
     }
 
     private static func candidateDirectories() -> [URL] {
-        var directories: [URL] = []
-
-        // SwiftBar remembers its plugin folder in its own preferences
-        if let pluginPath = UserDefaults(suiteName: "com.ameba.SwiftBar")?
-            .string(forKey: "PluginDirectory") {
-            let expanded = NSString(string: pluginPath).expandingTildeInPath
-            directories.append(URL(filePath: expanded))
-        }
-
-        directories.append(supportDirectory)
-        directories.append(
-            FileManager.default.homeDirectoryForCurrentUser
-                .appending(path: "Library/Application Support/SwiftBar", directoryHint: .isDirectory)
-        )
-
-        return directories
+        [supportDirectory]
     }
 
-    /// The frequency suffix means the file can be named update_system.6h.sh,
-    /// so match on the prefix rather than a fixed name.
+    /// An older install can still be named update_system.6h.sh - the frequency
+    /// suffix used to mean something - so match on the prefix, not a fixed name.
     private static func firstScript(in directory: URL) -> URL? {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(atPath: directory.path(percentEncoded: false)) else {

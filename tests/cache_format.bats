@@ -267,7 +267,7 @@ canonical_result() {
 @test "result_prune drops records past the retention window and keeps the rest" {
     # Records are meant to be consumed by GuideApp as the run ends; the ones
     # still here long after belong to runs nobody was watching (a terminal
-    # window, a SwiftBar click) and would otherwise pile up forever.
+    # window, a cron tick) and would otherwise pile up forever.
     run run_zsh_snippet '
         mkdir -p "$RESULTS_DIR"
         print -r -- "v1|1|brew|old|old|ok|" > "$RESULTS_DIR/result.1.old"

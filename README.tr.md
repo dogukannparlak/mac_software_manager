@@ -22,7 +22,7 @@ kaybetmeden Homebrew'a devredebilir.
 <!-- Image 1 : img/app_menubar_panel.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
 <p align="center">
   <img src="img/app_menubar_panel.png" alt="Uygulamanın menü çubuğu paneli" width="100%">
-  <br><sub>Menü çubuğu ögesi MacUpdaterGuide'ın kendisine aittir. SwiftBar işin içinde değildir ve kurulu olması gerekmez.</sub>
+  <br><sub>Menü çubuğu ögesi MacUpdaterGuide'ın kendisine aittir.</sub>
 </p>
 -->
 
@@ -43,11 +43,10 @@ kullanabilirsiniz:
 * **Kabuk motoru** Homebrew, App Store (`mas`), Sparkle appcast'leri ve GitHub
   release akışlarıyla konuşmayı bilir. Bütün işi o yapar ve bulduklarını
   `~/Library/Application Support/MacSoftwareUpdater/cache/` altına yazar.
-* **SwiftUI uygulaması** (`GuideApp/`) bu cache'i okur ve motorun alt
-  komutlarını çağırarak onu sürer. Kendi menü çubuğu ögesini kendisi
-  oluşturduğu için **SwiftBar artık zorunlu değil**. Motoru argümansız
-  çalıştırdığınızda hâlâ bir SwiftBar eklenti menüsü basar; uygulama var olmadan
-  önce bu araç seti böyle çalışıyordu.
+* **SwiftUI uygulaması** (`GuideApp/`) bu cache'i okur, motorun alt
+  komutlarını çağırarak onu sürer ve menü çubuğu ögesinin sahibidir. Motorun
+  her çağrısı bir alt komut adı taşır; argümansız çalıştırılırsa kullanım
+  metnini basıp **2** ile çıkar.
 
 Cache biçimi ikisi arasındaki sözleşmedir ve
 [CACHE_FORMAT.md](CACHE_FORMAT.md) içinde belgelenmiştir.
@@ -113,9 +112,6 @@ Simgeyi uygulama çizer (`MacUpdaterGuideApp.swift` içindeki `MenuBarLabel`) ve
 | **Bekleyen güncelleme** | `arrow.triangle.2.circlepath.circle` + sayı | Bekleyen güncelleme sayısı simgenin yanına yazılır. |
 | **Yenileniyor** | `arrow.triangle.2.circlepath` | Bir cache tazelemesi sürüyor. |
 
-Motorun SwiftBar eklentisinin kendi simgeleri vardır; uygulamada karşılığı
-olmayan bir durum da dahil — bkz.
-[SwiftBar eklentisi (opsiyonel)](#swiftbar-eklentisi-opsiyonel).
 
 ## Kurulum
 
@@ -190,24 +186,21 @@ bütün bayrakları anlatır.
 `--unattended`, uygulamanın kurulum sayfasının kullandığı moddur ve terminalden
 de çalışır — sıfırdan bir Mac'i betikle kurmak için kullanışlıdır. Her soruyu
 güvenli varsayılanıyla yanıtlar (varsa mevcut yapılandırma, yoksa Terminal.app
-ve açık App Store güncellemeleri), geçiş sihirbazını atlar, ne SwiftBar ne de
-giriş ögesi kurar ve normal çıktısının yanında makine tarafından okunabilir
+ve açık App Store güncellemeleri), geçiş sihirbazını atlar, giriş ögesi
+eklemez ve normal çıktısının yanında makine tarafından okunabilir
 `STEP|<id>|<durum>|<metin>` satırları basar. Homebrew'u asla kurmaz: kurulu
 olmayan bir Mac'te tek satır sebep basıp **3** ile çıkar. Çıkış kodları: `0`
 başarı, `2` hatalı kullanım, `3` Homebrew yok, `1` diğer.
 
-SwiftBar yapılandırılmamışsa `--unattended`, hiçbir şeyin okumayacağı bir eklenti
-klasörü yaratmak yerine motoru doğrudan
-`~/Library/Application Support/MacSoftwareUpdater/` altına kurar. Uygulama oraya
-da baktığı için her iki durumda da motoru bulur.
+`setup_mac.sh` motoru
+`~/Library/Application Support/MacSoftwareUpdater/` altına kurar; uygulamanın
+kurulu bir kopya için baktığı yer burasıdır.
 
 Kurulum sırasında yedek mirror için bir **Codeberg kullanıcı adı** sorar. Atlamak
 için boş bırakın: indirmeler yine çalışır ve yalnızca GitHub'a karşı doğrulanır;
 menü de bunu sessizce güvenceyi düşürmek yerine açıkça söyler. Bkz.
 [Güvenlik](#güvenlik).
 
-> macOS, Belgeler klasörünüze erişim izni isterse **İzin Ver**'e tıklayın — bu,
-> SwiftBar eklenti dizinine yazma isteğidir.
 
 ### Geçiş adımı
 
@@ -251,9 +244,9 @@ okunurdur — bir bakış noktasıdır, bir kontrol paneli değil.
 **Ayarlar → Genel → Sadece menü çubuğu (Dock simgesini gizle)** Dock simgesini
 kaldırır.
 
-Uygulama motoru SwiftBar eklenti klasöründe ya da
-`~/Library/Application Support/MacSoftwareUpdater/` altında otomatik bulur. Başka
-bir yerde tutuyorsanız **Ayarlar → Gelişmiş** (Settings → Advanced) altından
+Uygulama motorun kendi kopyasını taşır; ayrıca kurulu bir kopya için
+`~/Library/Application Support/MacSoftwareUpdater/` altına da bakar. Başka bir
+yerde tutuyorsanız **Ayarlar → Gelişmiş** (Settings → Advanced) altından
 gösterin.
 
 #### Güncellemeler (Updates)
@@ -459,12 +452,12 @@ Uygulama isteğe bağlıdır. Terminalden tam bir güncelleme:
 ## Motorun komut satırı
 
 `update_system.1h.sh` bir önyükleyici ve dağıtıcıdır; işlevleri `lib/*.sh`
-içinde (on bir modül) durur ve çalışma anında `source` edilir. Aşağıdakilerin
-hiçbiriyle eşleşmeyen çağrı SwiftBar menü çıktısına düşer.
+içinde (on modül) durur ve çalışma anında `source` edilir. Her çağıran
+aşağıdaki alt komutlardan birini adlandırır; başka her şey kullanım metnini
+basıp **2** ile çıkar.
 
 | Çağrı | Ne yapar |
 | --- | --- |
-| *(argümansız)* | SwiftBar eklenti menüsünü basar. Yalnızca cache'i okur — asla `brew`, `mas` veya `curl` çağırmaz. |
 | `run all` | Önce `plugin`, sonra `system`: self-update denetimi, ardından tam güncelleme. Özel güncelleme kilidini alır. |
 | `run system` | Homebrew ve (etkinse) App Store yükseltmeleri, artı isteğe bağlı temizlik. Özel kilit. |
 | `run plugin` | Motor ve `lib/` kümesi için self-update denetimi. Özel kilit. |
@@ -484,8 +477,6 @@ hiçbiriyle eşleşmeyen çağrı SwiftBar menü çıktısına düşer.
 | `toggle_mas` | App Store (`mas`) desteğini açar veya kapatır. |
 | `toggle_cleanup` | Çalışma sonrası `brew cleanup --prune=all` seçeneğini açar veya kapatır. |
 | `toggle_auto_install` | Otomatik uygulama paketi değiştirmeyi açar veya kapatır. |
-| `toggle_autostart` | Otomatik başlatmayı açar veya kapatır. |
-| `change_interval` | Denetim aralığı: 1s, 2s, 6s, 12s veya 1 gün. |
 | `change_terminal` | Tercih edilen terminal: Terminal, iTerm2, Warp, Alacritty veya Ghostty. |
 | `change_branch` | Güncelleme kanalı — bkz. [Güncelleme kanalı](#güncelleme-kanalı). |
 | `about_dialog` | Hakkında penceresi. |
@@ -528,7 +519,7 @@ tutar.
 | `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` veya `Ghostty`. |
 | `MAS_ENABLED` | App Store güncellemeleri. `1` = açık, `0` = kapalı. |
 | `UPDATE_BRANCH` | Güncelleme kanalı: `main` (stable) veya `develop` (beta). |
-| `AUTOSTART` | SwiftBar otomatik başlatma durumu. |
+| `AUTOSTART` | Eski otomatik başlatma bayrağı. Kimse okumuyor — girişte başlatma uygulamanın kendi ayarı, macOS tarafından tutuluyor. |
 | `CLEANUP_ENABLED` | Her güncellemeden sonra `brew cleanup --prune=all` çalıştır. |
 | `AUTO_INSTALL_APPS` | Kendini güncelleyen uygulama paketlerini doğrudan değiştir. Varsayılan `0`. |
 | `CODEBERG_USERNAME` | Yedek mirror için kullanıcı adı. Boş = yalnızca GitHub, çift kaynaklı doğrulama yok. |
@@ -681,31 +672,29 @@ başka bir şey zaten yoktur.
 ~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
 ```
 
-Argümansız çalıştırıldığında altı adımın her birinden önce sorar:
+Argümansız çalıştırıldığında beş adımın her birinden önce sorar:
 
-1. **SwiftBar eklentisi** — SwiftBar'ın kendi tercihlerinden okuduğu eklenti
-   dizinindeki `update_system.*.sh` dosyalarını siler.
-2. **Uygulama** — `/Applications/MacUpdaterGuide.app` dizinini kaldırır; 5.
+1. **Uygulama** — `/Applications/MacUpdaterGuide.app` dizinini kaldırır; 4.
    adımın çalışabilmesi için bundle tanımlayıcısını önce paketten okur.
-3. **Giriş ögesi** — eski usul LaunchAgents ve System Events giriş ögelerini
+2. **Giriş ögesi** — eski usul LaunchAgents ve System Events giriş ögelerini
    kaldırır. Uygulamanın kendisi `SMAppService` üzerinden kaydolur; bu ancak
    uygulamanın içinden ya da Sistem Ayarları'ndan kapatılabildiği için betik o
    bölmeyi açmayı önerir.
-4. **Veri ve yapılandırma** —
+3. **Veri ve yapılandırma** —
    `~/Library/Application Support/MacSoftwareUpdater` dizinini siler.
-5. **Uygulama tercihleri** — 2. adımda okunan bundle tanımlayıcısı için
+4. **Uygulama tercihleri** — 1. adımda okunan bundle tanımlayıcısı için
    `defaults delete`.
-6. **İsteğe bağlı bağımlılıklar** — `mas` ve SwiftBar'ı kaldırmayı önerir; her
-   biri kendi onayının arkasında. Bu ikisi, araç setinin kendisi için kurduğu
-   tek paketlerdir. Homebrew'a dokunulmaz: ilgisiz yazılımları da barındıran
-   sistem geneli bir paket yöneticisidir, onu kaldırmak bu betiğin işi değildir.
-   Betik bunu söyler ve Homebrew'un kendi yönergelerine yönlendirir.
+5. **İsteğe bağlı bağımlılıklar** — `mas`'ı kaldırmayı önerir, kendi onayının
+   arkasında. Araç setinin kendisi için kurduğu tek paket odur. Homebrew'a
+   dokunulmaz: ilgisiz yazılımları da barındıran sistem geneli bir paket
+   yöneticisidir, onu kaldırmak bu betiğin işi değildir. Betik bunu söyler ve
+   Homebrew'un kendi yönergelerine yönlendirir.
 
 Adı verilen adımlar hiçbir şey sormadan çalışır; uygulama betiği böyle sürer:
 
 ```zsh
 uninstall.sh --list                  # neler var, adım başına bir satır
-uninstall.sh --plugin --data         # yalnızca bu ikisini kaldır, soru sorma
+uninstall.sh --app --data            # yalnızca bu ikisini kaldır, soru sorma
 uninstall.sh --all --dry-run         # her şeyi bildir, hiçbir şeyi kaldırma
 uninstall.sh --help                  # tüm bayraklar
 ```
@@ -713,31 +702,6 @@ uninstall.sh --help                  # tüm bayraklar
 Adı verilen her adım bir `RESULT|adım|sonuç|ayrıntı` satırı, `--list` ise bir
 `ITEM|adım|yes|no|ayrıntı` satırı basar; böylece çağıran taraf çıkış kodundan
 tahmin yürütmek yerine adım adım sonuç bildirebilir.
-
-## SwiftBar eklentisi (opsiyonel)
-
-Yukarıdaki her şey uygulamaya ait. Motor, argümansız çalıştırıldığında hâlâ bir
-**SwiftBar eklenti menüsü** basar; uygulama var olmadan önce bu araç seti böyle
-çalışıyordu. Bu bölümdeki iki görsel SwiftBar'a aittir, uygulamaya değil.
-
-<p align="center">
-  <img src="img/menubar_monitor.png" alt="SwiftBar eklenti menüsü" width="100%">
-  <br><sub><b>SwiftBar</b> eklenti menüsü, uygulama değil: bekleyen güncellemeler, izlenen ögeler ve eklentinin sunduğu işlemler.</sub>
-</p>
-
-<p align="center">
-  <img src="img/menubar_preferences.png" alt="SwiftBar eklentisinin Tercihler alt menüsü" width="100%">
-  <br><sub><b>SwiftBar</b> eklentisinin Tercihler alt menüsü: aralık, terminal, App Store, güncelleme kanalı ve self-update denetimi.</sub>
-</p>
-
-Eklentinin kendi simge durumları vardır; biri uygulamada hiç karşılığı olmayan
-bir durumdur:
-
-| Durum | Simge | Anlamı |
-| :--- | :--- | :--- |
-| **Güncel** | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Her şey güncel"> | Bekleyen bir şey yok. |
-| **Güncelleme hazır** | <img src="img/menubar_icon_update_ready.png?v=2" height="24" alt="Güncelleme hazır"> | Bekleyen sayısını gösteren rozet. |
-| **Araç seti güncellemesi** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Araç seti güncellemesi"> | Araç setinin kendisinin yeni bir sürümü var. Uygulama bunu bunun yerine Güncellemeler sayfasında bildirir. |
 
 ## Geliştirme
 

@@ -34,7 +34,6 @@ DISTRIBUTED_FILES=(
     lib/app_install.sh
     lib/migrate.sh
     lib/run_modes.sh
-    lib/menu.sh
 )
 
 for file in "${DISTRIBUTED_FILES[@]}"; do

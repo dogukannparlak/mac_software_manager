@@ -22,7 +22,7 @@ losing their settings.
 <!-- Image 1 : img/app_menubar_panel.png (not yet captured; delete this comment wrapper once the file exists)
 <p align="center">
   <img src="img/app_menubar_panel.png" alt="The app's menu bar panel" width="100%">
-  <br><sub>The menu bar item belongs to MacUpdaterGuide itself. SwiftBar is not involved and does not need to be installed.</sub>
+  <br><sub>The menu bar item belongs to MacUpdaterGuide itself.</sub>
 </p>
 -->
 
@@ -45,9 +45,9 @@ Two layers, one state directory between them:
   what it finds into
   `~/Library/Application Support/MacSoftwareUpdater/cache/`.
 * The **SwiftUI app** (`GuideApp/`) reads that cache and drives the engine by
-  invoking its subcommands. It owns its own menu bar item, so **SwiftBar is no
-  longer required**. Run the engine with no arguments and it still prints a
-  SwiftBar plugin menu, which is how the toolkit worked before the app existed.
+  invoking its subcommands, and owns the menu bar item. Every engine
+  invocation names a subcommand; run it bare and it prints its usage and
+  exits **2**.
 
 The cache format is the contract between them, documented in
 [CACHE_FORMAT.md](CACHE_FORMAT.md).
@@ -112,8 +112,6 @@ carries three states:
 | **Updates pending** | `arrow.triangle.2.circlepath.circle` + count | The number of waiting updates is drawn next to the icon. |
 | **Refreshing** | `arrow.triangle.2.circlepath` | A cache refresh is in flight. |
 
-The engine's SwiftBar plugin has its own icons, including a state the app does
-not have — see [SwiftBar plugin (optional)](#swiftbar-plugin-optional).
 
 ## Installation
 
@@ -189,24 +187,21 @@ installer only when no verified remote source can be reached.
 `--unattended` is the mode the app's setup sheet drives, and it works from a
 terminal too — useful for scripting a fresh Mac. It answers every question with
 its safe default (existing configuration where there is one, otherwise
-Terminal.app and App Store updates on), skips the migration wizard, installs
-neither SwiftBar nor a login item, and prints machine-readable
+Terminal.app and App Store updates on), skips the migration wizard, adds no
+login item, and prints machine-readable
 `STEP|<id>|<state>|<text>` lines alongside its normal output. It never installs
 Homebrew: a Mac without it exits **3** with a single line saying so. Exit codes
 are `0` success, `2` bad usage, `3` no Homebrew, `1` anything else.
 
-With no SwiftBar configured, `--unattended` installs the engine into
-`~/Library/Application Support/MacSoftwareUpdater/` rather than creating a
-plugin folder nothing would read. The app looks there, so it finds it either
-way.
+`setup_mac.sh` installs the engine into
+`~/Library/Application Support/MacSoftwareUpdater/`, which is where the app
+looks for an installed copy.
 
 During setup it asks for a **Codeberg username** for a backup mirror. Leave it
 blank to skip: downloads still work and are verified against GitHub alone, and
 the menu says so rather than silently downgrading the guarantee. See
 [Security](#security).
 
-> If macOS asks for permission to access your Documents folder, click
-> **Allow** — that is the SwiftBar plugin directory being written.
 
 ### The migration step
 
@@ -245,9 +240,9 @@ The menu bar item is created by the app itself. It shows the pending count and,
 during a run, which package it is on. It is deliberately read-only — a glance,
 not a control panel. **Settings → General → Menu bar only** drops the Dock icon.
 
-The app finds the engine automatically in the SwiftBar plugin folder or in
-`~/Library/Application Support/MacSoftwareUpdater/`. If you keep it elsewhere,
-point at it under **Settings → Advanced**.
+The app ships its own copy of the engine and also looks in
+`~/Library/Application Support/MacSoftwareUpdater/` for an installed one. If you
+keep it elsewhere, point at it under **Settings → Advanced**.
 
 #### Updates
 
@@ -447,12 +442,11 @@ The app is optional. A full update from a terminal:
 ## Engine command line
 
 `update_system.1h.sh` is a bootstrap and dispatcher; its functions live in
-`lib/*.sh` (eleven modules) and are sourced at runtime. Anything not matched
-below falls through to the SwiftBar menu render.
+`lib/*.sh` (ten modules) and are sourced at runtime. Every caller names one of
+the subcommands below; anything else prints the usage banner and exits **2**.
 
 | Invocation | What it does |
 | --- | --- |
-| *(no arguments)* | Renders the SwiftBar plugin menu. Reads the cache only — never shells out to `brew`, `mas` or `curl`. |
 | `run all` | `plugin` then `system`: self-update check, then the full update. Takes the exclusive update lock. |
 | `run system` | Homebrew and (if enabled) App Store upgrades, plus optional cleanup. Exclusive lock. |
 | `run plugin` | Self-update check for the engine and its `lib/` set. Exclusive lock. |
@@ -472,8 +466,6 @@ below falls through to the SwiftBar menu render.
 | `toggle_mas` | Turns App Store (`mas`) support on or off. |
 | `toggle_cleanup` | Turns `brew cleanup --prune=all` after a run on or off. |
 | `toggle_auto_install` | Turns automatic app-bundle replacement on or off. |
-| `toggle_autostart` | Turns autostart on or off. |
-| `change_interval` | Check interval: 1h, 2h, 6h, 12h or 1 day. |
 | `change_terminal` | Preferred terminal: Terminal, iTerm2, Warp, Alacritty or Ghostty. |
 | `change_branch` | Update channel — see the note under [Update channel](#update-channel). |
 | `about_dialog` | The About dialog. |
@@ -515,7 +507,7 @@ Exactly what `setup_mac.sh` writes:
 | `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` or `Ghostty`. |
 | `MAS_ENABLED` | App Store updates. `1` = enabled, `0` = disabled. |
 | `UPDATE_BRANCH` | Update channel: `main` (stable) or `develop` (beta). |
-| `AUTOSTART` | SwiftBar autostart state. |
+| `AUTOSTART` | Legacy autostart flag. Nothing reads it — starting at login is the app's own setting, recorded by macOS. |
 | `CLEANUP_ENABLED` | Run `brew cleanup --prune=all` after each update. |
 | `AUTO_INSTALL_APPS` | Replace self-updating app bundles directly. `0` by default. |
 | `CODEBERG_USERNAME` | Username for the backup mirror. Blank = GitHub only, no dual-source verification. |
@@ -661,31 +653,29 @@ remove in that case.
 ~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
 ```
 
-Run with no arguments it asks before each of six steps:
+Run with no arguments it asks before each of five steps:
 
-1. **SwiftBar plugin** — deletes `update_system.*.sh` from the plugin
-   directory it reads out of SwiftBar's own preferences.
-2. **The app** — removes `/Applications/MacUpdaterGuide.app`, reading its
-   bundle identifier from the bundle first so step 5 still works.
-3. **Login item** — removes legacy LaunchAgents and System Events login
+1. **The app** — removes `/Applications/MacUpdaterGuide.app`, reading its
+   bundle identifier from the bundle first so step 4 still works.
+2. **Login item** — removes legacy LaunchAgents and System Events login
    items. The app itself registers through `SMAppService`, which can only be
    turned off inside the app or in System Settings, so the script offers to
    open that pane.
-4. **Data and configuration** — deletes
+3. **Data and configuration** — deletes
    `~/Library/Application Support/MacSoftwareUpdater`.
-5. **App preferences** — `defaults delete` for the bundle identifier read in
-   step 2.
-6. **Optional dependencies** — offers to uninstall `mas` and SwiftBar, each
-   behind its own confirmation. These are the only two packages the toolkit
-   installs for itself. Homebrew is left alone: it is a system-wide package
-   manager holding unrelated software, so removing it is not this uninstaller's
-   job. The script says so and points at Homebrew's own instructions.
+4. **App preferences** — `defaults delete` for the bundle identifier read in
+   step 1.
+5. **Optional dependencies** — offers to uninstall `mas`, behind its own
+   confirmation. It is the only package the toolkit installs for itself.
+   Homebrew is left alone: it is a system-wide package manager holding
+   unrelated software, so removing it is not this uninstaller's job. The
+   script says so and points at Homebrew's own instructions.
 
 Named steps run without any questions, which is how the app drives it:
 
 ```zsh
 uninstall.sh --list                  # what is present, one line per step
-uninstall.sh --plugin --data         # remove exactly these two, ask nothing
+uninstall.sh --app --data            # remove exactly these two, ask nothing
 uninstall.sh --all --dry-run         # report everything, remove nothing
 uninstall.sh --help                  # every flag
 ```
@@ -693,30 +683,6 @@ uninstall.sh --help                  # every flag
 Each named step prints one `RESULT|step|outcome|detail` line, and `--list`
 prints one `ITEM|step|yes|no|detail` line, so a caller can report per-step
 results rather than guessing from an exit code.
-
-## SwiftBar plugin (optional)
-
-Everything above is the app. The engine also still renders a **SwiftBar plugin
-menu** when run with no arguments, which is how the toolkit worked before the
-app existed. The two screenshots in this section are SwiftBar, not the app.
-
-<p align="center">
-  <img src="img/menubar_monitor.png" alt="The SwiftBar plugin menu" width="100%">
-  <br><sub>The <b>SwiftBar</b> plugin menu, not the app: pending updates, monitored items and the actions the plugin offers.</sub>
-</p>
-
-<p align="center">
-  <img src="img/menubar_preferences.png" alt="The SwiftBar plugin preferences submenu" width="100%">
-  <br><sub>The <b>SwiftBar</b> plugin's Preferences submenu: interval, terminal, App Store, update channel and the self-update check.</sub>
-</p>
-
-The plugin has its own icon states, including one the app has no equivalent for:
-
-| State | Icon | Meaning |
-| :--- | :--- | :--- |
-| **Up to date** | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Everything updated"> | Nothing pending. |
-| **Updates ready** | <img src="img/menubar_icon_update_ready.png?v=2" height="24" alt="Updates ready"> | Badge with the pending count. |
-| **Toolkit update** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Toolkit update"> | A new version of the toolkit itself is available. The app reports this on its Updates page instead. |
 
 ## Development
 

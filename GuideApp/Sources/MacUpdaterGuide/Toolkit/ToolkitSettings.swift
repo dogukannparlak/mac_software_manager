@@ -61,7 +61,7 @@ final class ToolkitSettings {
     var autoInstallApps = false
     /// Empty means no Codeberg mirror is configured: downloads and self-update
     /// fall back to GitHub only, and the shell engine surfaces that in its
-    /// own "Config Warnings" menu entry.
+    /// own config warning.
     var codebergUsername = ""
 
     /// Set when the file could not be written, so the UI can say so.
@@ -137,7 +137,9 @@ final class ToolkitSettings {
         # Update Channel (main=Stable, develop=Beta)
         UPDATE_BRANCH="\(channel.rawValue)"
 
-        # SwiftBar Autostart State (Syncs with System Events)
+        # Legacy autostart flag. Nothing acts on it: starting at login is this
+        # app's own setting, recorded by macOS. Written so an existing config
+        # file keeps the key it already had.
         AUTOSTART="\(autostart ? "1" : "0")"
 
         # Run 'brew cleanup --prune=all' after each update (1=Enabled, 0=Disabled)

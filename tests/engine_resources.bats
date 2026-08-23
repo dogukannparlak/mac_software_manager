@@ -73,9 +73,9 @@ engine_library_names() {
 }
 
 @test "the bundle carries no installer - there is nothing to install" {
-    # setup_mac.sh is the terminal path for SwiftBar users, not something the
-    # app runs. Shipping it inside the bundle would invite exactly the "install
-    # yourself first" step this design removed.
+    # setup_mac.sh is the terminal install path, not something the app runs.
+    # Shipping it inside the bundle would invite exactly the "install yourself
+    # first" step this design removed.
     [ ! -f "$RESOURCES/setup_mac.sh" ]
 }
 

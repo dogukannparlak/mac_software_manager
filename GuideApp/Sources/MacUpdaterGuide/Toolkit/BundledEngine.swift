@@ -32,7 +32,7 @@ enum BundledEngine {
     /// rather than at the point a run fails.
     static let libraryNames = [
         "utils", "cache", "ignored", "history", "selfupdate", "updaters",
-        "selfupdate_apps", "app_install", "migrate", "run_modes", "menu"
+        "selfupdate_apps", "app_install", "migrate", "run_modes"
     ]
 
     /// The engine this build ships, or `nil` if the bundle somehow has none.

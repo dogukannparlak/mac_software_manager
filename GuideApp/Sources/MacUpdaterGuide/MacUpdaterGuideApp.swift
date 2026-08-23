@@ -114,7 +114,7 @@ private struct MenuBarLabel: View {
         }
     }
 
-    /// The same symbols the SwiftBar plugin has always used, which is what the
+    /// The same symbols the menu bar plugin always used, which is what the
     /// README documents and what people recognise.
     private var symbol: String {
         if isRefreshing { return "arrow.triangle.2.circlepath" }

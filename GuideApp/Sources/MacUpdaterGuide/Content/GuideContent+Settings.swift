@@ -200,15 +200,15 @@ extension GuideContent {
                     .paragraph(Localized(
                         """
                         Settings > Uninstall lists everything the toolkit put on this Mac with a tick box each: the \
-                        SwiftBar plugin, the app itself, any leftover launch agent, the \
+                        app itself, any leftover launch agent, the \
                         ~/Library/Application Support/MacSoftwareUpdater folder with the settings and history in it, \
                         and the app's own preferences. Tick what should go and press Remove once.
                         """,
                         """
                         Ayarlar > Kaldır sayfası, aracın bu Mac'e bıraktığı her şeyi birer onay kutusuyla listeler: \
-                        SwiftBar eklentisi, uygulamanın kendisi, varsa artık kalmış launch agent, ayarların ve \
-                        geçmişin durduğu ~/Library/Application Support/MacSoftwareUpdater klasörü ve uygulamanın kendi \
-                        tercihleri. Gitmesini istediklerinizi işaretleyip bir kez Kaldır'a basın.
+                        uygulamanın kendisi, varsa artık kalmış launch agent, ayarların ve geçmişin durduğu \
+                        ~/Library/Application Support/MacSoftwareUpdater klasörü ve uygulamanın kendi tercihleri. \
+                        Gitmesini istediklerinizi işaretleyip bir kez Kaldır'a basın.
                         """
                     )),
                     .paragraph(Localized(
@@ -227,12 +227,12 @@ extension GuideContent {
                     )),
                     .paragraph(Localized(
                         """
-                        It then offers to uninstall mas and SwiftBar as well, each as its own question. Those are the \
-                        only two packages the toolkit installs for itself.
+                        It then offers to uninstall mas as well, as its own question. That is the only package the \
+                        toolkit installs for itself.
                         """,
                         """
-                        Ardından mas ve SwiftBar'ı da kaldırmayı teklif eder; her biri ayrı bir soru olarak. Bu ikisi, \
-                        araç setinin kendisi için kurduğu tek paketlerdir.
+                        Ardından mas'ı da kaldırmayı teklif eder; ayrı bir soru olarak. Araç setinin kendisi için \
+                        kurduğu tek paket odur.
                         """
                     )),
                     .note(Localized(

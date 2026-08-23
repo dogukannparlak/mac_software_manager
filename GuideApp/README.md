@@ -5,7 +5,6 @@ menu bar item, reads the zsh engine's cache and drives the engine by invoking
 its subcommands. The engine does all the work; this app is the interface on
 top of the files it writes.
 
-Because the app provides its own menu bar item, SwiftBar is not required.
 
 ## Requirements
 

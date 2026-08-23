@@ -150,6 +150,6 @@ In scope: the verification chains above, the config file handling, the
 migration paths, and anything that can lead to code execution or an
 unverified binary landing on disk.
 
-Out of scope: vulnerabilities in Homebrew, `mas`, SwiftBar or the applications
+Out of scope: vulnerabilities in Homebrew, `mas` or the applications
 this toolkit updates — report those upstream. `--local` installs are
 deliberately unverified and say so; that is not a finding.

@@ -23,15 +23,14 @@ Settings → About shows both on one card. From a terminal, the engine carries
 its version in a `<bitbar.version>` header:
 
 ```sh
-grep -m1 '<bitbar.version>' "$(find ~/Documents/SwiftBarPlugins \
-    ~/Library/Application\ Support/MacSoftwareUpdater \
-    ~/Library/Application\ Support/SwiftBar \
+grep -m1 '<bitbar.version>' "$(find ~/Library/Application\ Support/MacSoftwareUpdater \
     -maxdepth 1 -name 'update_system.*.sh' 2>/dev/null | head -1)"
 ```
 
-<!-- The plugin file is wherever SwiftBar's plugin directory points; the
-     default is ~/Documents/SwiftBarPlugins. The frequency suffix is part of
-     the name, so it can be update_system.6h.sh rather than 1h. -->
+<!-- An older install can still be named update_system.6h.sh rather than 1h,
+     which is why the find matches on the prefix. If the app came from the disk
+     image and was never set up from a terminal, there is no installed copy:
+     read the version from Settings → About instead. -->
 
 ## System
 
@@ -40,8 +39,7 @@ grep -m1 '<bitbar.version>' "$(find ~/Documents/SwiftBarPlugins \
 - **Homebrew installed?** <!-- yes / no -->
 
 Homebrew is not optional: the engine refuses to start a run without it
-(`❌ Error: Homebrew is not installed!`) and a menu render degrades to
-`⚠️ Brew Missing`. `brew --version` settles it.
+(`❌ Error: Homebrew is not installed!`). `brew --version` settles it.
 
 ## Engine or app?
 
@@ -49,9 +47,7 @@ The app only reads what the engine writes, so the first thing worth knowing is
 which half is wrong. Run the engine directly and paste the output:
 
 ```sh
-"$(find ~/Documents/SwiftBarPlugins \
-    ~/Library/Application\ Support/MacSoftwareUpdater \
-    ~/Library/Application\ Support/SwiftBar \
+"$(find ~/Library/Application\ Support/MacSoftwareUpdater \
     -maxdepth 1 -name 'update_system.*.sh' 2>/dev/null | head -1)" run all
 ```
 

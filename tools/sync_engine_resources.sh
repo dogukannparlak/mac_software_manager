@@ -31,7 +31,7 @@ DEST="$REPO_ROOT/GuideApp/Sources/MacUpdaterGuide/EngineResources"
 # and the uninstaller the Uninstall page drives. Keep the lib list in step with
 # LIB_NAMES in update_system.1h.sh - the engine refuses to start without all of
 # them. setup_mac.sh is deliberately absent: the app no longer installs
-# anything, and that script is now only the terminal path for SwiftBar users.
+# anything, and that script is now only the terminal install path.
 typeset -a ENGINE_FILES
 ENGINE_FILES=(
     uninstall.sh
@@ -46,7 +46,6 @@ ENGINE_FILES=(
     lib/app_install.sh
     lib/migrate.sh
     lib/run_modes.sh
-    lib/menu.sh
 )
 
 CHECK_ONLY=0

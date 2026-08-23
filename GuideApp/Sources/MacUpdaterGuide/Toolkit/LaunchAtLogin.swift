@@ -3,9 +3,8 @@ import ServiceManagement
 
 /// Registers the app itself as a login item.
 ///
-/// The SwiftBar version added *SwiftBar* to the login items, because that was
-/// what drew the menu bar. The menu bar item now belongs to this app, so this
-/// is what has to start at login for it to be there.
+/// The menu bar item belongs to this app, so this is what has to start at
+/// login for it to be there.
 enum LaunchAtLogin {
 
     static var isEnabled: Bool {

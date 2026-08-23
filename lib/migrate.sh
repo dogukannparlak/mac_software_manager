@@ -21,8 +21,8 @@
 #
 # What this file does NOT copy from setup_mac.sh is the sudo escalation in its
 # backup path. The installer runs interactively, with a terminal to type a
-# password into; this engine also runs headless (SwiftBar's tick, a GuideApp
-# item run), where a sudo prompt has nothing to read from and would hang until
+# password into; this engine also runs headless (a cron tick, a GuideApp item
+# run), where a sudo prompt has nothing to read from and would hang until
 # something killed it. A move that needs root fails here instead, which is what
 # the "needs-root" state below exists to warn about before anything is tried.
 
@@ -833,8 +833,6 @@ run_mode_migrate() {
     }
 
     echo "---------------------------"
-    echo "🔄 Refreshing SwiftBar..."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     echo "Done!"
     sleep 2
     exit 0

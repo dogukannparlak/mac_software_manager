@@ -134,25 +134,24 @@ extract_homebrew_check() {
     [ "$output" = "0" ]
 }
 
-@test "setup_mac.sh --local --unattended installs into the support folder when SwiftBar is absent" {
+@test "setup_mac.sh --local --unattended installs into the support folder" {
     run env HOME="$TEST_HOME" zsh "$REPO_SETUP_SCRIPT" --local --unattended < /dev/null
 
     [ "$status" -eq 0 ]
-    # ToolkitPaths.locateScript() looks here, so this is what lets the app find
-    # the engine with no SwiftBar involved at all.
+    # ToolkitPaths.locateScript() looks here, and this is the only place the
+    # engine is ever installed.
     [ -x "$TEST_HOME/Library/Application Support/MacSoftwareUpdater/update_system.1h.sh" ]
-    # ...and nothing was created in the folder SwiftBar would have used.
+    # ...and no plugin folder was invented anywhere else.
     [ ! -d "$TEST_HOME/Documents/SwiftBarPlugins" ]
 }
 
-@test "setup_mac.sh --local --unattended skips SwiftBar, login items and the migration wizard" {
+@test "setup_mac.sh --local --unattended skips login items and the migration wizard" {
     run env HOME="$TEST_HOME" zsh "$REPO_SETUP_SCRIPT" --local --unattended < /dev/null
 
     [ "$status" -eq 0 ]
-    assert_contains "STEP|swiftbar|skip|" "$output"
     assert_contains "STEP|migration|skip|" "$output"
     assert_contains "STEP|login-item|skip|" "$output"
-    refute_contains "Adding SwiftBar to Login Items" "$output"
+    refute_contains "Login Items" "$output"
     refute_contains "Scanning installed applications" "$output"
 }
 

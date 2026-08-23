@@ -42,33 +42,6 @@ load "test_helper"
     [ "$output" = "cask|some.app+beta|Exact" ]
 }
 
-# swiftbar_sq_escape: single-quote escaping for SwiftBar's bash= param values.
-# A comment in the source flags a real historical bug here ("only ever ran on
-# quote-free script paths, so it went unnoticed").
-
-@test "swiftbar_sq_escape passes through a string with no quotes" {
-    run run_zsh_fn swiftbar_sq_escape "/Applications/Foo.app"
-    [ "$status" -eq 0 ]
-    [ "$output" = "/Applications/Foo.app" ]
-}
-
-@test "swiftbar_sq_escape escapes a single quote for shell embedding" {
-    run run_zsh_fn swiftbar_sq_escape "Bob's Script.sh"
-    [ "$status" -eq 0 ]
-    [ "$output" = "Bob'\\''s Script.sh" ]
-}
-
-@test "swiftbar_sq_escape output survives being wrapped in single quotes" {
-    # The whole point of the escape: 'output' must be safe to drop inside
-    # single quotes in a shell command without breaking out of the literal.
-    run run_zsh_snippet "
-        escaped=\$(swiftbar_sq_escape \"O'Brien\")
-        eval \"printf '%s' '\$escaped'\"
-    "
-    [ "$status" -eq 0 ]
-    [ "$output" = "O'Brien" ]
-}
-
 # applescript_escape: backslash-then-quote escaping for AppleScript string
 # literals (display dialog / display notification).
 

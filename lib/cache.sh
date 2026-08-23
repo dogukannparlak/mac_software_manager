@@ -117,8 +117,9 @@ cache_stale_tiers() {
     (( tier_stale )) && print -r -- "websites"
 }
 
-# Fire-and-forget background refresh. Detached so SwiftBar does not wait on it;
-# refresh_cache itself takes a non-blocking lock, so extra spawns are harmless.
+# Fire-and-forget background refresh. Detached so the caller does not wait on
+# it; refresh_cache itself takes a non-blocking lock, so extra spawns are
+# harmless.
 spawn_cache_refresh() {
     nohup "$SCRIPT_FILE" refresh_cache "${1:-auto}" >/dev/null 2>&1 &!
 }
@@ -405,8 +406,8 @@ RESULT_FORMAT_VERSION="v1"
 
 # How long an unread result file is kept. A record is meant to be consumed by
 # GuideApp as soon as the run it belongs to ends; anything still here long
-# afterwards belongs to a run nobody was watching (a terminal window, a
-# SwiftBar menu click) and is only taking up space.
+# afterwards belongs to a run nobody was watching (a terminal window, a cron
+# tick) and is only taking up space.
 RESULT_RETENTION_SECONDS=${RESULT_RETENTION_SECONDS:-86400}
 
 # Drops result files past RESULT_RETENTION_SECONDS. Called from result_write,

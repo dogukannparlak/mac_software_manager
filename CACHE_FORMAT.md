@@ -134,8 +134,8 @@ v1|running|brew-upgrade|awscli|3|8
 ### `engine`
 
 What the installed engine declares it can be relied on to write. Rewritten by
-**every** invocation of the engine - the SwiftBar menu draw, a cache refresh, a
-bulk run, a headless single-item run - before any action is dispatched.
+**every** invocation of the engine - a cache refresh, a bulk run, a headless
+single-item run - before any action is dispatched.
 
 ```
 v1|epoch|contract|release
@@ -418,7 +418,7 @@ the same dual-parser risk as everything above, so it follows the same `vN|`
 convention rather than starting a new one. Lives at
 `$APP_DIR/notifications/` (a sibling of `cache/`, not inside it).
 
-The shell engine can run headless - cron, SwiftBar, a terminal - with no
+The shell engine can run headless - cron, a terminal - with no
 guarantee GuideApp is even running, so it cannot call into the app directly.
 Instead, whenever GuideApp is running (checked with `pgrep -x
 MacUpdaterGuide`) it drops one file per notification into this directory;
@@ -575,7 +575,7 @@ v1|1755400000|cask|alt-tab|AltTab|fail|still-outdated
   nothing anywhere said the two halves disagreed.
 - Unread records are pruned by age on every write (`result_prune`,
   `RESULT_RETENTION_SECONDS`, 24h). Anything still there by then belongs to a
-  run nobody was watching - a terminal window, a SwiftBar menu click - and
+  run nobody was watching - a terminal window, a cron tick - and
   the directory must not grow without bound.
 - Shell writer: `result_write()` in `lib/cache.sh`; call sites are
   `run_mode_single()` and `run_mode_install()` in `lib/run_modes.sh` (the

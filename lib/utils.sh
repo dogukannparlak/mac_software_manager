@@ -1,18 +1,4 @@
 
-# Escape strings for SwiftBar param usage
-# Escapes single quotes in a string to ensure safe usage within SwiftBar parameters.
-# This function replaces every single quote with a sequence that remains valid when wrapped in shell commands.
-# Necessary for handling file paths or arguments containing special characters to prevent syntax breakage in the menu.
-swiftbar_sq_escape() {
-  # Build the ' -> '\'' replacement from single characters. Writing it as a
-  # backslash escape inside the substitution silently produced the wrong string
-  # (it only ever ran on quote-free script paths, so it went unnoticed).
-  local q="'"
-  local bs='\'
-  local rep="${q}${bs}${q}${q}"
-  print -r -- "${1//$q/$rep}"
-}
-
 # Escape a string for use inside an AppleScript double-quoted literal.
 # App names reach 'display dialog' and 'display notification' directly, and a
 # quote in a name (or a crafted cask token) would otherwise end the literal and
@@ -167,7 +153,7 @@ acquire_lock() {
 # whole-run lock - but a caller that only needs to serialize one short step
 # (collect_cache_for_item, lib/cache.sh) would otherwise keep every other
 # waiter blocked through its own trailing work: the final progress line, the
-# SwiftBar refresh, the closing sleep.
+# closing sleep.
 # Quiet no-op when there is nothing to release - the degraded no-zsystem
 # path, an acquire that failed or timed out, a second release of the same
 # lock - so callers never have to guard the call.
@@ -450,11 +436,11 @@ EOF
 #     language instead of quoting shell English (see CACHE_FORMAT.md)
 #   - a notification, the only one of the three that carries the full
 #     instruction untruncated, and the only one left when the run was started
-#     from the SwiftBar menu rather than GuideApp
+#     from a terminal rather than GuideApp
 #
 # Arguments are passed straight to launch_in_terminal, and its status is
 # returned unchanged. The recorded phase names the failure rather than the
-# action that hit it: which menu item was pressed is not what the user has to
+# action that hit it: which command was invoked is not what the user has to
 # do something about.
 launch_in_terminal_or_report() {
     local rc=0

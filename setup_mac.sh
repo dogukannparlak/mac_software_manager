@@ -45,9 +45,8 @@ Options:
               Install the engine without asking anything. Every question is
               answered with the safe default: the existing configuration where
               there is one, otherwise Terminal.app, App Store updates on, and
-              no migration wizard. SwiftBar is neither installed nor added to
-              your login items, and Homebrew is never installed - a Mac
-              without it exits 3 instead. Progress is printed as machine
+              no migration wizard. Nothing is added to your login items, and
+              Homebrew is never installed - a Mac without it exits 3 instead. Progress is printed as machine
               readable STEP|<id>|<state>|<text> lines alongside the normal
               output; <state> is one of start, ok, fail, skip.
               This is what MacUpdaterGuide.app runs from its setup sheet.
@@ -115,7 +114,7 @@ echo "${fg[bold]}  mac_software_manager${reset_color} v1.6.0"
 echo "${fg[cyan]}  Software Update & Application Migration Toolkit${reset_color}"
 echo "${fg[cyan]}--------------------------------------------------${reset_color}"
 echo "This script will: "
-echo "1. Install necessary missing tools (Homebrew, SwiftBar and optionally mas)"
+echo "1. Install necessary missing tools (Homebrew and optionally mas)"
 echo "2. Check and Migrate your applications to managed versions"
 echo "3. Configure real-time update monitoring"
 echo ""
@@ -818,22 +817,6 @@ else
     step mas skip "App Store updates are off"
 fi
 
-# SwiftBar hosts the menu bar plugin. Under --unattended it is left alone:
-# installing a cask copies an application into /Applications and can ask for
-# an administrator password, which is exactly the prompt this mode exists to
-# avoid - and the app driving it draws its own menu bar item, so nothing here
-# needs SwiftBar to be present.
-if (( UNATTENDED )); then
-    step swiftbar skip "SwiftBar not installed - the app has its own menu bar item"
-elif ! brew list --cask swiftbar &> /dev/null; then
-    echo "${fg[yellow]}Installing SwiftBar...${reset_color}"
-    brew install --cask swiftbar
-else
-    echo "${fg[green]}SwiftBar is already installed.${reset_color}"
-fi
-
-echo ""
-
 # Migration Process
 #
 # Never under --unattended. The wizard is a per-application conversation -
@@ -1034,7 +1017,7 @@ elif ask_confirmation "Do you want to run the application migration? (Scanning a
     for app in "${app_list[@]}"; do
         source="${app_sources[$app]}"
 
-        if [[ "$app" == "SwiftBar" || "$source" == "SYSTEM" ]]; then continue; fi
+        if [[ "$source" == "SYSTEM" ]]; then continue; fi
         if [[ "$PROCESS_ONLY_OTHER" -eq 1 ]]; then
             if [[ "$source" == "HOMEBREW" || ( "$source" == "APP STORE" && "$MAS_ENABLED" == "1" ) ]]; then continue; fi
         fi
@@ -1281,59 +1264,14 @@ elif ask_confirmation "Do you want to run the application migration? (Scanning a
 fi
 
 echo ""
-echo "${fg[green]}=== SWIFTBAR CONFIGURATION ===${reset_color}"
+echo "${fg[green]}=== ENGINE LOCATION ===${reset_color}"
 
-# Handle SwiftBar configuration safely
-EXISTING_DIR=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "")
-
-if (( UNATTENDED )); then
-    # Two cases, and neither of them invents a SwiftBar installation.
-    #
-    # A machine that already runs SwiftBar keeps its plugin folder, so the
-    # menu it has been drawing goes on working and no second copy of the
-    # plugin appears beside the one it runs.
-    #
-    # A machine without SwiftBar gets the engine in $APP_DIR instead of a
-    # ~/Documents/SwiftBarPlugins that nothing would ever read. That folder is
-    # already where locateScript() looks (see ToolkitPaths.swift), so the app
-    # finds the engine straight away - and this run neither creates a stray
-    # directory nor writes SwiftBar's own preferences on its behalf.
-    if [[ -n "$EXISTING_DIR" ]]; then
-        PLUGIN_DIR="${EXISTING_DIR/#\~/$HOME}"
-        echo "Using the configured SwiftBar plugin folder: ${fg[cyan]}$PLUGIN_DIR${reset_color}"
-    else
-        PLUGIN_DIR="$APP_DIR"
-        echo "SwiftBar is not configured - installing the engine into ${fg[cyan]}$APP_DIR${reset_color}"
-    fi
-else
-    if [[ -n "$EXISTING_DIR" ]]; then
-        # Expand tilde if present
-        EXPANDED_EXISTING="${EXISTING_DIR/#\~/$HOME}"
-        echo "SwiftBar is already configured to use: ${fg[cyan]}$EXPANDED_EXISTING${reset_color}"
-        if ask_confirmation "Use this existing directory for the plugin?"; then
-            PLUGIN_DIR="$EXPANDED_EXISTING"
-        fi
-    fi
-
-    if [[ -z "$PLUGIN_DIR" ]]; then
-        DEFAULT_DIR="$HOME/Documents/SwiftBarPlugins"
-        if ask_confirmation "Use default directory $DEFAULT_DIR?"; then
-            PLUGIN_DIR="$DEFAULT_DIR"
-        else
-            echo "Enter full path for plugins:"
-            read -r user_path
-            PLUGIN_DIR="${user_path/#\~/$HOME}"
-        fi
-        # Only update global setting if it's different or missing
-        # Use quotes for variables that might contain spaces in paths
-        if [[ "$PLUGIN_DIR" != "$EXPANDED_EXISTING" ]]; then
-            defaults write com.ameba.SwiftBar PluginDirectory -string "$PLUGIN_DIR"
-        fi
-    fi
-fi
-
-# Create plugin directory
-mkdir -p "$PLUGIN_DIR"
+# The engine and its library live together in $APP_DIR. There is no separate
+# plugin folder to choose any more: MacUpdaterGuide ships its own copy of the
+# engine and finds an installed one here (see locateScript in ToolkitPaths.swift),
+# so a stray directory somewhere else would only be a second copy to keep in
+# sync. Nothing outside this script's own files is configured.
+echo "Installing the engine into ${fg[cyan]}$APP_DIR${reset_color}"
 
 # APP_DIR and CONFIG_FILE are defined at the top of this script, because the
 # existing configuration has to be read before the first question is asked.
@@ -1459,7 +1397,8 @@ MAS_ENABLED="$MAS_ENABLED"
 # Update Channel (main=Stable, develop=Beta)
 UPDATE_BRANCH="$WRITE_BRANCH"
 
-# SwiftBar Autostart State (Syncs with System Events)
+# Legacy autostart flag. Nothing acts on it: starting at login is the app's
+# own setting, recorded by macOS. Kept so an existing config file still parses.
 AUTOSTART="$WRITE_AUTOSTART"
 
 # Run 'brew cleanup --prune=all' after each update (1=Enabled, 0=Disabled)
@@ -1483,15 +1422,12 @@ step config ok "Configuration written"
 # Install/Update the Engine Library (lib/*.sh)
 # update_system.1h.sh is now a bootstrap + dispatcher that sources its actual
 # functions from $APP_DIR/lib at runtime - it cannot run at all without these,
-# so they have to land before the plugin file itself. Kept in $APP_DIR
-# (not the SwiftBar plugin folder) for the same reason setup_mac.sh/
-# uninstall.sh already are - see "Remove utility scripts from SwiftBar Plugin
-# Directory" further down for the bug that taught this project that lesson.
+# so they have to land before the engine file itself.
 # This list MUST match LIB_NAMES in update_system.1h.sh exactly.
 echo "Fetching engine library..."
 step lib start "Installing the engine library"
 typeset -a LIB_NAMES
-LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes menu)
+LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes)
 
 mkdir -p "$APP_DIR/lib"
 LIB_INSTALL_FAILED=0
@@ -1514,29 +1450,25 @@ if [[ "$LIB_INSTALL_FAILED" == "1" ]]; then
 fi
 step lib ok "Engine library installed"
 
-# Install/Update the Main Plugin (Only this goes to SwiftBar folder)
-echo "Fetching latest monitor plugin..."
+# Install/Update the Engine
+echo "Fetching latest engine..."
 step plugin start "Installing the update engine"
 
-# A previous install may use a different refresh interval (update_system.6h.sh).
-# Reuse that exact file name, otherwise SwiftBar would run two copies of the
-# plugin side by side - two menu bar icons, two parallel update checks.
-# (Nom) = no error when nothing matches, newest modification time first, so the
-# copy SwiftBar has actually been running is the one that survives.
-typeset -a existing_plugins
-existing_plugins=("$PLUGIN_DIR"/update_system.*.sh(Nom))
+# The .1h. in the name is a leftover of the interval-in-the-filename scheme the
+# menu bar plugin host used to schedule by. Nothing schedules off the name now,
+# so every install normalises to update_system.1h.sh and an older install's
+# differently-named copy (update_system.6h.sh and friends) is removed rather
+# than kept - two copies in $APP_DIR would only be two engines to keep in sync.
+# (Nom) = no error when nothing matches, newest modification time first.
+typeset -a existing_engines
+existing_engines=("$APP_DIR"/update_system.*.sh(Nom))
 
-TARGET_PLUGIN="$PLUGIN_DIR/update_system.1h.sh"
-if [[ ${#existing_plugins[@]} -gt 0 ]]; then
-    TARGET_PLUGIN="${existing_plugins[1]}"
-    echo "Existing plugin found: ${fg[cyan]}${TARGET_PLUGIN:t}${reset_color} (refresh interval kept)"
-fi
+TARGET_PLUGIN="$APP_DIR/update_system.1h.sh"
 
-# Remove every other copy so only one plugin instance survives
-for stale_plugin in "${existing_plugins[@]}"; do
-    if [[ "$stale_plugin" != "$TARGET_PLUGIN" ]]; then
-        echo "${fg[yellow]}Removing duplicate plugin: ${stale_plugin:t}${reset_color}"
-        rm -f "$stale_plugin"
+for stale_engine in "${existing_engines[@]}"; do
+    if [[ "$stale_engine" != "$TARGET_PLUGIN" ]]; then
+        echo "${fg[yellow]}Removing superseded engine copy: ${stale_engine:t}${reset_color}"
+        rm -f "$stale_engine"
     fi
 done
 
@@ -1546,7 +1478,7 @@ elif (( ! LOCAL_MODE )) && [[ -f "./update_system.1h.sh" ]]; then
     echo "${fg[yellow]}Remote copy unavailable or unverified - using the local copy from this installer.${reset_color}"
     cp "./update_system.1h.sh" "$TARGET_PLUGIN"
 else
-    echo "${fg[red]}❌ Critical Error: No verified source found for plugin.${reset_color}"
+    echo "${fg[red]}❌ Critical Error: No verified source found for the engine.${reset_color}"
     step plugin fail "No verified source found for the update engine"
     exit 1
 fi
@@ -1566,55 +1498,16 @@ echo "Backing up Setup Wizard..."
 cp "$0" "$APP_DIR/setup_mac.sh"
 chmod +x "$APP_DIR/setup_mac.sh"
 
-# Remove utility scripts from SwiftBar Plugin Directory if they exist (bug in previous version)
-#
-# Skipped when the plugin folder *is* $APP_DIR - the --unattended case where
-# SwiftBar is not configured. Those two files are meant to live in $APP_DIR and
-# were installed there moments ago; deleting them here would undo that.
-if [[ "$PLUGIN_DIR" != "$APP_DIR" ]]; then
-    echo "Cleaning up SwiftBar Plugin Directory..."
-    rm -f "$PLUGIN_DIR/setup_mac.sh"
-    rm -f "$PLUGIN_DIR/uninstall.sh"
-fi
-
-# Everything below reaches outside this script's own files: it talks to
-# SwiftBar, edits the login items through System Events and launches an
-# application. Under --unattended none of it happens.
-#
-# The login item edit is the reason. `System Events` is scripting another
-# process, so macOS puts up an Automation consent dialog the first time - in
-# front of whichever app happens to be running this script, with no way for
-# it to answer. Adding an application to someone's login items is also not a
-# side effect to have while they were asking for the engine to be installed.
-if (( UNATTENDED )); then
-    step login-item skip "Login items left alone"
-else
-    # Restart SwiftBar application to apply changes
-    echo "Refreshing SwiftBar..."
-    open -g "swiftbar://refreshallplugins"
-
-    # Enable autostart for SwiftBar
-    echo "Ensuring SwiftBar autostarts at login..."
-    if ! osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "SwiftBar"; then
-        echo "Adding SwiftBar to Login Items..."
-        osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/SwiftBar.app", hidden:false}' >/dev/null 2>&1
-        echo "${fg[green]}✓ SwiftBar added to Login Items.${reset_color}"
-    else
-        echo "${fg[green]}✓ SwiftBar is already in Login Items.${reset_color}"
-    fi
-
-    # Launch SwiftBar if not already running
-    if ! pgrep -x "SwiftBar" >/dev/null; then
-        echo "Starting SwiftBar..."
-        open -a SwiftBar
-        sleep 2  # Give SwiftBar time to start before refreshing plugins
-    fi
-fi
+# This script no longer touches login items. Starting at login is the app's
+# own switch (SMAppService, see LaunchAtLogin.swift), which macOS records for
+# the app itself - a script editing the login items through System Events would
+# put an Automation consent dialog in front of whichever app happens to be
+# running it, with no way for it to answer.
+step login-item skip "Login items are managed by MacUpdaterGuide"
 
 echo ""
 echo "${fg[green]}Setup complete!${reset_color}"
-echo "1. Plugin installed in: ${fg[cyan]}$PLUGIN_DIR${reset_color}"
-echo "2. System files moved to: ${fg[cyan]}$APP_DIR${reset_color}"
+echo "Engine installed in: ${fg[cyan]}$APP_DIR${reset_color}"
 echo ""
 echo "You can now safely delete the Installer folder from your Downloads."
 step done ok "Setup complete"

@@ -40,13 +40,11 @@ Options:
   --list             Print what is present, one "ITEM|key|yes|no|detail" line
                      per step, and exit without removing anything.
   --all              Run every step below without asking.
-  --plugin           Remove the SwiftBar plugin script.
   --app              Remove the GuideApp application bundle.
   --login-item       Remove legacy launch agents for the app.
   --data             Remove ~/Library/Application Support/MacSoftwareUpdater.
   --prefs            Remove the app's preferences (defaults domain).
   --mas              Uninstall the 'mas' Homebrew package.
-  --swiftbar         Uninstall the SwiftBar Homebrew cask.
   --app-path PATH    Where the app bundle is, if not /Applications.
   --dry-run          Report what each selected step would do, remove nothing.
   --quiet            Suppress the narration; keep the RESULT| lines.
@@ -72,14 +70,12 @@ select_step() { SELECTED[$1]=1; INTERACTIVE=0 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --list)        LIST_ONLY=1 ;;
-        --all)         for k in plugin app login-item data prefs mas swiftbar; do select_step "$k"; done ;;
-        --plugin)      select_step plugin ;;
+        --all)         for k in app login-item data prefs mas; do select_step "$k"; done ;;
         --app)         select_step app ;;
         --login-item)  select_step login-item ;;
         --data)        select_step data ;;
         --prefs)       select_step prefs ;;
         --mas)         select_step mas ;;
-        --swiftbar)    select_step swiftbar ;;
         --app-path)    shift; GUIDE_APP="$1" ;;
         --dry-run)     DRY_RUN=1 ;;
         --quiet)       QUIET=1 ;;
@@ -142,22 +138,6 @@ removed() {
 
 # --- Shared discovery, so --list and the steps themselves never disagree ---
 
-swiftbar_plugin_dir() {
-    local dir
-    dir=$(defaults read com.ameba.SwiftBar PluginDirectory 2>/dev/null || echo "")
-    echo "${dir/#\~/$HOME}"
-}
-
-# Prints one plugin script path per line; nothing when the directory is
-# missing or empty. find, not a glob: under zsh's default options a glob that
-# matches nothing throws "no matches found", which under `set -e` used to kill
-# the whole uninstaller.
-swiftbar_plugin_scripts() {
-    local dir="$1"
-    [[ -d "$dir" ]] || return 0
-    find "$dir" -maxdepth 1 -name 'update_system.*.sh' 2>/dev/null || true
-}
-
 legacy_launch_agents() {
     find "$HOME/Library/LaunchAgents" -maxdepth 1 -iname "*macupdaterguide*" 2>/dev/null || true
 }
@@ -178,14 +158,6 @@ fi
 # front of someone who only opened a settings page is not a fair trade for one
 # checkbox. Legacy launch agent files are visible without any of that.
 if (( LIST_ONLY )); then
-    plugin_dir="$(swiftbar_plugin_dir)"
-    plugin_scripts="$(swiftbar_plugin_scripts "$plugin_dir")"
-    if [[ -n "$plugin_scripts" ]]; then
-        echo "ITEM|plugin|yes|$(echo "$plugin_scripts" | tr '\n' ' ')"
-    else
-        echo "ITEM|plugin|no|$plugin_dir"
-    fi
-
     if [[ -d "$GUIDE_APP" ]]; then
         echo "ITEM|app|yes|$GUIDE_APP"
     else
@@ -217,51 +189,16 @@ if (( LIST_ONLY )); then
         echo "ITEM|mas|no|mas"
     fi
 
-    if brew list --cask swiftbar &> /dev/null; then
-        echo "ITEM|swiftbar|yes|swiftbar"
-    else
-        echo "ITEM|swiftbar|no|swiftbar"
-    fi
-
     exit 0
 fi
 
 say "${fg[red]}=== Mac Software Manager: Uninstaller v1.6.0 ===${reset_color}"
 (( DRY_RUN )) && say "${fg[yellow]}Dry run: nothing will actually be removed.${reset_color}"
 
-# 1. Remove the SwiftBar Plugin
-if wants plugin; then
-    say ""
-    say "Step 1: SwiftBar Plugin"
-    # Try to find the plugin directory from SwiftBar settings
-    EXPANDED_DIR="$(swiftbar_plugin_dir)"
-
-    if [[ -d "$EXPANDED_DIR" ]]; then
-        # Look for any version of the script (1h, 1d, etc.)
-        FILES=()
-        while IFS= read -r -d '' f; do FILES+=("$f"); done < <(find "$EXPANDED_DIR" -maxdepth 1 -name 'update_system.*.sh' -print0)
-        if [[ ${#FILES[@]} -gt 0 ]]; then
-            say "Found plugin(s) in: $EXPANDED_DIR"
-            if confirm "Delete update_system script from SwiftBar?"; then
-                perform rm -f "${FILES[@]}"
-                removed plugin "${FILES[*]}" "Plugin removed."
-            else
-                report plugin skipped "declined"
-            fi
-        else
-            say "No update_system scripts found in $EXPANDED_DIR."
-            report plugin skipped "nothing to remove"
-        fi
-    else
-        say "Could not automatically determine SwiftBar plugin directory."
-        report plugin skipped "plugin directory not found"
-    fi
-fi
-
-# 2. Remove the GuideApp Application
+# 1. Remove the GuideApp Application
 if wants app; then
     say ""
-    say "Step 2: GuideApp Application"
+    say "Step 1: GuideApp Application"
     if [[ -d "$GUIDE_APP" ]]; then
         if confirm "Delete $GUIDE_APP?"; then
             if perform rm -rf "$GUIDE_APP"; then
@@ -278,10 +215,10 @@ if wants app; then
     fi
 fi
 
-# 3. Remove Login Item / Launch Agent
+# 2. Remove Login Item / Launch Agent
 if wants login-item; then
     say ""
-    say "Step 3: GuideApp Login Item"
+    say "Step 2: GuideApp Login Item"
     FOUND_LOGIN_ITEM=0
 
     # Legacy-style LaunchAgents plist (GuideApp itself uses SMAppService, not a
@@ -323,10 +260,10 @@ if wants login-item; then
     fi
 fi
 
-# 4. Remove Data & Config
+# 3. Remove Data & Config
 if wants data; then
     say ""
-    say "Step 4: Local Data & Configuration"
+    say "Step 3: Local Data & Configuration"
     if [[ -d "$APP_DIR" ]]; then
         if confirm "Delete logs and configuration files in $APP_DIR?"; then
             if perform rm -rf "$APP_DIR"; then
@@ -343,10 +280,10 @@ if wants data; then
     fi
 fi
 
-# 5. Remove GuideApp Preferences (UserDefaults)
+# 4. Remove GuideApp Preferences (UserDefaults)
 if wants prefs; then
     say ""
-    say "Step 5: GuideApp Preferences"
+    say "Step 4: GuideApp Preferences"
     if [[ -n "$GUIDE_BUNDLE_ID" ]]; then
         if confirm "Delete GuideApp preferences ($GUIDE_BUNDLE_ID)?"; then
             if (( DRY_RUN )); then
@@ -366,14 +303,14 @@ if wants prefs; then
     fi
 fi
 
-# 6. Optional Dependencies
-# Only the two packages this toolkit installs for itself. Homebrew is
+# 5. Optional Dependencies
+# Only the one package this toolkit installs for itself. Homebrew is
 # deliberately left alone: it is a system-wide package manager holding software
 # that has nothing to do with this project, so removing it is not this
 # uninstaller's business.
-if wants mas || wants swiftbar; then
+if wants mas; then
     say ""
-    say "Step 6: Dependencies (Optional)"
+    say "Step 5: Dependencies (Optional)"
 fi
 
 if wants mas; then
@@ -389,25 +326,6 @@ if wants mas; then
         fi
     else
         report mas skipped "not installed"
-    fi
-fi
-
-if wants swiftbar; then
-    if brew list --cask swiftbar &> /dev/null; then
-        if confirm "Uninstall SwiftBar app?"; then
-            # Remove from login items first
-            say "Removing SwiftBar from Login Items..."
-            perform osascript -e 'tell application "System Events" to delete every login item whose name is "SwiftBar"' 2>/dev/null || true
-            if perform brew uninstall --cask swiftbar; then
-                removed swiftbar "swiftbar" "SwiftBar removed."
-            else
-                report swiftbar failed "brew uninstall --cask swiftbar failed"
-            fi
-        else
-            report swiftbar skipped "declined"
-        fi
-    else
-        report swiftbar skipped "not installed"
     fi
 fi
 

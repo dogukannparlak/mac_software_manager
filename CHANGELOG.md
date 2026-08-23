@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The app stopped asking to install itself.
+The app stopped asking to install itself, and SwiftBar is gone.
+
+### Removed
+
+- **SwiftBar, everywhere.** The menu bar item has belonged to
+  `MacUpdaterGuide.app` since 1.5.0, which left SwiftBar as a second menu
+  nobody the app was built for ever saw — and a dependency `setup_mac.sh`
+  installed, added to the login items and launched on their behalf.
+
+  What went: `lib/menu.sh` and `render_menu` (the plugin's whole 651-line menu
+  draw), `swiftbar_sq_escape` in `lib/utils.sh` and its tests, every
+  `swiftbar://refreshplugin` call, the `<swiftbar.*>` plugin metadata header,
+  and the `change_interval` and `toggle_autostart` subcommands — the first
+  scheduled by renaming the file, which only SwiftBar read, and the second
+  toggled SwiftBar's own login item.
+
+  `setup_mac.sh` no longer installs the SwiftBar cask, asks about a plugin
+  directory, writes `com.ameba.SwiftBar` preferences, or touches the login
+  items at all; the engine always installs into
+  `~/Library/Application Support/MacSoftwareUpdater/` and normalises to
+  `update_system.1h.sh`. `uninstall.sh` lost its `--plugin` and `--swiftbar`
+  steps and now walks five steps rather than seven. `ToolkitPaths` no longer
+  searches SwiftBar's plugin folder.
+
+  **If you installed through SwiftBar**, its plugin script and the SwiftBar
+  cask stay on your Mac and the uninstaller no longer offers to remove them.
+  Delete `update_system.*.sh` from your plugin directory and
+  `brew uninstall --cask swiftbar` by hand.
+
+  Running the engine with no subcommand now prints its usage and exits `2`
+  instead of drawing a menu. `AUTOSTART` stays in `settings.conf` as a legacy
+  key so existing files keep parsing; nothing reads it.
 
 ### Changed
 
@@ -27,9 +58,9 @@ The app stopped asking to install itself.
 
   `ToolkitPaths.locateScript()` prefers the bundled engine over any installed
   copy, so the two can never disagree about what the other writes. An existing
-  `setup_mac.sh` installation keeps working for SwiftBar; the app just no
-  longer needs it to be there. The Uninstall page falls back to the bundled
-  `uninstall.sh` the same way.
+  `setup_mac.sh` installation still works; the app just no longer needs it to
+  be there. The Uninstall page falls back to the bundled `uninstall.sh` the
+  same way.
 
 - **The setup sheet now lists only what the app cannot bring with it**:
   Homebrew, and the optional `mas`. It appears only when Homebrew is missing
@@ -46,17 +77,15 @@ The app stopped asking to install itself.
 - **`setup_mac.sh --unattended`**: installs the engine with no questions asked,
   every answer taken from the existing configuration or a safe default. It
   prints machine-readable `STEP|<id>|<state>|<text>` progress lines alongside
-  its normal output, skips the migration wizard, and installs neither SwiftBar
-  nor a login item. Exit codes are `0` success, `2` bad usage, `3` no Homebrew,
-  `1` anything else. Works together with `--local`.
+  its normal output, skips the migration wizard, and adds no login item. Exit
+  codes are `0` success, `2` bad usage, `3` no Homebrew, `1` anything else.
+  Works together with `--local`.
 
-  This is now the *terminal* path — for scripting a fresh Mac, and for anyone
-  who wants the SwiftBar plugin. The app does not use it.
+  This is now the *terminal* path — for scripting a fresh Mac. The app does
+  not use it.
 
-  With no SwiftBar configured it installs into
-  `~/Library/Application Support/MacSoftwareUpdater/` instead of creating a
-  plugin folder nothing would read, and it does not write SwiftBar's
-  preferences on its behalf.
+  It installs into `~/Library/Application Support/MacSoftwareUpdater/`, which
+  is where the app looks for an installed copy.
 
 ### Security
 

@@ -28,24 +28,24 @@ final class UninstallPlanTests: XCTestCase {
     /// The flags are the raw values, so the enum and the script can never
     /// drift apart by a typo in a hand-written string.
     func testFlagsMatchTheScriptsOptionNames() {
-        XCTAssertEqual(UninstallStep.plugin.flag, "--plugin")
+        XCTAssertEqual(UninstallStep.app.flag, "--app")
         XCTAssertEqual(UninstallStep.loginItem.flag, "--login-item")
-        XCTAssertEqual(UninstallStep.swiftbar.flag, "--swiftbar")
+        XCTAssertEqual(UninstallStep.mas.flag, "--mas")
     }
 
     // MARK: - list
 
     func testListParsesPresenceAndDetail() async throws {
         let fixture = try makeFixture("""
-        echo 'ITEM|plugin|yes|/Users/x/Library/Application Support/SwiftBar/update_system.1h.sh'
+        echo 'ITEM|data|yes|/Users/x/Library/Application Support/MacSoftwareUpdater'
         echo 'ITEM|app|no|/Applications/MacUpdaterGuide.app'
         """)
 
         let items = await UninstallPlan.list(script: fixture, appBundle: appBundle)
 
-        let plugin = try XCTUnwrap(items.first { $0.step == .plugin })
-        XCTAssertTrue(plugin.isPresent)
-        XCTAssertTrue(plugin.detail.hasSuffix("update_system.1h.sh"))
+        let data = try XCTUnwrap(items.first { $0.step == .data })
+        XCTAssertTrue(data.isPresent)
+        XCTAssertTrue(data.detail.hasSuffix("MacSoftwareUpdater"))
 
         let app = try XCTUnwrap(items.first { $0.step == .app })
         XCTAssertFalse(app.isPresent)

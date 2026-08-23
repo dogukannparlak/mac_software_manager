@@ -7,11 +7,12 @@
 # <bitbar.desc>Monitors Homebrew and App Store updates, tracks history and stats.</bitbar.desc>
 # <bitbar.dependencies>brew,mas</bitbar.dependencies>
 # <bitbar.abouturl>https://github.com/dogukannparlak/mac_software_manager</bitbar.abouturl>
-# <swiftbar.hideSwiftBar>true</swiftbar.hideSwiftBar>
-# <swiftbar.hideLastUpdated>true</swiftbar.hideLastUpdated>
-# <swiftbar.hideRunInTerminal>true</swiftbar.hideRunInTerminal>
-# <swiftbar.hideDisablePlugin>true</swiftbar.hideDisablePlugin>
-# <swiftbar.hideAbout>true</swiftbar.hideAbout>
+#
+# The <bitbar.*> block above is no longer plugin metadata for anything to read
+# as a menu: it is this engine's version header. tools/sync_version.sh stamps
+# <bitbar.version>, ToolkitVersion.read and the self-update download check parse
+# it, and <bitbar.title> is the sanity header install_project_file verifies. It
+# has to stay inside the first five lines - see the head -n 5 just below.
 
 # ==============================================================================
 # 1. GLOBAL CONFIGURATION
@@ -251,7 +252,7 @@ fi
 
 # Colors (Light/Dark mode support)
 # Format: COLOR_LIGHT,COLOR_DARK
-# SwiftBar automatically switches between these based on system theme WITHOUT needing a refresh.
+# The pair is kept so a renderer can pick the right one for the system theme.
 # Text Color: Almost Black for Light Mode, Light Gray for Dark Mode
 COLOR_INFO="#333333,#B0B0B0"
 # Success (Green): Deep Emerald for Light, Neon Green for Dark
@@ -297,14 +298,12 @@ fi
 # lib/run_modes.sh) - the two must never drift apart. See CACHE_FORMAT.md and
 # the doc comment on each lib file for what lives where.
 typeset -a LIB_NAMES
-LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes menu)
+LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes)
 
 # MSU_LIB_DIR overrides where libs are sourced from - used by the bats test
 # suite (tests/test_helper.bash) to point straight at the repo's lib/
 # directory instead of a real install. Production never sets it, so this is
-# always $APP_DIR/lib there - deliberately NOT the SwiftBar plugin directory
-# (see "Cleaning up SwiftBar Plugin Directory" further down in this file for
-# why extra files do not belong there).
+# always $APP_DIR/lib there.
 LIB_DIR="${MSU_LIB_DIR:-$APP_DIR/lib}"
 for lib_name in "${LIB_NAMES[@]}"; do
     lib_path="$LIB_DIR/${lib_name}.sh"
@@ -328,18 +327,15 @@ done
 [[ "$ZSH_EVAL_CONTEXT" == *:file ]] && return 0
 
 # Every action below is a one-shot command (change a setting, run an update,
-# refresh the cache) that does its work and exits - unlike section 6, nothing
-# here has to keep going in the face of a broken step. From here through the
-# end of "run"/"brew_update", a failing command aborts instead of being
-# silently absorbed, so a real bug shows up as a visible failure. Section 6
-# (the cache-backed menu draw, which runs on every SwiftBar tick and must
-# never go blank over one bad entry) opts back out with its own 'set +e'.
+# refresh the cache) that does its work and exits. From here through the end of
+# "run"/"brew_update", a failing command aborts instead of being silently
+# absorbed, so a real bug shows up as a visible failure.
 set -e
 set -o pipefail
 
 # State what this engine can be relied on to write, before anything is
-# dispatched. Every real invocation passes through here - the SwiftBar menu
-# draw, a cache refresh, a bulk run, a headless single-item run - so the record
+# dispatched. Every real invocation passes through here - a cache refresh, a
+# bulk run, a headless single-item run - so the record
 # is always at least as new as whatever run a reader is asking about, which is
 # what lets GuideApp tell "this engine does not support that" from "this engine
 # has not run yet". An engine older than the contract writes nothing here, and
@@ -370,73 +366,6 @@ if [[ "$1" == "refresh_cache" ]]; then
             ;;
     esac
 
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
-    exit 0
-fi
-
-# Change Interval
-if [[ "$1" == "change_interval" ]]; then
-    SELECTION=$(osascript -e 'choose from list {"1 hour", "2 hours", "6 hours", "12 hours", "1 day"} with title "Update Frequency" with prompt "Select how often to check for updates:" default items "1 hour"')
-
-    if [[ "$SELECTION" == "false" ]]; then
-        exit 0
-    fi
-
-    NEW_SUFFIX=""
-    case "$SELECTION" in
-        "1 hour")   NEW_SUFFIX="1h" ;;
-        "2 hours")  NEW_SUFFIX="2h" ;;
-        "6 hours")  NEW_SUFFIX="6h" ;;
-        "12 hours") NEW_SUFFIX="12h" ;;
-        "1 day")    NEW_SUFFIX="1d" ;;
-        *)          exit 1 ;;
-    esac
-
-    DIR=$(dirname "$SCRIPT_FILE")
-    # Clean current name and apply new suffix
-    NEW_PATH="$DIR/update_system.${NEW_SUFFIX}.sh"
-
-    if [[ "$SCRIPT_FILE" != "$NEW_PATH" ]]; then
-        mv "$SCRIPT_FILE" "$NEW_PATH" && chmod +x "$NEW_PATH"
-        notify "Update frequency changed to $SELECTION."
-        sleep 2
-        open -g "swiftbar://refreshallplugins" 2>/dev/null || true
-    else
-         notify "Frequency is already set to $SELECTION."
-    fi
-    exit 0
-fi
-
-# Toggle Autostart (SwiftBar)
-if [[ "$1" == "toggle_autostart" ]]; then
-    # Verify actual system state via AppleScript
-    if osascript -e 'tell application "System Events" to get the name of every login item' 2>/dev/null | grep -q "SwiftBar"; then
-        # '|| true': a race between this check and the actual delete (the user
-        # removed it by hand in between) is not a bug worth aborting the toggle
-        # over - the config update right below still has to happen.
-        osascript -e 'tell application "System Events" to delete login item "SwiftBar"' || true
-        NEW_STATE="0"
-        MSG="SwiftBar removed from Login Items."
-    else
-        osascript -e 'tell application "System Events" to make login item at end with properties {path:"/Applications/SwiftBar.app", hidden:false}' >/dev/null 2>&1 || true
-        NEW_STATE="1"
-        MSG="SwiftBar added to Login Items."
-    fi
-
-    # Update configuration file to reflect new state
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        mkdir -p "$APP_DIR"
-        echo "AUTOSTART=\"$NEW_STATE\"" > "$CONFIG_FILE"
-    else
-        if grep -q "^AUTOSTART=" "$CONFIG_FILE" 2>/dev/null; then
-            sed -i '' "s/^AUTOSTART=.*/AUTOSTART=\"$NEW_STATE\"/" "$CONFIG_FILE"
-        else
-            echo "AUTOSTART=\"$NEW_STATE\"" >> "$CONFIG_FILE"
-        fi
-    fi
-
-    notify "$MSG"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -556,7 +485,6 @@ if [[ "$1" == "change_branch" ]]; then
         spawn_cache_refresh "force"
 
         notify "Switched to $SELECTION channel."
-        open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     else
         echo "❌ Error: Could not install the $NEW_BRANCH version. Reverting config."
         notify "Channel switch failed. Config reverted."
@@ -616,7 +544,6 @@ if [[ "$1" == "ignore_app" ]]; then
     esac
     safe_dialog_name=$(applescript_escape "$name")
     osascript -e "display dialog \"$safe_dialog_name has been ignored.\" & return & return & \"It will no longer appear in the updates list.\" buttons {\"OK\"} default button \"OK\" with title \"App Ignored\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -639,7 +566,6 @@ if [[ "$1" == "unignore_app" ]]; then
     esac
     safe_dialog_name=$(applescript_escape "$name")
     osascript -e "display dialog \"$safe_dialog_name has been restored.\" & return & return & \"It will now appear in the updates list.\" buttons {\"OK\"} default button \"OK\" with title \"App Restored\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -674,7 +600,6 @@ if [[ "$1" == "toggle_mas" ]]; then
     spawn_cache_refresh "force"
 
     osascript -e "display dialog \"$MSG\" & return & return & \"The plugin will now refresh to reflect this change.\" buttons {\"OK\"} default button \"OK\" with title \"App Store updates\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -704,7 +629,6 @@ if [[ "$1" == "toggle_auto_install" ]]; then
     fi
 
     osascript -e "display dialog \"$MSG\" & return & return & \"$DETAIL\" buttons {\"OK\"} default button \"OK\" with title \"App Installation\" with icon note giving up after 8"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -734,7 +658,6 @@ if [[ "$1" == "toggle_cleanup" ]]; then
     fi
 
     osascript -e "display dialog \"$MSG\" & return & return & \"$DETAIL\" buttons {\"OK\"} default button \"OK\" with title \"Homebrew Cleanup\" with icon note giving up after 5"
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -767,7 +690,6 @@ fi
 # Manual Update Check
 if [[ "$1" == "check_updates" ]]; then
     check_for_updates_manual
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -799,7 +721,6 @@ if [[ "$1" == "brew_update" ]]; then
     cache_refresh_entry "brew_status"   collect_brew_status
 
     echo "✅ Homebrew database is up to date."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -831,7 +752,6 @@ if [[ "$1" == "scan_migration" ]]; then
     release_lock "cache"
 
     echo "✅ Migration scan complete."
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -851,7 +771,6 @@ if [[ "$1" == "migrate_app" ]]; then
     # keeping the phase and item the run was on - see progress_finalize.
     migrate_to_cask "$2" "$3" "${4:-adopt}" || exit 1
 
-    open -g "swiftbar://refreshplugin?name=$(basename "$SCRIPT_FILE")" 2>/dev/null || true
     exit 0
 fi
 
@@ -900,8 +819,16 @@ if [[ "$1" == "run" ]]; then
 fi
 
 # ==============================================================================
-# 6. MENU RENDER
+# 6. NO SUBCOMMAND MATCHED
 # ==============================================================================
-# Nothing above matched $1, so this is a plain SwiftBar draw. render_menu
-# (lib/menu.sh) reads only the cache and never shells out to brew/mas/curl.
-render_menu
+# Every caller names a subcommand. Reaching here means a typo or a caller built
+# against a different engine version, and both are worth saying out loud rather
+# than exiting 0 as if the work had been done.
+echo "Usage: ${SCRIPT_FILE:t} <subcommand> [args...]" >&2
+echo "" >&2
+echo "Subcommands: refresh_cache, check_updates, run, launch_update, brew_update," >&2
+echo "             install_app, update_app, ignore_app, unignore_app," >&2
+echo "             scan_migration, migrate_app, migrate_app_in_terminal," >&2
+echo "             change_terminal, change_branch, toggle_mas, toggle_cleanup," >&2
+echo "             toggle_auto_install, about_dialog" >&2
+exit 2

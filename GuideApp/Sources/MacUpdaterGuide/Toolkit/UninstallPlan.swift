@@ -3,8 +3,8 @@ import Foundation
 /// Driving `uninstall.sh` from the app instead of from a terminal.
 ///
 /// The script stays the thing that removes files - it is the only place that
-/// knows where the SwiftBar plugin ended up, what the support folder is called
-/// and which defaults domain the app writes. What changes here is who answers
+/// knows what the support folder is called and which defaults domain the app
+/// writes. What changes here is who answers
 /// its questions: the `[y/N]` walkthrough assumes someone is reading a
 /// terminal, and nobody who installed the app from a disk image expects to
 /// open one. So the app asks with checkboxes and runs the script with the step
@@ -16,13 +16,11 @@ import Foundation
 /// typo in a string literal somewhere. The script rejects an unknown option
 /// with exit 2, which makes a real mismatch loud rather than a silent no-op.
 enum UninstallStep: String, CaseIterable, Identifiable, Sendable {
-    case plugin
     case app
     case loginItem = "login-item"
     case data
     case prefs
     case mas
-    case swiftbar
 
     var id: String { rawValue }
 
@@ -30,20 +28,16 @@ enum UninstallStep: String, CaseIterable, Identifiable, Sendable {
 
     var symbol: String {
         switch self {
-        case .plugin:    return "menubar.dock.rectangle"
         case .app:       return "app.badge"
         case .loginItem: return "power"
         case .data:      return "folder"
         case .prefs:     return "slider.horizontal.3"
         case .mas:       return "bag"
-        case .swiftbar:  return "menubar.rectangle"
         }
     }
 
     var title: Localized {
         switch self {
-        case .plugin:
-            return Localized("SwiftBar plugin", "SwiftBar eklentisi")
         case .app:
             return Localized("This application", "Bu uygulama")
         case .loginItem:
@@ -54,18 +48,11 @@ enum UninstallStep: String, CaseIterable, Identifiable, Sendable {
             return Localized("Application preferences", "Uygulama tercihleri")
         case .mas:
             return Localized("mas (App Store command line tool)", "mas (App Store komut satırı aracı)")
-        case .swiftbar:
-            return Localized("SwiftBar", "SwiftBar")
         }
     }
 
     var explanation: Localized {
         switch self {
-        case .plugin:
-            return Localized(
-                "The update_system script SwiftBar runs to draw its menu.",
-                "SwiftBar'ın menüsünü çizmek için çalıştırdığı update_system betiği."
-            )
         case .app:
             return Localized(
                 "The app bundle itself. Ticking this closes the app once everything else is done.",
@@ -91,21 +78,16 @@ enum UninstallStep: String, CaseIterable, Identifiable, Sendable {
                 "Installed by setup_mac.sh to check App Store apps. Other tools on your Mac may use it too.",
                 "App Store uygulamalarını kontrol etmek için setup_mac.sh tarafından kuruldu. Mac'inizdeki başka araçlar da kullanıyor olabilir."
             )
-        case .swiftbar:
-            return Localized(
-                "The menu bar host for the plugin. Only needed if you use the SwiftBar menu.",
-                "Eklentiyi barındıran menü çubuğu uygulaması. Yalnızca SwiftBar menüsünü kullanıyorsanız gerekir."
-            )
         }
     }
 
-    /// Which boxes start ticked. The five things this toolkit put there and
-    /// nothing else uses; `mas` and SwiftBar are general-purpose tools someone
-    /// may well want to keep, so they start off and have to be chosen.
+    /// Which boxes start ticked. The four things this toolkit put there and
+    /// nothing else uses; `mas` is a general-purpose tool someone may well want
+    /// to keep, so it starts off and has to be chosen.
     var isCheckedByDefault: Bool {
         switch self {
-        case .plugin, .app, .loginItem, .data, .prefs: return true
-        case .mas, .swiftbar: return false
+        case .app, .loginItem, .data, .prefs: return true
+        case .mas: return false
         }
     }
 }

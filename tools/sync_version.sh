@@ -2,8 +2,8 @@
 #
 # Propagates the version in ./VERSION into every file that carries one.
 #
-# The scripts are distributed standalone (the plugin is a single file in the
-# SwiftBar plugin directory), so each one has to embed its own version string.
+# The scripts are distributed standalone (each is installed as its own file),
+# so each one has to embed its own version string.
 # ./VERSION is the single source of truth; this script keeps the copies in sync.
 #
 # Usage: ./tools/sync_version.sh [--check]

@@ -22,9 +22,9 @@ copy wins — it downloads, verifies fine, and is written straight over your
 local changes.
 
 With `--local` the download and checksum step is skipped entirely, and
-`update_system.1h.sh`, all eleven `lib/*.sh` files and `uninstall.sh` are
+`update_system.1h.sh`, all ten `lib/*.sh` files and `uninstall.sh` are
 copied from the directory the script itself lives in. Everything else about the
-run — the migration wizard, the prompts, the SwiftBar setup — is unchanged.
+run — the migration wizard, the prompts, the configuration — is unchanged.
 
 It says so out loud and prints one line per file confirming that verification
 was deliberately disabled — in this mode a file's provenance is "whatever is in
@@ -66,9 +66,9 @@ error fails the build immediately.
 ## Version and checksum rule
 
 `VERSION` is the single source of truth. The scripts are distributed
-standalone — the plugin is one file in the SwiftBar plugin directory — so each
-one embeds its own copy of the version string, and self-update refuses to
-install anything whose SHA-256 is not in the published `SHA256SUMS`.
+standalone — each is installed as its own file — so each one embeds its own
+copy of the version string, and self-update refuses to install anything whose
+SHA-256 is not in the published `SHA256SUMS`.
 
 After changing `setup_mac.sh`, `uninstall.sh`, `update_system.1h.sh` or any
 `lib/*.sh`:

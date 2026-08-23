@@ -160,7 +160,7 @@ extension ToolkitController {
 
     // MARK: - Periodic refresh
 
-    /// Replaces the plugin-filename trick the SwiftBar version used for its
+    /// Replaces the plugin-filename trick the menu bar plugin used for its
     /// interval: the schedule is now just a timer inside this app.
     func startScheduler() {
         timerTask?.cancel()
