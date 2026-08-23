@@ -93,3 +93,10 @@ PROJECT_STRUCTURE.txt
 # tools/sync_version.sh reads VERSION as the single source of truth.
 # Release artifacts (uploaded to GitHub Releases, not tracked)
 dist/
+
+# ==============================================================================
+# Generated reports
+# ==============================================================================
+# Ad-hoc audit/review reports (frontend, security, etc.) - working output,
+# not part of the project.
+docs/reports/
