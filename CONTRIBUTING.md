@@ -147,6 +147,14 @@ dialog still offers.
 * Keep version and checksum regeneration in the same commit as the change that
   needs it.
 
+[.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) fills the
+description in for you; every box on it is one of the rules above, and CI
+checks all of them. Bug reports and feature requests have templates too, under
+[.github/ISSUE_TEMPLATE/](.github/ISSUE_TEMPLATE/) — the bug one asks for both
+version strings, because the engine and the app ship separately and a mismatch
+between them is its own failure mode. Security problems do not go in an issue;
+see [SECURITY.md](SECURITY.md).
+
 ## Documentation
 
 * [CACHE_FORMAT.md](CACHE_FORMAT.md) — the contract between the two halves.
