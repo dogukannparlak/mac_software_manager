@@ -1,95 +1,326 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Last Commit](https://img.shields.io/gitea/last-commit/dogukannparlak/mac_software_manager?gitea_url=https%3A%2F%2Fcodeberg.org&label=last%20update&color=blue)](https://codeberg.org/dogukannparlak/mac_software_manager/commits/branch/main)
-[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://codeberg.org/dogukannparlak/mac_software_manager/releases)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
 
-![Platform](https://img.shields.io/badge/macOS-12%2B-blue?logo=apple&logoColor=white)
-![Zsh](https://img.shields.io/badge/shell-Zsh-blue?logo=gnu-bash&logoColor=white)
-![Homebrew](https://img.shields.io/badge/needs-Homebrew-blue?logo=homebrew&logoColor=white)
-![SwiftBar](https://img.shields.io/badge/GUI-SwiftBar-blue?logo=swift&logoColor=white)
-
-![Sources](https://img.shields.io/badge/sources-GitHub_%26_Codeberg-blue?logo=git&logoColor=white)
-![Maintenance](https://img.shields.io/badge/maintenance-automated-blue?logo=robot-framework&logoColor=white)
+![Engine](https://img.shields.io/badge/engine-zsh%20%2B%20Homebrew-blue?logo=homebrew&logoColor=white)
+![App](https://img.shields.io/badge/app-macOS%2014.0%2B-blue?logo=apple&logoColor=white)
+![Universal](https://img.shields.io/badge/binary-Apple%20Silicon%20%2B%20Intel-blue?logo=apple&logoColor=white)
 
 </div>
 
-# Mac Software Manager
+# Mac Software Manager
 
-Mac Software Manager is a targeted automation tool designed to bring order to your macOS environment. This project combines **Homebrew**, **Mac App Store CLI (mas)**, and **SwiftBar** to solve two specific problems:
+🇹🇷 Türkçe: [README.tr.md](README.tr.md)
 
-1. **Migration:** Moving manually installed applications under the control of package managers (App Store or Homebrew).
-2. **Updates:** Monitors updates from the menu bar and applies them via a single terminal command.
+Mac Software Manager keeps track of every application and command line tool on
+your Mac — where each one came from, whether an update is waiting, and whether
+Homebrew could be managing it instead of you. It updates them from one place,
+in the background, and can hand hand-installed apps over to Homebrew without
+losing their settings.
 
-> **⚠️ Note to Contributors & Testers**
->
-> * **Pull Requests:** Please submit all changes to the **`develop`** branch. The `main` branch is reserved for stable releases.
-> * **Upcoming Features:** Want to try the latest version before it's released? Switch to the `develop` branch to see what's next.
+<!-- Image 1 : img/app_menubar_panel.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_menubar_panel.png" alt="The app's menu bar panel" width="100%">
+  <br><sub>The menu bar item belongs to MacUpdaterGuide itself. SwiftBar is not involved and does not need to be installed.</sub>
+</p>
+-->
 
-## 🚀 Key Features
+## Requirements
 
-* **Fail-Safe Migration:** Safely converts "Drag & Drop" apps to Homebrew Casks or App Store versions without data loss.
-* **Menu Bar Dashboard:** Detailed breakdown of Casks, Formulae, and Store apps (with version numbers).
-* **One-Click Update:** Runs `brew upgrade` and `mas upgrade` in the background by default, with progress shown right in the app — no terminal window unless you turn one on in Settings.
-* **Built-in Uninstaller:** A dedicated script to safely remove the toolkit and its logs.
-* **Smart History:** Tracks how many updates you've installed over the last 7 and 30 days.
-* **Apple Silicon Ready:** Works natively on M1/M2/M3 and Intel Macs.
-* **Resilient Updates:** Features a smart failover system that automatically switches to a backup server (Codeberg) if GitHub is unreachable.
-* **Granular Control:** Easily ignore (pin) specific updates directly from the menu if you need to stay on an older version.
-* **Modular Updates:** Optional App Store support. Enable or disable mas updates globally if you prefer to manage Store apps manually.
-* **Self-Updating Apps:** Detects new releases for apps managed by neither Homebrew nor the App Store, via their Sparkle appcast or GitHub releases feed. Detection only — the menu links to the publisher's download.
-* **Instant Menu:** All data is cached and refreshed in the background, so opening the menu never waits on Homebrew or the network.
-* **Verified Self-Update:** The toolkit only replaces itself after the download matches the published `SHA256SUMS` on **both** GitHub and Codeberg.
-* **Honest History:** Updates that fail are recorded as failed instead of being counted as successes.
-* **Verified App Replacement (opt-in):** For apps with a direct DMG/ZIP download, the toolkit can install the update itself — but only after the developer's Team ID matches, the signature verifies, Gatekeeper accepts it and (where published) Sparkle's EdDSA signature checks out. Off by default; enable under **Settings → Updates**.
-* **Native App, Two Languages:** A SwiftUI app provides the menu bar item, a full update list with app icons, an inventory of everything installed and where it came from, update history, and settings — in English and Turkish, switchable without relaunching.
-* **Live Progress:** A progress bar in the app tracks every phase of an update — refreshing Homebrew, upgrading packages, cleaning up — and names the package currently being installed. Visible in the menu bar and on the Updates page, whether the update is running in the background or in a terminal.
-* **Official Links, Verified Automatically:** Detects each app's official website and GitHub repository from data it already has — a Homebrew cask's declared homepage and download URL, a GitHub repo's own homepage field — never guessed. Wrong or missing links can be corrected per app, purely locally.
-* **One Menu Per App:** Every row on the Installed Apps page has a "…" menu with everything for that app — open its links, correct them, fix how it is tracked for updates, remap it to a Homebrew cask, ignore it — no more hunting through separate settings pages.
-* **Move to Homebrew:** Finds applications you installed by hand that a Homebrew cask could keep up to date, tells you how sure each pairing is and exactly what moving would do, then hands them over in place. Scanning downloads, installs and moves nothing — it only reads cask descriptions and each app's own version info. Under **Settings → Move to Homebrew**.
-* **Manual Homebrew Check:** A dedicated "Check Homebrew" action pulls the latest Homebrew and tap metadata (`brew update`) on demand, the same way the Updates page lets you re-check individual apps.
+The two halves have different requirements, and you can use either one without
+the other:
 
-## ⚙️ How It Works
+| Part | Needs |
+| --- | --- |
+| **Shell engine** (`update_system.1h.sh`, `lib/*.sh`, `setup_mac.sh`) | `zsh` and **Homebrew** — the engine refuses to run without `brew` (pre-flight check in `update_system.1h.sh`). `mas` is optional, for App Store apps. |
+| **MacUpdaterGuide.app** (`GuideApp/`) | **macOS 14.0 or later** — `MACOSX_DEPLOYMENT_TARGET = 14.0` in `GuideApp/MacUpdaterGuide.xcodeproj/project.pbxproj` and `.macOS(.v14)` in [GuideApp/Package.swift](GuideApp/Package.swift). Universal binary: Apple Silicon and Intel. |
 
-This is not a generic maintenance utility. It is a small engine with a native interface on top:
+## How it is put together
 
-* The **shell toolkit** knows how to talk to Homebrew, the App Store, Sparkle feeds and GitHub releases. It does all the work and writes what it finds to a cache.
-* The **SwiftUI app** (`GuideApp/`) reads that cache and drives the toolkit. It owns the menu bar item, so **SwiftBar is no longer required** — though the plugin still renders in SwiftBar if you prefer it.
+Two layers, one state directory between them:
 
-### 1. Migration Wizard (`setup_mac.sh`)
+* The **shell engine** knows how to talk to Homebrew, the App Store (`mas`),
+  Sparkle appcasts and GitHub release feeds. It does all the work and writes
+  what it finds into
+  `~/Library/Application Support/MacSoftwareUpdater/cache/`.
+* The **SwiftUI app** (`GuideApp/`) reads that cache and drives the engine by
+  invoking its subcommands. It owns its own menu bar item, so **SwiftBar is no
+  longer required**. Run the engine with no arguments and it still prints a
+  SwiftBar plugin menu, which is how the toolkit worked before the app existed.
 
-Run via terminal, this script scans your `/Applications` folder to detect unmanaged software. For every app found, it checks if a matching version exists in Homebrew or the App Store.
+The cache format is the contract between them, documented in
+[CACHE_FORMAT.md](CACHE_FORMAT.md).
 
-* **Installation:** It can reuse your Homebrew and other tools, but if you don't have them, they will be installed
-* **Verification:** Distinguishes between System apps, Homebrew apps, and manually downloaded apps. It will only migrate unmanaged versions
-* **The Decision:** For every "unmanaged" app (e.g., Spotify or Chrome installed manually), it asks you for an action (depending on availability):
-  * **[A]pp Store:** Replaces the manual version with the official App Store version.
-  * **[B]rew Cask:** Replaces the manual version with a Homebrew Cask (preserving settings).
-  * **[L]eave:** Keeps the app exactly as it is.
-* **🛡️Safety First:** Before any migration, it creates a local backup (`.app.bak`). If the new installation fails (network error, hash mismatch) it automatically restores the original application. Only removes the backup if the installation was 100% successful.
-* **Not a one-off:** Answering **[L]eave** now costs nothing — the same migration is available later from the app under **Settings → Move to Homebrew** (see below), which is the same job without a terminal.
+## Features
 
-### 2. Update Engine (`update_system.x.sh`)
+* **Update everything from one place.** Homebrew formulae and casks, App Store
+  apps via `mas`, and apps that update themselves through a Sparkle appcast or
+  a GitHub releases feed.
+* **Instant menu.** Everything shown is read from the cache, refreshed in the
+  background, so opening the menu never waits on Homebrew or the network.
+* **Live progress.** The engine writes what it is doing right now — refreshing
+  Homebrew, upgrading a named package, cleaning up — and both the menu bar item
+  and the Updates page report it, whether the run is headless or in a terminal.
+* **Honest history.** After a run each package is re-checked and the real
+  outcome is logged, so a failed update is recorded as failed rather than
+  counted as a success.
+* **Inventory with provenance.** Every application with its icon, version and
+  where it came from: Homebrew, App Store, Setapp, Apple, or installed by hand.
+* **CLI tools as their own page.** Every Homebrew formula on the machine,
+  grouped into categories (see below).
+* **Move to Homebrew.** Finds hand-installed apps a Homebrew cask could keep
+  updated, says how sure each pairing is and exactly what moving would do, then
+  hands them over in place.
+* **Verified self-update.** The engine only replaces itself after the download
+  matches the published `SHA256SUMS` — see [Security](#security).
+* **Verified app replacement, opt-in.** For apps with a direct DMG/ZIP
+  download, the engine can install the update itself, but only after Team ID,
+  code signature, Gatekeeper and (where published) Sparkle's EdDSA signature
+  all pass. Off by default.
+* **Granular control.** Ignore (pin) an app, correct how it is tracked, map an
+  app name to a Homebrew cask token, or fix a detected website/GitHub link —
+  all from the app, all written into the engine's own config files.
+* **Native notifications.** The engine drops one file per event into
+  `notifications/`; the app turns each into a real `UNUserNotificationCenter`
+  alert with an **Open** action. When the app is not running, the engine falls
+  back to `osascript`.
+* **Two languages.** English and Turkish, switchable without relaunching.
 
-The part that knows how things actually get updated.
+## Menu bar states
 
-* **Status:** Collects pending updates from Homebrew, the App Store, Sparkle appcasts and GitHub release feeds, and caches the result so nothing has to wait on the network to see it.
-* **Action:** Runs `brew upgrade` and `mas upgrade` in a terminal window you can watch and stop, followed by an optional cleanup.
-* **Verification:** After a run it re-checks each package and records the real outcome, so a failed update is never logged as a success.
-* **Progress:** Writes what it is doing right now — including the package currently being installed — so the interface can report it without taking the run away from the terminal.
+The icon is drawn by the app (`MenuBarLabel` in `MacUpdaterGuideApp.swift`) and
+carries three states:
 
-It runs standalone: `./update_system.1h.sh run all` does a full update from a terminal, no app required. Run with no arguments it prints a SwiftBar plugin menu, which is how the toolkit worked before the app existed.
+<!-- Image 1.1 : img/menubar_icon_states.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/menubar_icon_states.png" alt="The three menu bar icon states" width="100%">
+  <br><sub>Left to right: up to date, updates pending, refreshing.</sub>
+</p>
+-->
 
-### 3. The App (`GuideApp/`)
+| State | SF Symbol | Meaning |
+| :--- | :--- | :--- |
+| **Up to date** | `checkmark.circle` | Nothing pending. |
+| **Updates pending** | `arrow.triangle.2.circlepath.circle` + count | The number of waiting updates is drawn next to the icon. |
+| **Refreshing** | `arrow.triangle.2.circlepath` | A cache refresh is in flight. |
 
-A native SwiftUI app that puts a face on all of it. Open the Xcode project and run it.
+The engine's SwiftBar plugin has its own icons, including a state the app does
+not have — see [SwiftBar plugin (optional)](#swiftbar-plugin-optional).
 
-* **Menu bar item:** Created by the app itself. Shows the pending count and, when a run is in flight, which package it is on. Deliberately read-only — a glance, not a control panel. Turn on **Settings → General → Menu bar only** to drop the Dock icon and live entirely up there.
-* **Updates:** Everything waiting, grouped by source, with real app icons. Update one item or all of them, or hide something you want to stay behind on. A **Check Homebrew** button next to Refresh pulls the latest Homebrew metadata on demand. Updates run in the background with an in-app progress bar by default; a terminal window is opt-in.
-* **Installed Apps:** Every application with its icon, version and **where it came from** — Homebrew, App Store, Setapp, Apple, or installed by hand. Filter by source, search, and see the Homebrew command line tools underneath. Each row's **"…" menu** opens its official website or GitHub page, and edits how that one app is tracked, mapped or linked — all local corrections, applied instantly.
-* **History:** What was updated over the last 7 or 30 days, grouped by day, with failures marked rather than hidden.
-* **Settings:** Part of the same window, not a separate panel. Language, check interval, Dock icon, open at login, whether updates run in a terminal (and which one), App Store support, cleanup, automatic installation, update channel, ignored apps, cache, and the engine location — plus the **Move to Homebrew** page described below and full editors for the tracking rules and Homebrew name mapping, so no configuration ever needs a text editor. Everything is written straight into the toolkit's config files, so the app and the terminal never disagree.
-* **Guide:** The whole feature guide built in, in English and Turkish, switchable without relaunching.
+## Installation
+
+The app and the engine install separately. Most people want both, but each
+works on its own.
+
+### 1. The app
+
+Download from
+[GitHub Releases](https://github.com/dogukannparlak/mac_software_manager/releases):
+
+| File | For |
+| --- | --- |
+| `MacUpdaterGuide-<version>-macOS-universal.dmg` | Drag-and-drop install |
+| `MacUpdaterGuide-<version>-macOS-universal.zip` | Smaller download |
+
+Both are universal binaries — Apple Silicon and Intel — and require macOS 14.0
+or later. Each release also publishes a `SHA256SUMS.txt` you can check your
+download against:
+
+```bash
+shasum -a 256 MacUpdaterGuide-<version>-macOS-universal.dmg
+```
+
+The app is **signed ad-hoc**, not with an Apple Developer ID, so macOS refuses
+to open it on the first try. Either:
+
+* **Right-click the app → Open → Open**, or
+* run `xattr -dr com.apple.quarantine /Applications/MacUpdaterGuide.app`
+
+Once only.
+
+> The 1.5.0 release is still a **draft** at the time of writing, so its assets
+> are not publicly downloadable yet. Until it is published, build the app from
+> source — see [Development](#development).
+
+### 2. The engine and the migration wizard
+
+There is no installer archive to `curl`. Clone the repository (or download the
+source archive from the Releases page) and run the wizard from the checkout:
+
+```bash
+git clone https://github.com/dogukannparlak/mac_software_manager.git
+cd mac_software_manager
+./setup_mac.sh
+```
+
+`setup_mac.sh` installs the engine into
+`~/Library/Application Support/MacSoftwareUpdater/`, writes `settings.conf`,
+and walks you through the migration step described below. Without `--local` it
+downloads each file it installs and verifies it against the published
+`SHA256SUMS` before putting it in place, falling back to the copy next to the
+installer only when no verified remote source can be reached.
+`./setup_mac.sh --help` lists both flags.
+
+During setup it asks for a **Codeberg username** for a backup mirror. Leave it
+blank to skip: downloads still work and are verified against GitHub alone, and
+the menu says so rather than silently downgrading the guarantee. See
+[Security](#security).
+
+> If macOS asks for permission to access your Documents folder, click
+> **Allow** — that is the SwiftBar plugin directory being written.
+
+### The migration step
+
+`setup_mac.sh` scans `/Applications` for software no package manager owns, and
+for each one checks whether a matching Homebrew cask or App Store entry exists.
+For every unmanaged app it asks what to do:
+
+* **[A]pp Store** — replace the manual copy with the App Store version.
+* **[B]rew Cask** — replace it with a Homebrew cask, preserving settings.
+* **[L]eave** — keep it exactly as it is.
+
+<!-- Image 6 : img/migration_utility.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/migration_utility.png" alt="The migration wizard in a terminal" width="100%">
+  <br><sub><code>setup_mac.sh</code> asking what to do with an unmanaged app. The file in the repository is from v1.2.4 and still carries the old project name, so it needs re-shooting before this is uncommented.</sub>
+</p>
+-->
+
+Before any migration it makes a local backup (`.app.bak`) and restores it
+automatically if the new installation fails, removing the backup only after a
+completely successful install.
+
+Answering **[L]eave** costs nothing: the same job is available later from the
+app under **Settings → Move to Homebrew**, without a terminal.
+
+## Using it
+
+### The app
+
+The window is a sidebar and a detail pane:
+
+Six entries in the sidebar: **Updates**, **Installed Apps**, **CLI Tools**,
+**History**, **Guide** and **Settings**. Each is described below.
+
+The menu bar item is created by the app itself. It shows the pending count and,
+during a run, which package it is on. It is deliberately read-only — a glance,
+not a control panel. **Settings → General → Menu bar only** drops the Dock icon.
+
+The app finds the engine automatically in the SwiftBar plugin folder or in
+`~/Library/Application Support/MacSoftwareUpdater/`. If you keep it elsewhere,
+point at it under **Settings → Advanced**.
+
+#### Updates
+
+Everything waiting, grouped by source, with real app icons. Update one item or
+all of them, or hide one you want to stay behind on. **Refresh** re-reads the
+cache; **Check Homebrew** pulls the latest Homebrew and tap metadata on demand.
+
+<!-- Image 2 : img/app_updates.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_updates.png" alt="The Updates page" width="100%">
+  <br><sub>Pending updates grouped by source, with Refresh and Check Homebrew in the toolbar.</sub>
+</p>
+-->
+
+Updates run in the background by default, with a progress banner naming the
+phase and the package currently being installed, an x/y counter, and a Cancel
+button. Cancelling a bulk run asks for confirmation first
+(`ToolkitController.cancelUpdate()`). A terminal window is opt-in, under Settings → General.
+
+<!-- Image 2.1 : img/app_updates_progress.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_updates_progress.png" alt="A run in progress" width="100%">
+  <br><sub>The progress banner during a run: phase, current package, counter and Cancel.</sub>
+</p>
+-->
+
+#### Installed Apps
+
+Every application with its icon, version and origin — Homebrew, App Store,
+Setapp, Apple, or installed by hand. Filter by source and search.
+
+<!-- Image 3 : img/app_installed.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_installed.png" alt="The Installed Apps page" width="100%">
+  <br><sub>Each row carries an icon, a version and the badge saying where the app came from.</sub>
+</p>
+-->
+
+Each row's **"…" menu** is everything for that one app: open its website or
+GitHub page, correct those links, change how it is tracked for updates, remap
+it to a Homebrew cask, or ignore it. Every correction is local and applied
+immediately.
+
+<!-- Image 3.1 : img/app_installed_row_menu.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_installed_row_menu.png" alt="A row's actions menu" width="100%">
+  <br><sub>Edit Links…, Edit Tracking Method…, Edit Homebrew Mapping… and Ignore, all on one app.</sub>
+</p>
+-->
+
+#### CLI Tools
+
+Homebrew has no first-class notion of a category for a formula, so this page
+leans on the one piece of real metadata Homebrew does expose: `brew leaves` —
+what you actually asked for, as opposed to what was pulled in transitively —
+plus a keyword heuristic over each leaf's own `brew desc` description.
+
+Leaves are sorted into eleven categories: Version Control, Languages &
+Runtimes, Cloud/DevOps & AI, Databases, Networking & Security, Build & Package
+Tools, Media & Documents, Shell & Text Utilities, Testing, Other Tools, and
+Libraries & Dependencies.
+
+A formula that is **not** a leaf is someone else's dependency, not a tool you
+think of as having a category, so it always lands in **Libraries &
+Dependencies** regardless of what it does. That bucket is the biggest one on
+most machines, so it is broken down further into its own sub-headings
+(runtime support, networking & security, databases, graphics & media, text &
+data, compression, AWS SDK, windowing, core).
+
+<!-- Image 3.2 : img/app_cli_tools.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_cli_tools.png" alt="The CLI Tools page" width="100%">
+  <br><sub>The category filter, with the leaf categories separated from the Libraries &amp; Dependencies bucket.</sub>
+</p>
+-->
+
+#### History
+
+What was updated over the last 7 or 30 days, grouped by day. Failures are
+marked, not hidden — after a run each package is re-checked and the real
+outcome is what gets logged.
+
+<!-- Image 4 : img/app_history.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_history.png" alt="The History page" width="100%">
+  <br><sub>The 7/30 day selector and day-grouped entries, including a failed one.</sub>
+</p>
+-->
+
+#### Guide
+
+The full feature guide, built into the app in English and Turkish, switchable
+without relaunching.
+
+#### Settings
+
+Eight pages: General, Updates, Tracked Apps, Name Mapping, Move to Homebrew,
+Ignored Apps, Advanced, About. Everything is written straight into the engine's
+own config files, so the app and the terminal never disagree.
+
+**Simultaneous Updates** on the General page is why single-item runs are exempt
+from the engine's exclusive lock: the app caps how many run at once itself
+(`AppPreferences.maxConcurrentUpdates`), and taking the bulk lock as well would
+just serialize them back to one at a time.
+
+<!-- Image 5 : img/app_settings_general.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_settings_general.png" alt="Settings › General" width="100%">
+  <br><sub>Language, check interval, run-in-terminal switch and terminal picker, concurrent update count, Dock icon, open at login.</sub>
+</p>
+-->
 
 #### Settings → Move to Homebrew
 
@@ -116,6 +347,13 @@ The results land in three groups:
 * **Cannot be moved** — listed with the reason rather than filtered out,
   because "why is my app not in the list" is the question a filtered list
   creates.
+
+<!-- Image 5.1 : img/app_settings_migrate.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_settings_migrate.png" alt="Move to Homebrew after a scan" width="100%">
+  <br><sub>All three groups at once: Ready to move, Needs your confirmation, and Cannot be moved with its reason.</sub>
+</p>
+-->
 
 **Why a failed move costs nothing.** The default is
 `brew install --cask --adopt`, which takes over the bundle that is already
@@ -160,163 +398,91 @@ where each one runs: the wizard has a terminal, so it may escalate with
 back-up-and-reinstall, whereas the page runs headless with nowhere to show a
 password prompt and never replaces an app unless you ask for it by name.
 
-## 📸 Screenshots
+### From a terminal
 
-<table width="100%">
-  <tr>
-    <td width="50%" align="center"><b>Main Menu Status</b><br>Overview of Homebrew and App Store updates</td>
-    <td width="50%" align="center"><b>History</b><br>Submenu tracking update counts for the last 7 and 30 days</td>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <img src="img/menubar_monitor.png" alt="Main View" height="400">
-    </td>
-    <td valign="top" align="center">
-      <img src="img/menubar_monitor_history.png" alt="History" weight="400">
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><b>Monitored apps</b><br>Submenu showing numbers of monitored apps</td>
-    <td width="50%" align="center"><b>Managed Apps List</b><br>Submenu showing details of monitored apps</td>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <img src="img/menubar_monitor_details.png" alt="Formulae Details" width="100%">
-    </td>
-    <td valign="top" align="center">
-      <img src="img/menubar_monitor_managed_apps.png" alt="Managed Apps List" width="100%">
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" align="center"><b>Preferences</b><br>Change Update Frequency, disable or force</td>
-    <td width="50%" align="center"><b>Migration tool</b><br>CLI Tool</td>
-  </tr>
-  <tr>
-    <td valign="top" align="center">
-      <img src="img/menubar_preferences.png" alt="Main View" width="100%">
-    </td>
-    <td valign="top" align="center">
-      <img src="img/migration_utility.png" alt="History" width="100%">
-    </td>
-  </tr>
-</table>
-
-### Menu Bar States
-
-| Status                  | Icon Appearance | Description                                |
-| :---------------------- | :-------------- | :----------------------------------------- |
-| **Up to Date**    | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Everything Updated"> | System is clean, checkmark icon displayed. |
-| **Updates Ready** | <img src="img/menubar_icon_update_ready.png?v=2" height="24" alt="Updates Ready"> | Badge with update count and red sync icon. |
-| **Plugin Update** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Plugin Update"> | New version of the toolkit is available.   |
-
-### Preferences & Control
-
-Manage the plugin behavior directly from the menu.
-
-| Feature                    | Description                                                                                                                                                                                                   |
-| :------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Update Frequency** | Toggle check intervals:`1h`, `2h`, `6h`, `12h`, or `1d`.                                                                                                                                            |
-| **Terminal App**     | Choose preferred terminal:`Terminal`, `iTerm2`, `Warp`, `Alacritty`, or `Ghostty`.                                                                                                                  |
-| **Self-Update**      | Check for updates. Verified against GitHub, plus your configured Codeberg mirror if you set one (see`CODEBERG_USERNAME` below) - GitHub only otherwise, and the menu shows a warning when no mirror is set. |
-| **Update Channel**   | Switch between`Stable (Main)` and `Beta (Develop)` releases instantly.                                                                                                                                    |
-| **App Store**        | Toggle`mas` integration on/off directly from the menu.                                                                                                                                                      |
-
-## 🛠 Quick Start
-
-### 1. Run the Installer
-
-The fastest way to start is to run this command in your Terminal. It downloads and triggers the migration wizard:
-
-**Option A: Standard Install (GitHub)**
-
-```bash
-curl -L https://github.com/dogukannparlak/mac_software_manager/releases/download/v1.5.0/Installer.zip -o Installer.zip && unzip -q Installer.zip && cd mac_software_manager && chmod +x setup_mac.sh && ./setup_mac.sh
-```
-
-**Option B: Emergency Mirror (Codeberg)**
-
-```bash
-zsh -c "$(curl -fsSL https://codeberg.org/<your-codeberg-username>/mac_software_manager/raw/branch/main/setup_mac.sh)"
-```
-
-> Option B only works once you've pushed this repo to your own Codeberg account and substituted `<your-codeberg-username>` above. `setup_mac.sh` will then ask for that same username and save it as `CODEBERG_USERNAME` in `settings.conf` - every download and self-update check from that point on verifies against **both** GitHub and Codeberg, and refuses to install a plugin update if the two disagree. Leave the prompt blank to skip the mirror entirely; downloads still work, verified against GitHub only, and the menu shows a "Config Warnings" entry saying so rather than silently downgrading the guarantee.
-
-### 2. Follow the Wizard
-
-The script will prompt you on how to handle detected applications. You can choose to migrate them or skip the process entirely.
-
-### 3. Finish
-
-Once completed, the update engine is installed and configured.
-
-> **Important:** If macOS asks for permission to access your Documents folder, click **Allow**. This is required to write and read the plugin file.
-
-### 4. Build the app (optional but recommended)
-
-```bash
-open GuideApp/MacUpdaterGuide.xcodeproj
-```
-
-Press **⌘R**. Or, from a terminal, without opening Xcode:
-
-```bash
-cd GuideApp && ./run.sh          # build (Debug) and launch
-cd GuideApp && ./run.sh -n       # launch what is already built, no rebuild
-cd GuideApp && ./run.sh --install  # build Release and copy into /Applications
-```
-
-The app adds its own menu bar item and gives you the update list, the installed-app inventory, history and settings. Turn on **Settings → General → Open at login** so the menu bar item is always there. Login items only work reliably when the app lives in `/Applications`, so use `--install` if you want that.
-
-The app finds the engine automatically in the SwiftBar plugin folder or in
-`~/Library/Application Support/MacSoftwareUpdater/`. If you keep it somewhere
-else, point at it under **Settings → Advanced**.
-
-If you would rather not use the app at all, everything still works from a terminal:
+The app is optional. A full update from a terminal:
 
 ```bash
 ~/Library/Application\ Support/MacSoftwareUpdater/update_system.1h.sh run all
 ```
 
----
+## Engine command line
 
-## 📦 Tools Used
+`update_system.1h.sh` is a bootstrap and dispatcher; its functions live in
+`lib/*.sh` (eleven modules) and are sourced at runtime. Anything not matched
+below falls through to the SwiftBar menu render.
 
-This toolkit acts as the "glue" integrating standard macOS power-user tools:
+| Invocation | What it does |
+| --- | --- |
+| *(no arguments)* | Renders the SwiftBar plugin menu. Reads the cache only — never shells out to `brew`, `mas` or `curl`. |
+| `run all` | `plugin` then `system`: self-update check, then the full update. Takes the exclusive update lock. |
+| `run system` | Homebrew and (if enabled) App Store upgrades, plus optional cleanup. Exclusive lock. |
+| `run plugin` | Self-update check for the engine and its `lib/` set. Exclusive lock. |
+| `run single <args>` | Update one item, headless. No exclusive lock — the app enforces its own concurrency limit. |
+| `run install <args>` | Install one app's update from its DMG/ZIP. No exclusive lock. |
+| `run migrate <app> <token> [adopt\|replace\|dry]` | Hand one app over to Homebrew. No exclusive lock. |
+| `refresh_cache [auto\|force]` | `auto` (the default) refreshes only the stale tiers; `force` (or `all`) refreshes everything. Non-blocking — exits if a refresh is already running. |
+| `check_updates` | Manual self-update check. |
+| `brew_update` | `brew update` only: pulls the latest Homebrew and tap metadata without upgrading anything. Takes the same lock a run does. |
+| `scan_migration` | Scans for apps Homebrew could manage. Never part of a background refresh. Takes the cache lock. |
+| `migrate_app <app> <token> [adopt\|replace\|dry]` | Headless migration of one app. Never runs `sudo`. |
+| `migrate_app_in_terminal <app> <token> [adopt\|replace\|dry]` | The same, in your configured terminal, where Homebrew can prompt for a password. |
+| `install_app <app> [live\|dry]` | Launches `run install` in your terminal. |
+| `update_app <args>` | Launches `run single` in your terminal. |
+| `ignore_app <brew\|cask\|mas\|sparkle> <id> [name]` | Pins a formula or adds the item to `ignored_apps.conf`. |
+| `unignore_app <type> <id>` | Reverses that. |
+| `toggle_mas` | Turns App Store (`mas`) support on or off. |
+| `toggle_cleanup` | Turns `brew cleanup --prune=all` after a run on or off. |
+| `toggle_auto_install` | Turns automatic app-bundle replacement on or off. |
+| `toggle_autostart` | Turns autostart on or off. |
+| `change_interval` | Check interval: 1h, 2h, 6h, 12h or 1 day. |
+| `change_terminal` | Preferred terminal: Terminal, iTerm2, Warp, Alacritty or Ghostty. |
+| `change_branch` | Update channel — see the note under [Update channel](#update-channel). |
+| `about_dialog` | The About dialog. |
+| `launch_update [mode]` | Launches a run in your configured terminal. |
 
-* **[Homebrew](https://brew.sh)** – The primary package manager. Used to install and update the majority of applications.
-* **[mas-cli](https://github.com/mas-cli/mas)** – Command-line interface for the Mac App Store. Allows updating Store apps without opening the GUI.
-* **[SwiftBar](https://swiftbar.app)** – *Optional.* The engine still renders a SwiftBar plugin menu when run with no arguments, for anyone who already uses SwiftBar. The bundled app provides its own menu bar item and does not need it.
-* **Sparkle appcasts & GitHub release feeds** – Read directly (via `xsltproc`) to catch apps that neither Homebrew nor the App Store manages.
+### Update channel
 
----
+`change_branch` offers **Stable (Main)** and **Beta (Develop)**, writing
+`main` or `develop` into `UPDATE_BRANCH`. The setting exists and works, but
+**the `develop` branch is not currently published** — `origin` has `main` and
+`feature/debug-page` only — so selecting Beta today points self-update at a
+branch that is not there. Stay on Stable unless a `develop` branch is
+announced.
 
-## 🗑️ Uninstallation
+## Configuration files
 
-If you decide to remove the toolkit, an uninstaller script is automatically placed in your application support folder during setup.
+All in `~/Library/Application Support/MacSoftwareUpdater/`.
 
-To uninstall:
+| Path | Purpose |
+| --- | --- |
+| `settings.conf` | The engine's settings, written by `setup_mac.sh` and edited by the toggles above. Mode `600`. |
+| `ignored_apps.conf` | Apps hidden from the update list (`type\|id\|name`). |
+| `tracked_apps.conf` | How individual apps are checked for updates. |
+| `app_token_map.conf` | App name → Homebrew cask token mapping. |
+| `app_links.conf` | Corrections to an app's detected website / GitHub repository. App-only — the shell engine never reads it. |
+| `cache/` | Cached update data plus the engine contract file. Safe to delete; rebuilt automatically. |
+| `notifications/` | One-shot notification requests the engine drops for the app to pick up. Events, not TTL state. |
+| `results/` | One file per single-item run, holding that run's outcome. |
+| `lib/` | The eleven engine modules, downloaded and verified as one atomic set. |
 
-1. Open **Terminal**.
-2. Run the following command:
+`update_history.log` sits alongside them and holds the history the app shows.
 
-```zsh
-~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
-```
+### `settings.conf` keys
 
----
+Exactly what `setup_mac.sh` writes:
 
-## 🗂 Configuration Files
+| Key | Meaning |
+| --- | --- |
+| `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` or `Ghostty`. |
+| `MAS_ENABLED` | App Store updates. `1` = enabled, `0` = disabled. |
+| `UPDATE_BRANCH` | Update channel: `main` (stable) or `develop` (beta). |
+| `AUTOSTART` | SwiftBar autostart state. |
+| `CLEANUP_ENABLED` | Run `brew cleanup --prune=all` after each update. |
+| `AUTO_INSTALL_APPS` | Replace self-updating app bundles directly. `0` by default. |
+| `CODEBERG_USERNAME` | Username for the backup mirror. Blank = GitHub only, no dual-source verification. |
 
-All live in `~/Library/Application Support/MacSoftwareUpdater/`.
-
-| File                   | Purpose                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `settings.conf`      | Terminal choice, App Store on/off, update channel, autostart, cleanup on/off. Re-running`setup_mac.sh` preserves these.                                              |
-| `ignored_apps.conf`  | Apps hidden from the update list (`type\|id\|name`). Managed from the menu.                                                                                            |
-| `tracked_apps.conf`  | How individual apps are checked for updates. Edited from**Settings → Tracked Apps**, or per app from its "…" menu — no need to open it by hand.               |
-| `app_token_map.conf` | Manual app name → Homebrew cask token mapping. Edited from**Settings → Name Mapping**, or per app from its "…" menu.                                          |
-| `app_links.conf`     | Corrections to an app's detected website / GitHub repository. App-only — the shell engine never reads it. Edited per app from its "…" menu (**Edit Links…**). |
-| `cache/`             | Cached update data. Safe to delete; it is rebuilt automatically.                                                                                                       |
+Re-running `setup_mac.sh` preserves the existing values.
 
 ### `tracked_apps.conf`
 
@@ -349,9 +515,8 @@ Sublime Text|sublime-text
 ```
 
 The migration wizard also appends a mapping automatically whenever you type a
-cask name by hand, so it will match on the next run. Editable the same two
-ways as `tracked_apps.conf` above — the app list, or **Edit Homebrew
-Mapping…** on the one app.
+cask name by hand, so it will match on the next run. Editable from
+**Settings → Name Mapping** or per app from its "…" menu.
 
 A mapping here counts as an `override` in the **Move to Homebrew** scan, which
 is the strongest match there is: you stated the answer, so nothing is guessed
@@ -371,106 +536,144 @@ App Name|website|owner/repo
 Either field can be left blank to keep the automatically detected value for
 just that one. Purely local: the shell engine never reads this file.
 
-## 🧑‍💻 Development
+## Security
 
-### Installing your working tree (`--local`)
+To report a vulnerability, see [SECURITY.md](SECURITY.md) — please do not open
+a public issue for one.
 
-`setup_mac.sh` normally downloads every file it installs and verifies it
-against `SHA256SUMS` before putting it in place, falling back to the copy next
-to the installer only when no verified remote source can be reached. That is
-what you want as a user — and exactly what gets in the way while developing.
-Run the plain installer from a checkout with unpushed fixes and the *published*
-copy wins: it downloads, verifies fine, and is written straight over your local
-changes.
+### Self-update
 
-Use `--local` for that case:
+Self-update overwrites a script that runs on every menu refresh, so nothing is
+installed before it passes three checks: the download has to parse as `zsh`,
+its SHA-256 has to match the publisher's `SHA256SUMS`, and — when a mirror is
+configured — the second source's `SHA256SUMS` has to agree.
 
-```bash
-./setup_mac.sh --local
+* **With `CODEBERG_USERNAME` set:** two independent sources are compared. A
+  single compromised or half-pushed mirror is caught, and the update is
+  refused if they disagree.
+* **Without it:** the file is verified against GitHub only. That is stated out
+  loud — the menu shows a "Config Warnings" entry saying so — rather than
+  quietly downgrading the guarantee.
+
+Downloads use HTTPS with TLS 1.2 enforced. Modifying the installed scripts
+yourself will trip the checksum comparison and show a toolkit-update prompt.
+
+### App replacement
+
+Off by default (`AUTO_INSTALL_APPS=0`); turn it on under **Settings →
+Updates**.
+
+<!-- Image 5.2 : img/app_settings_updates.png (not yet captured; delete this comment wrapper once the file exists)
+<p align="center">
+  <img src="img/app_settings_updates.png" alt="Settings › Updates" width="100%">
+  <br><sub>The App Store, cleanup and automatic-installation switches, the warning next to automatic installation, and the update channel picker.</sub>
+</p>
+-->
+
+When enabled, replacing an app bundle passes through
+[lib/app_install.sh](lib/app_install.sh), where every check must pass before
+anything is written:
+
+1. **Team ID match** — the downloaded bundle's `TeamIdentifier` must equal the
+   installed one's. An unsigned installed app has nothing to compare against,
+   so it is never replaced.
+2. **Code signature** — `codesign --verify` on the download.
+3. **Gatekeeper** — `spctl -a -t open`. Rejects anything not signed for
+   distribution and notarised.
+4. **Sparkle EdDSA** — verified when the app publishes an `SUPublicEDKey` and
+   the feed carries a signature. A signature that does not match is fatal; a
+   missing key or signature is reported as not checked, not as a pass.
+5. **Version match** — the bundle must be the version the feed advertised.
+
+Only `.dmg` and `.zip` are accepted. **`.pkg` is refused outright**: it runs
+preinstall/postinstall scripts as root, which can neither be sandboxed nor
+rolled back. The old bundle is moved aside rather than deleted and is restored
+on any error. Every install also offers a **Dry run** that performs the
+download and all signature checks without modifying anything.
+
+## Uninstalling
+
+`setup_mac.sh` places an uninstaller in the application support folder:
+
+```zsh
+~/Library/Application\ Support/MacSoftwareUpdater/uninstall.sh
 ```
 
-With the flag, the download and checksum step is skipped entirely and
-`update_system.1h.sh`, all eleven `lib/*.sh` files and `uninstall.sh` are copied
-from the directory the script itself lives in. Everything else about the run —
-the migration wizard, the prompts, the SwiftBar setup — is unchanged.
+It asks before each of six steps:
 
-The verification is not skipped quietly. A `--local` run says so up front and
-prints one line per file confirming that the checksum check was deliberately
-disabled, because in this mode a file's provenance is "whatever is in this
-working tree", which no published checksum can describe.
+1. **SwiftBar plugin** — deletes `update_system.*.sh` from the plugin
+   directory it reads out of SwiftBar's own preferences.
+2. **The app** — removes `/Applications/MacUpdaterGuide.app`, reading its
+   bundle identifier from the bundle first so step 5 still works.
+3. **Login item** — removes legacy LaunchAgents and System Events login
+   items. The app itself registers through `SMAppService`, which can only be
+   turned off inside the app or in System Settings, so the script offers to
+   open that pane.
+4. **Data and configuration** — deletes
+   `~/Library/Application Support/MacSoftwareUpdater`.
+5. **App preferences** — `defaults delete` for the bundle identifier read in
+   step 2.
+6. **Optional dependencies** — offers to uninstall `mas`, SwiftBar, and
+   finally Homebrew itself, each behind its own confirmation. The Homebrew
+   step warns that it removes every brew-installed package.
 
-Without the flag, behaviour is byte-for-byte what it has always been: remote
-first, local copy only as a fallback. `./setup_mac.sh --help` describes both.
+## SwiftBar plugin (optional)
 
-When you are ready to push, regenerate the checksums — see the **For
-contributors** note under [Notes](#-notes); installed copies refuse to
-self-update against a stale `SHA256SUMS`.
+Everything above is the app. The engine also still renders a **SwiftBar plugin
+menu** when run with no arguments, which is how the toolkit worked before the
+app existed. The two screenshots in this section are SwiftBar, not the app.
 
-### The Debug page
+<p align="center">
+  <img src="img/menubar_monitor.png" alt="The SwiftBar plugin menu" width="100%">
+  <br><sub>The <b>SwiftBar</b> plugin menu, not the app: pending updates, monitored items and the actions the plugin offers.</sub>
+</p>
 
-The app ships a hidden page for driving every screen, state and engine output
-by hand, without waiting on `brew`, `mas` or the network. In a DEBUG build it is
-always in the sidebar. In a Release build you turn it on at the bottom of
-**Settings › Advanced** with **Show the Debug page**, which adds a **Developer**
-section to the sidebar. It is at the bottom of the last settings page
-deliberately — it is somewhere you go looking for, not somewhere you pass
-through — and some of what it offers starts real updates.
+<p align="center">
+  <img src="img/menubar_preferences.png" alt="The SwiftBar plugin preferences submenu" width="100%">
+  <br><sub>The <b>SwiftBar</b> plugin's Preferences submenu: interval, terminal, App Store, update channel and the self-update check.</sub>
+</p>
 
-Its State panel does not mock anything. It produces a UI state by writing the
-same files the app normally reads, under
-`~/Library/Application Support/MacSoftwareUpdater` — the cache, the
-notification queue, the run results and the hand-edited config files. What you
-see afterwards is the real code path reading real files; only the contents are
-fake.
+The plugin has its own icon states, including one the app has no equivalent for:
 
-That is what makes the backup contract the important part. Nothing is ever
-overwritten without a backup landing beside it first, as a sidecar file rather
-than a copy held in memory — the failures worth testing are the ones where the
-app is quit or crashes mid-injection, and a restore that only works while the
-process that made the mess is still running is not a restore. There are two
-sidecars and never both, so *"there was no file here"* is recorded as
-explicitly as *"here is what was here"*:
+| State | Icon | Meaning |
+| :--- | :--- | :--- |
+| **Up to date** | <img src="img/menubar_icon_everything_updated.png?v=2" height="24" alt="Everything updated"> | Nothing pending. |
+| **Updates ready** | <img src="img/menubar_icon_update_ready.png?v=2" height="24" alt="Updates ready"> | Badge with the pending count. |
+| **Toolkit update** | <img src="img/menubar_icon_plugin_update.png" height="24" alt="Toolkit update"> | A new version of the toolkit itself is available. The app reports this on its Updates page instead. |
 
-| Sidecar | Meaning | What restore does |
-| --- | --- | --- |
-| `<name>.debugbackup` | A real file was displaced | Copies it back |
-| `<name>.debugbackup.none` | There was no file here | Deletes the fake |
+## Development
 
-The event directories (`notifications/`, `results/`) are never overwritten at
-all. Injection only ever *adds* a file there, named with a `.debug.` marker so
-cleanup deletes exactly what the page created and nothing a real run left
-behind. `CACHE_FORMAT.md` states outright that those file names carry no
-meaning and that readers must not parse them, which is what makes that safe.
+The workflow lives in its own documents rather than here, so there is one copy
+of each rule to keep current. [CONTRIBUTING.md](CONTRIBUTING.md) is the whole of
+it: installing your working tree with `--local`, running both test suites, the
+version and checksum rule, what CI's four jobs check, and the four places a
+cache-format change has to reach. Pull requests go against `main`.
 
-**Restore all real state** therefore works from the disk alone: it scans the
-four directories for sidecars and `.debug.` markers rather than consulting
-anything held in memory, so it recovers just as well after a relaunch — or
-after a crash — as it does a second after the injection. For the same reason
-the warning strip at the top of the page is driven by a disk scan, not by a
-flag set on write: state left injected by an earlier launch raises the warning
-the moment the page is opened. The failure this page has to avoid is somebody
-debugging fake state for an hour without knowing it is fake.
+* **[CONTRIBUTING.md](CONTRIBUTING.md)** — setup, tests, shell style, the
+  version/checksum rule, CI, branches and pull requests.
+* **[GuideApp/README.md](GuideApp/README.md)** — the SwiftUI app on its own:
+  building it with `run.sh`, the page-to-view map, and the Debug page.
+* **[CACHE_FORMAT.md](CACHE_FORMAT.md)** — the file contract the engine and the
+  app both have to agree with.
+* **[CHANGELOG.md](CHANGELOG.md)** — what changed in each release.
 
-Nothing inside the page is localized, on purpose. Its labels name Swift
-properties, cache keys and shell verbs — `brew_outdated`, `run single`,
-`EngineContract.supportsMigration` — each of which has exactly one spelling,
-here and in `CACHE_FORMAT.md`. The two strings a non-developer could meet, the
-sidebar entry and the settings toggle, are translated like everything else.
+## Known limitations
 
-## 📝 Notes
-
-> **Important:** Since this script uses checksums to detect updates, modifying the code (e.g., changing icons) will trigger a "Plugin Update Available" alert. If you customize the script, please go to Preferences → Disable Self-Update to prevent your changes from being overwritten.
->
-> **Limitation:** Apple-native apps (e.g., iMovie) are often invisible to the mas CLI. While this plugin provides a workaround to monitor these "Ghost Apps," the actual update must be performed manually in the App Store.
->
-> **Known Issue:** Apps running as iPad/iPhone wrappers on Apple Silicon are invisible to this tool. This is a limitation of the upstream `mas` command-line utility used for App Store interactions.
->
-> **Setapp:** Applications under `/Applications/Setapp/` are skipped entirely. Setapp ships its own updater and replacing those bundles breaks it.
->
-> **App installation limits:** Only `.dmg` and `.zip` downloads can be installed automatically. A `.pkg` runs installer scripts as root, which can neither be contained nor rolled back, so it always opens the publisher's page instead. Every install has a **Dry run** option that performs the download and all signature checks without modifying anything. Apps signed with a plain "Apple Development" certificate — common for small open-source projects — are refused by Gatekeeper and must be installed by hand.
->
-> **For contributors:** `VERSION` is the single source of truth for the version number, and the runtime scripts are verified against `SHA256SUMS` before any self-update. After changing `setup_mac.sh`, `uninstall.sh` or `update_system.1h.sh`, run `./tools/sync_version.sh` and `./tools/generate_checksums.sh` and commit the result — otherwise installed copies will refuse to update themselves. CI checks both.
+* **Apple's own apps** (iMovie, GarageBand and friends) are often invisible to
+  the `mas` CLI. They can be monitored, but the update itself has to be done in
+  the App Store.
+* **iPad/iPhone apps running on Apple Silicon** are invisible to this tool.
+  That is a limitation of `mas`, not of the toolkit.
+* **Setapp** — anything under `/Applications/Setapp/` is skipped entirely.
+  Setapp ships its own updater and replacing those bundles breaks it.
+* **`.pkg` downloads cannot be installed.** Only `.dmg` and `.zip`; a `.pkg`
+  always opens the publisher's page instead.
+* **Apps signed with a plain "Apple Development" certificate** — common for
+  small open-source projects — are rejected by Gatekeeper and have to be
+  installed by hand. That is the intended outcome, not a bug to work around.
+* **The `develop` update channel** is selectable but that branch is not
+  currently published.
 
 ## License
 
-MIT License.
+MIT — see [LICENSE](LICENSE).

@@ -90,9 +90,9 @@ apply "README.md" \
     "s|badge/version-[0-9.]+-blue|badge/version-${VERSION}-blue|" \
     "badge/version-${VERSION}-blue"
 
-apply "README.md" \
-    "s|/releases/download/v[0-9.]+/Installer\.zip|/releases/download/v${VERSION}/Installer.zip|" \
-    "/releases/download/v${VERSION}/Installer\.zip"
+apply "README.tr.md" \
+    "s|badge/version-[0-9.]+-blue|badge/version-${VERSION}-blue|" \
+    "badge/version-${VERSION}-blue"
 
 # Two build configurations (Debug and Release) each carry their own copy.
 apply "GuideApp/MacUpdaterGuide.xcodeproj/project.pbxproj" \
