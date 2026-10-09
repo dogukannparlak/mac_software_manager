@@ -15,6 +15,7 @@ struct UpdatesView: View {
     @Environment(ToolkitController.self) private var toolkit
     @Environment(AppIconCache.self) private var icons
     @Environment(\.openURL) private var openURL
+    @Environment(InventoryStore.self) private var inventory
 
     @State private var warnings: [ConfigWarning] = []
     @State private var domain: UpdateDomain = .apps
@@ -36,6 +37,16 @@ struct UpdatesView: View {
         }
         return display
     }
+
+    /// Pending updates from outside Homebrew and the App Store (npm, pipx,
+    /// uv, Cargo, self-updating tools). Not part of `UpdateSnapshot`: they
+    /// update one at a time, in a terminal, through their own managers - so
+    /// they get their own section below, with the same rows the CLI Tools
+    /// page shows.
+    private var otherUpdates: [OtherPackage] { inventory.otherPackages.filter(\.isOutdated) }
+
+    /// Everything waiting, both kinds - what the title and the icon count.
+    private var totalPending: Int { toolkit.snapshot.count + otherUpdates.count }
 
     var body: some View {
         ScrollView {
@@ -90,7 +101,7 @@ struct UpdatesView: View {
                     }
                 }
 
-                if displaySnapshot.items.isEmpty {
+                if displaySnapshot.items.isEmpty && otherUpdates.isEmpty {
                     Card {
                         HStack(spacing: 12) {
                             Image(systemName: "checkmark.seal.fill")
@@ -105,7 +116,7 @@ struct UpdatesView: View {
                             }
                         }
                     }
-                } else {
+                } else if !displaySnapshot.items.isEmpty {
                     // Installed Apps vs CLI Tools as two switchable tabs -
                     // the same two pages the sidebar links to - each with its
                     // own filter-chip bar (install source for apps,
@@ -139,6 +150,10 @@ struct UpdatesView: View {
                             }
                         }
                     }
+                }
+
+                if !otherUpdates.isEmpty {
+                    OtherPackagesSection(packages: otherUpdates)
                 }
             }
             .padding(28)
@@ -185,9 +200,9 @@ struct UpdatesView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 16) {
             IconTile(
-                symbol: !toolkit.snapshot.isEmpty ? "arrow.down.circle.fill" : "checkmark.circle.fill",
+                symbol: totalPending > 0 ? "arrow.down.circle.fill" : "checkmark.circle.fill",
                 size: 56,
-                tint: !toolkit.snapshot.isEmpty ? .orange : .green
+                tint: totalPending > 0 ? .orange : .green
             )
 
             VStack(alignment: .leading, spacing: 4) {
@@ -219,9 +234,9 @@ struct UpdatesView: View {
     }
 
     private var headerTitle: String {
-        toolkit.snapshot.isEmpty
+        totalPending == 0
             ? UIStrings.everythingUpToDate[loc.language]
-            : String(format: UIStrings.updatesWaitingFormat[loc.language], toolkit.snapshot.count)
+            : String(format: UIStrings.updatesWaitingFormat[loc.language], totalPending)
     }
 
     private var lastCheckText: String {

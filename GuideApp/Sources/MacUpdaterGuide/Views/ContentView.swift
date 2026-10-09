@@ -126,8 +126,11 @@ struct ContentView: View {
                     HStack {
                         Text(UIStrings.navUpdates[loc.language])
                         Spacer(minLength: 4)
-                        if !toolkit.snapshot.isEmpty {
-                            Text("\(toolkit.snapshot.count)")
+                        // Homebrew/App Store plus the updates beyond them -
+                        // the same total the Updates page title shows.
+                        let pending = toolkit.snapshot.count + inventory.otherPackages.filter(\.isOutdated).count
+                        if pending > 0 {
+                            Text("\(pending)")
                                 .font(.caption.monospacedDigit().weight(.semibold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6)

@@ -478,6 +478,11 @@ collect_local_tools() {
         for f in "$dir"/*(N-*); do
             name="${f:t}"
             [[ -z "${seen[$name]}" ]] || continue
+            # Leftovers, not tools: what an updater keeps of the previous
+            # version ("agy.1791553591174963000.old") and editor backups.
+            case "$name" in
+                *.old|*.bak|*.orig|*.backup|*.tmp|*.swp|*~) continue ;;
+            esac
             target="${f:A}"
             case "$target" in
                 */Cellar/*|*/Caskroom/*|*/pipx/*|*/uv/tools/*|*/node_modules/*|*/.cargo/*) continue ;;

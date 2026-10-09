@@ -89,7 +89,10 @@ struct MacUpdaterGuideApp: App {
                 .environment(inventory)
                 .environment(onboarding)
         } label: {
-            MenuBarLabel(pending: toolkit.snapshot.count, isRefreshing: toolkit.isRefreshing)
+            MenuBarLabel(
+                pending: toolkit.snapshot.count + inventory.otherPackages.filter(\.isOutdated).count,
+                isRefreshing: toolkit.isRefreshing
+            )
         }
         .menuBarExtraStyle(.window)
 

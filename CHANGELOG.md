@@ -88,6 +88,9 @@ The app stopped asking to install itself, and SwiftBar is gone.
   against their registry; outdated ones sort to the top with an Update button.
   `claude`, `uv`, `bun`, `deno` and `rustup` update through their own command.
   Settings → Updates picks which sources are listed (`OTHER_SOURCES_LIST`).
+- Updates beyond Homebrew show on the Updates page too, in their own section,
+  and count in its title, the sidebar badge and the menu bar icon. Backup
+  files such as `agy.<timestamp>.old` are no longer listed as tools.
 - Installed Apps also finds apps one folder down
   (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
 

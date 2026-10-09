@@ -127,7 +127,8 @@ exit 1'
     printf '#!/bin/sh\n' > "$prefix/Homebrew/bin/brew"
     printf '#!/bin/sh\n' > "$prefix/Cellar/jq/1.7/bin/jq"
     printf '#!/bin/sh\n' > "$prefix/bin/agy"
-    chmod +x "$prefix/Homebrew/bin/brew" "$prefix/Cellar/jq/1.7/bin/jq" "$prefix/bin/agy"
+    printf '#!/bin/sh\n' > "$prefix/bin/agy.1791553591174963000.old"
+    chmod +x "$prefix/Homebrew/bin/brew" "$prefix/Cellar/jq/1.7/bin/jq" "$prefix/bin/agy" "$prefix/bin/agy.1791553591174963000.old"
     ln -s ../Homebrew/bin/brew "$prefix/bin/brew"
     ln -s ../Cellar/jq/1.7/bin/jq "$prefix/bin/jq"
 
@@ -136,6 +137,7 @@ exit 1'
     assert_contains "local|agy||$prefix/bin/agy" "$output"
     refute_contains "|jq|" "$output"
     refute_contains "|brew|" "$output"
+    refute_contains ".old" "$output"
 }
 
 @test "OTHER_SOURCES_LIST limits which sources are scanned" {
