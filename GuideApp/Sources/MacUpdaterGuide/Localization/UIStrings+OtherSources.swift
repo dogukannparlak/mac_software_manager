@@ -23,9 +23,7 @@ extension UIStrings {
         "%d from Homebrew, %d from other sources",
         "%d Homebrew'dan, %d diğer kaynaklardan"
     )
-    static let updateInTerminal = Localized("Update in Terminal", "Terminalde Güncelle")
     static let partOfApp = Localized("Updated with its app", "Uygulamasıyla güncellenir")
-    static let selfUpdating = Localized("Updates itself", "Kendini günceller")
     static let showInFinder = Localized("Show in Finder", "Finder'da Göster")
     static let copyName = Localized("Copy Name", "Adı Kopyala")
 }
