@@ -74,6 +74,10 @@ The app stopped asking to install itself, and SwiftBar is gone.
 
 ### Added
 
+- **An app icon.** A blue rounded square with white update arrows around a
+  download arrow, in `GuideApp/Sources/MacUpdaterGuide/Assets.xcassets`; the
+  source drawing is `GuideApp/Design/AppIcon.svg`.
+
 - **`setup_mac.sh --unattended`**: installs the engine with no questions asked,
   every answer taken from the existing configuration or a safe default. It
   prints machine-readable `STEP|<id>|<state>|<text>` progress lines alongside

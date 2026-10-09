@@ -10,6 +10,9 @@ let package = Package(
         .executableTarget(
             name: "MacUpdaterGuide",
             path: "Sources/MacUpdaterGuide",
+            // The app icon is for the Xcode-built .app (ASSETCATALOG_COMPILER_
+            // APPICON_NAME); a SwiftPM build has no bundle to show it on.
+            exclude: ["Assets.xcassets"],
             // The shell engine, shipped inside the app rather than downloaded
             // at setup time. Kept in step with the repository root by
             // tools/sync_engine_resources.sh - see that script for why the

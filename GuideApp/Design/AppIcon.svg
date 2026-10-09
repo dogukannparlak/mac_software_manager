@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#4F8DFD"/><stop offset="1" stop-color="#2340B8"/>
+ </linearGradient>
+ <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+  <stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/>
+ </linearGradient>
+ <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+  <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity=".28"/>
+ </filter>
+ <filter id="gs"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0B1A5C" flood-opacity=".35"/></filter>
+</defs>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)" filter="url(#sh)"/>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#gloss)"/>
+<g filter="url(#gs)">
+<path d="M297.8,434.0 A228,228 0 0 1 709.5,398.0" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="round"/><path d="M748.5,465.5 L763.1,367.0 L655.8,429.0 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/><path d="M726.2,590.0 A228,228 0 0 1 314.5,626.0" fill="none" stroke="#fff" stroke-width="60" stroke-linecap="round"/><path d="M275.5,558.5 L260.9,657.0 L368.2,595.0 Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+<rect x="484" y="372" width="56" height="150" rx="28" fill="#fff"/>
+<path d="M512,640 L420,520 L604,520 Z" fill="#fff" stroke="#fff" stroke-width="24" stroke-linejoin="round"/>
+</g>
+</svg>
