@@ -80,3 +80,18 @@ load "test_helper"
     [ "$query" -eq 30 ]
     [ "$upgrade" -gt "$((query * 10))" ]
 }
+
+# The watcher used to leave its 'sleep' holding the captured stdout open, so
+# output=$(run_with_timeout 30 <external command>) - how every cache entry is
+# filled - always took the full 30 seconds, however fast the command was.
+@test "run_with_timeout returns as soon as a captured external command finishes" {
+    run run_zsh_snippet '
+        start=$EPOCHREALTIME
+        out=$(run_with_timeout 20 /bin/echo fast)
+        print "out=$out elapsed=$(( EPOCHREALTIME - start ))"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "out=fast" "$output"
+    elapsed="${output##*elapsed=}"
+    [ "${elapsed%%.*}" -lt 5 ]
+}

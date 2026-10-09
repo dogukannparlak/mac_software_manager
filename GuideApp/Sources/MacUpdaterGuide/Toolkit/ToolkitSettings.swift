@@ -59,6 +59,10 @@ final class ToolkitSettings {
     var autostart = true
     var cleanupEnabled = true
     var autoInstallApps = false
+    /// Also list what came from outside Homebrew and the App Store (npm,
+    /// pipx, uv, cargo, go, standalone tools, .pkg receipts). Homebrew stays
+    /// the primary source either way.
+    var otherSourcesEnabled = true
     /// Empty means no Codeberg mirror is configured: downloads and self-update
     /// fall back to GitHub only, and the shell engine surfaces that in its
     /// own config warning.
@@ -111,6 +115,8 @@ final class ToolkitSettings {
             cleanupEnabled = (value == "1")
         case "AUTO_INSTALL_APPS":
             autoInstallApps = (value == "1")
+        case "OTHER_SOURCES_ENABLED":
+            otherSourcesEnabled = (value == "1")
         case "CODEBERG_USERNAME":
             codebergUsername = (value == "YOUR_CODEBERG_USERNAME") ? "" : value
         default:
@@ -147,6 +153,9 @@ final class ToolkitSettings {
 
         # Replace self-updating apps (Sparkle/GitHub) directly (1=Enabled, 0=Disabled)
         AUTO_INSTALL_APPS="\(autoInstallApps ? "1" : "0")"
+
+        # Also list npm, pipx, uv, cargo, go, standalone tools and .pkg receipts (1=Enabled, 0=Disabled)
+        OTHER_SOURCES_ENABLED="\(otherSourcesEnabled ? "1" : "0")"
 
         # Codeberg username for the backup mirror (blank = GitHub only, no dual-source verification)
         CODEBERG_USERNAME="\(codebergUsername)"

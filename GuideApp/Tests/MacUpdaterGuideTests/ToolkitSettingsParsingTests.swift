@@ -72,6 +72,15 @@ final class ToolkitSettingsParsingTests: XCTestCase {
         XCTAssertTrue(settings.autoInstallApps)
     }
 
+    func testOtherSourcesFlagIsApplied() {
+        let settings = ToolkitSettings()
+        settings.otherSourcesEnabled = true
+        settings.apply(key: "OTHER_SOURCES_ENABLED", value: "0")
+        XCTAssertFalse(settings.otherSourcesEnabled)
+        settings.apply(key: "OTHER_SOURCES_ENABLED", value: "1")
+        XCTAssertTrue(settings.otherSourcesEnabled)
+    }
+
     // MARK: - UPDATE_BRANCH
 
     func testRecognizedChannelValueIsApplied() {

@@ -413,6 +413,43 @@ SomeApp|https://example.com
 - Writer: `collect_github_homepages()`, `lib/selfupdate_apps.sh`.
 - Swift reader: `InstalledInventory.websiteMap()`, `InstalledApps.swift`.
 
+### `other_packages`
+
+Everything outside Homebrew and the App Store, one package per line. Written
+empty when `OTHER_SOURCES_ENABLED="0"`.
+```
+source|name|version|location
+```
+`source` is one of `npm`, `pipx`, `uv`, `cargo`, `go`, `app` (a command line
+shim inside an application bundle), `local` (a standalone executable in
+`~/.local/bin` and the like) or `pkg` (an installer package receipt).
+`version` and `location` may be empty. `location` is what the source needs to
+act on the package: the module path for `go` (what `go install` takes), the
+bundle for `app`, the resolved file for `local`, the install location for
+`pkg`. Example:
+```
+npm|@anthropic-ai/claude-code|2.0.14|
+local|claude|2.0.14|/Users/me/.local/share/claude/versions/2.0.14/claude
+go|gopls|0.16.2|golang.org/x/tools/gopls
+```
+A reader skips sources it does not know, so a newer engine can add one.
+- Writer: `collect_other_packages()`, `lib/updaters.sh`.
+- Shell reader: `other_package_line()` (`run_mode_tool` only acts on a
+  package listed here).
+- Swift reader: `OtherPackage.parse(packages:outdated:)`, `OtherPackage.swift`.
+
+### `other_outdated`
+
+```
+source|name|current|latest
+```
+Only `npm` reports this today (`npm outdated -g`). Example:
+```
+npm|typescript|5.4.5|5.6.3
+```
+- Writer: `collect_other_outdated()`, `lib/updaters.sh`.
+- Swift reader: `OtherPackage.parse(packages:outdated:)`, `OtherPackage.swift`.
+
 ## Notification queue (`notifications/`)
 
 Not a cache - each file is a one-shot event, not TTL-refreshed state - but

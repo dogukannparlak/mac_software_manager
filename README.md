@@ -59,9 +59,14 @@ The cache format is the contract between them, documented in
   outcome is logged, so a failed update is recorded as failed rather than
   counted as a success.
 * **Inventory with provenance.** Every application with its icon, version and
-  where it came from: Homebrew, App Store, Setapp, Apple, or installed by hand.
+  where it came from: Homebrew, App Store, Setapp, Apple, or installed by hand —
+  including apps an installer put in a folder of their own one level down
+  (`/Applications/<Vendor>/<App>.app`).
 * **CLI tools as their own page.** Every Homebrew formula on the machine,
-  grouped into categories (see below).
+  grouped into categories (see below) — and, below them, everything that came
+  from somewhere else: npm, pipx, uv, Cargo and Go installs, standalone tools
+  such as Claude Code, command line shims inside apps, and installer packages
+  (`.pkg`). Homebrew stays the primary source; the rest is optional.
 * **Move to Homebrew.** Finds hand-installed apps a Homebrew cask could keep
   updated, says how sure each pairing is and exactly what moving would do, then
   hands them over in place.
@@ -250,6 +255,17 @@ immediately.
 
 #### CLI Tools
 
+**Beyond Homebrew.** Under the Homebrew categories the page lists what the
+engine finds everywhere else (`collect_other_packages`, `lib/updaters.sh`):
+global npm packages, pipx and uv tools, `cargo install` crates, Go binaries,
+standalone executables in `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin`
+and (on Apple Silicon) `/usr/local/bin`, and non-Apple installer package
+receipts from `pkgutil`. Nothing found is ever executed — only the package
+managers' own listing commands run. npm reports pending updates; for npm,
+pipx, uv, Cargo and Go a row's menu offers **Update in Terminal**, which runs
+that manager's own update command. Turn the whole section off under
+**Settings → Updates → Also look beyond Homebrew** (`OTHER_SOURCES_ENABLED`).
+
 Homebrew has no first-class notion of a category for a formula, so this page
 leans on the one piece of real metadata Homebrew does expose: `brew leaves` —
 what you actually asked for, as opposed to what was pulled in transitively —
@@ -388,6 +404,7 @@ the subcommands below; anything else prints the usage banner and exits **2**.
 | `migrate_app_in_terminal <app> <token> [adopt\|replace\|dry]` | The same, in your configured terminal, where Homebrew can prompt for a password. |
 | `install_app <app> [live\|dry]` | Launches `run install` in your terminal. |
 | `update_app <args>` | Launches `run single` in your terminal. |
+| `update_tool <source> <name>` | Updates one npm/pipx/uv/cargo/go package in your terminal (`run tool`), only if the last scan listed it. |
 | `ignore_app <brew\|cask\|mas\|sparkle> <id> [name]` | Pins a formula or adds the item to `ignored_apps.conf`. |
 | `unignore_app <type> <id>` | Reverses that. |
 | `toggle_mas` | Turns App Store (`mas`) support on or off. |
@@ -440,6 +457,7 @@ Exactly what `setup_mac.sh` writes:
 | `AUTOSTART` | Legacy autostart flag. Nothing reads it — starting at login is the app's own setting, recorded by macOS. |
 | `CLEANUP_ENABLED` | Run `brew cleanup --prune=all` after each update. |
 | `AUTO_INSTALL_APPS` | Replace self-updating app bundles directly. `0` by default. |
+| `OTHER_SOURCES_ENABLED` | Also list npm, pipx, uv, Cargo, Go, standalone tools and `.pkg` receipts. `1` by default. |
 | `CODEBERG_USERNAME` | Username for the backup mirror. Blank = GitHub only, no dual-source verification. |
 
 Re-running `setup_mac.sh` preserves the existing values.

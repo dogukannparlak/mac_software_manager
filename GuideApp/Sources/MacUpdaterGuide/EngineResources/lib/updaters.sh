@@ -302,3 +302,248 @@ collect_manual_updates() {
 
     print -rn -- "$result"
 }
+
+# ------------------------------------------------------------------------------
+# 3c2. EVERYTHING ELSE ON THE MAC (OTHER PACKAGE MANAGERS)
+# ------------------------------------------------------------------------------
+# Homebrew is the primary source and stays that way: every brew-specific path
+# above is untouched by this section. What lives here is the rest of what a
+# Mac collects over time - npm/pipx/uv/cargo/go installs, installer packages
+# (.pkg) and standalone tools dropped into ~/.local/bin and friends (Claude
+# Code installs itself there, for one) - so the CLI Tools page can list
+# everything, not just formulae.
+#
+# Opt-out through OTHER_SOURCES_ENABLED="0" in settings.conf: with it off,
+# both entries below are written empty.
+#
+# Line format, one package per line (CACHE_FORMAT.md, "other_packages"):
+#     source|name|version|location
+# source is one of npm pipx uv cargo go pkg app local; version and location
+# may be empty. location is what a source needs to be acted on: the module
+# path for go (what 'go install' takes), the bundle for an app's command line
+# shim, the resolved file for a standalone tool, the install location for a
+# .pkg receipt.
+#
+# Nothing here ever executes the tools it finds - only the package managers'
+# own listing commands and 'go version -m', which reads build info from the
+# binary without running it. Every query gets the same hang guard 'mas' does.
+OTHER_QUERY_TIMEOUT=${OTHER_QUERY_TIMEOUT:-30}
+
+# The first dotted-numeric component of a path ("…/versions/2.0.14" -> 2.0.14),
+# which is how most self-installing tools lay out their versions.
+version_from_path() {
+    local part
+    for part in "${(@s:/:)1}"; do
+        if [[ "$part" =~ '^v?[0-9]+(\.[0-9]+)+([-+._][A-Za-z0-9.]+)?$' ]]; then
+            print -r -- "${part#v}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+collect_npm_packages() {
+    command -v npm &> /dev/null || return 0
+    local out line spec name ver
+    # 'npm ls' exits non-zero over a single extraneous or invalid package
+    # while still printing the whole list, so the status is not the verdict.
+    out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" npm ls -g --depth=0 --parseable --long 2>/dev/null) || true
+    for line in "${(@f)out}"; do
+        # <path>:<name>@<version>[:<extra>] - the root directory line has no
+        # spec and is skipped.
+        [[ "$line" == *:* ]] || continue
+        spec="${line#*:}"
+        spec="${spec%%:*}"
+        [[ "$spec" == ?*@* ]] || continue
+        name="${spec%@*}"
+        ver="${spec##*@}"
+        [[ -n "$name" ]] && print -r -- "npm|$name|$ver|"
+    done
+    return 0
+}
+
+collect_pipx_packages() {
+    command -v pipx &> /dev/null || return 0
+    local out line
+    out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" pipx list --short 2>/dev/null) || return 0
+    for line in "${(@f)out}"; do
+        local -a f=(${=line})
+        (( ${#f} >= 2 )) && print -r -- "pipx|${f[1]}|${f[2]}|"
+    done
+    return 0
+}
+
+collect_uv_tools() {
+    command -v uv &> /dev/null || return 0
+    local out line
+    out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" uv tool list 2>/dev/null) || return 0
+    for line in "${(@f)out}"; do
+        # "ruff v0.6.0" heads each tool; its executables follow as "- ruff".
+        [[ "$line" =~ '^[A-Za-z0-9][A-Za-z0-9._-]* v[0-9]' ]] || continue
+        local -a f=(${=line})
+        print -r -- "uv|${f[1]}|${f[2]#v}|"
+    done
+    return 0
+}
+
+collect_cargo_packages() {
+    command -v cargo &> /dev/null || return 0
+    local out line ver
+    out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" cargo install --list 2>/dev/null) || return 0
+    for line in "${(@f)out}"; do
+        # "ripgrep v14.1.0:" (or "foo v0.1.0 (https://…):"); binaries follow
+        # indented.
+        [[ "$line" == [A-Za-z0-9]* ]] || continue
+        local -a f=(${=line})
+        (( ${#f} >= 2 )) || continue
+        ver="${f[2]%:}"
+        print -r -- "cargo|${f[1]}|${ver#v}|"
+    done
+    return 0
+}
+
+collect_go_binaries() {
+    command -v go &> /dev/null || return 0
+    local bindir bin info pkg ver
+    bindir=$(go env GOBIN 2>/dev/null)
+    [[ -n "$bindir" ]] || bindir="$(go env GOPATH 2>/dev/null | cut -d: -f1)/bin"
+    [[ -d "$bindir" ]] || return 0
+    for bin in "$bindir"/*(N.*); do
+        info=$(run_with_timeout 10 go version -m "$bin" 2>/dev/null) || continue
+        # "\tpath\t<package>" names what 'go install' takes; "\tmod\t<module>\t<version>"
+        # carries the version.
+        pkg=$(print -r -- "$info" | awk -F'\t' '$2 == "path" { print $3; exit }')
+        ver=$(print -r -- "$info" | awk -F'\t' '$2 == "mod" { print $4; exit }')
+        [[ -n "$pkg" ]] || continue
+        print -r -- "go|${bin:t}|${ver#v}|$pkg"
+    done
+    return 0
+}
+
+# Installer package receipts, minus Apple's own. These are what a .pkg
+# download leaves behind - drivers, runtimes, apps that ship as installers.
+collect_pkg_receipts() {
+    command -v pkgutil &> /dev/null || return 0
+    local out id info ver location
+    out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" pkgutil --pkgs 2>/dev/null) || return 0
+    for id in "${(@f)out}"; do
+        [[ -n "$id" && "$id" != com.apple.* ]] || continue
+        info=$(pkgutil --pkg-info "$id" 2>/dev/null) || continue
+        ver=$(print -r -- "$info" | awk -F': ' '$1 == "version" { print $2; exit }')
+        location=$(print -r -- "$info" | awk -F': ' '$1 == "location" { print $2; exit }')
+        print -r -- "pkg|$id|$ver|$location"
+    done
+    return 0
+}
+
+# Standalone executables in the usual per-user bin folders - and in
+# /usr/local/bin when that is not Homebrew's own prefix (Apple Silicon).
+# Anything another collector already accounts for (Homebrew, pipx, uv, npm,
+# cargo) is skipped; a shim into an application bundle is reported as that
+# app's ("app"), since it updates with the app.
+collect_local_tools() {
+    local brew_prefix="" dir f target name ver app
+    typeset -A seen
+    typeset -a dirs
+    # <prefix>/bin/brew -> <prefix>. Not resolved through the symlink: that
+    # lands in <prefix>/Homebrew, which is not where formulae link into.
+    command -v brew &> /dev/null && brew_prefix="${$(command -v brew):h:h}"
+
+    dirs=("$HOME/.local/bin" "$HOME/bin" "$HOME/.bun/bin" "$HOME/.deno/bin")
+    [[ "$brew_prefix" != "/usr/local" ]] && dirs+=("/usr/local/bin")
+
+    for dir in "${dirs[@]}"; do
+        [[ -d "$dir" ]] || continue
+        # (N-*): executables, following symlinks to judge the target
+        for f in "$dir"/*(N-*); do
+            name="${f:t}"
+            [[ -z "${seen[$name]}" ]] || continue
+            target="${f:A}"
+            case "$target" in
+                */Cellar/*|*/Caskroom/*|*/pipx/*|*/uv/tools/*|*/node_modules/*|*/.cargo/*) continue ;;
+            esac
+            [[ -n "$brew_prefix" && "$target" == "$brew_prefix"/* ]] && continue
+            seen[$name]=1
+
+            if [[ "$target" == *.app/Contents/* ]]; then
+                app="${target%%.app/Contents/*}.app"
+                ver=$(plist_value "$app/Contents/Info.plist" CFBundleShortVersionString) || ver=""
+                print -r -- "app|$name|$ver|$app"
+            else
+                ver=$(version_from_path "$target") || ver=""
+                print -r -- "local|$name|$ver|$target"
+            fi
+        done
+    done
+    return 0
+}
+
+collect_other_packages() {
+    [[ "${OTHER_SOURCES_ENABLED:-1}" == "1" ]] || return 0
+    collect_npm_packages
+    collect_pipx_packages
+    collect_uv_tools
+    collect_cargo_packages
+    collect_go_binaries
+    collect_local_tools
+    collect_pkg_receipts
+    return 0
+}
+
+# What has a newer version waiting, for the sources that can say so without
+# installing anything: source|name|current|latest. Only npm answers this
+# cheaply today; the others list what is installed, not what is new.
+collect_other_outdated() {
+    [[ "${OTHER_SOURCES_ENABLED:-1}" == "1" ]] || return 0
+    command -v npm &> /dev/null || return 0
+    local out line current latest
+    # Exits 1 whenever something IS outdated - that is the answer, not an error.
+    out=$(run_with_timeout 60 npm outdated -g --parseable --depth=0 2>/dev/null) || true
+    for line in "${(@f)out}"; do
+        # <path>:<name>@<wanted>:<name>@<current>:<name>@<latest>[:…]
+        local -a f=("${(@s/:/)line}")
+        (( ${#f} >= 4 )) || continue
+        current="${f[3]##*@}"
+        latest="${f[4]##*@}"
+        [[ -n "$latest" && "$current" != "$latest" ]] || continue
+        print -r -- "npm|${f[4]%@*}|$current|$latest"
+    done
+    return 0
+}
+
+# Whether a source has an update command at all.
+other_source_is_updatable() {
+    case "$1" in
+        npm|pipx|uv|cargo|go) return 0 ;;
+    esac
+    return 1
+}
+
+# Update one package through its own package manager. A fixed command per
+# source, run directly (never through eval); the caller has already checked
+# the package against the last scan (other_package_line).
+run_other_package_update() {
+    local source="$1" name="$2" location="$3"
+    case "$source" in
+        npm)   npm install -g "${name}@latest" ;;
+        pipx)  pipx upgrade "$name" ;;
+        uv)    uv tool upgrade "$name" ;;
+        # Reinstalls only when crates.io has something newer.
+        cargo) cargo install "$name" ;;
+        go)    [[ -n "$location" ]] || return 1
+               go install "${location}@latest" ;;
+        *)     return 1 ;;
+    esac
+}
+
+# The cached line for one package, or non-zero when the last scan has no such
+# package.
+other_package_line() {
+    local source="$1" name="$2" line
+    for line in "${(@f)$(cache_get other_packages 2>/dev/null)}"; do
+        [[ "${line%%|*}" == "$source" ]] || continue
+        local -a f=("${(@s:|:)line}")
+        [[ "${f[2]}" == "$name" ]] && { print -r -- "$line"; return 0; }
+    done
+    return 1
+}

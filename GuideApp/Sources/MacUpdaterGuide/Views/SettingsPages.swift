@@ -196,6 +196,7 @@ struct GeneralSettingsPage: View {
 
 struct UpdateSettingsPage: View {
     @Environment(LocalizationStore.self) private var loc
+    @Environment(ToolkitController.self) private var toolkit
 
     @State private var settings = ToolkitSettings()
 
@@ -232,6 +233,15 @@ struct UpdateSettingsPage: View {
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    Divider()
+                    settingToggle(
+                        \.otherSourcesEnabled,
+                        title: UIStrings.otherSources,
+                        help: UIStrings.otherSourcesHelp,
+                        // The lists are cached: rebuild them so the CLI Tools
+                        // page follows the switch now, not at the next refresh.
+                        onChange: { toolkit.refresh(force: true) }
+                    )
                 }
             }
 
@@ -263,11 +273,12 @@ struct UpdateSettingsPage: View {
     private func settingToggle(
         _ keyPath: ReferenceWritableKeyPath<ToolkitSettings, Bool>,
         title: Localized,
-        help: Localized
+        help: Localized,
+        onChange: (() -> Void)? = nil
     ) -> some View {
         Toggle(isOn: Binding(
             get: { settings[keyPath: keyPath] },
-            set: { settings[keyPath: keyPath] = $0; settings.save() }
+            set: { settings[keyPath: keyPath] = $0; settings.save(); onChange?() }
         )) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title[loc.language])

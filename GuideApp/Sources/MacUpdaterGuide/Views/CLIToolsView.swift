@@ -3,7 +3,8 @@ import SwiftUI
 /// Every Homebrew formula on the Mac, grouped into categories - its own page
 /// rather than a disclosure group buried under Installed Apps, since the
 /// list (leaves plus every transitive dependency) is often bigger than the
-/// application list itself.
+/// application list itself. Below it, everything from outside Homebrew
+/// (`OtherPackagesSection`), when Settings › Updates allows it.
 struct CLIToolsView: View {
     @Environment(LocalizationStore.self) private var loc
     @Environment(ToolkitController.self) private var toolkit
@@ -15,12 +16,27 @@ struct CLIToolsView: View {
     /// different top-level category resets it, same as switching away from
     /// Libraries at all would make it meaningless.
     @State private var librarySubcategoryFilter: LibrarySubcategory?
+    /// The "Beyond Homebrew" chip: hides the Homebrew categories.
+    @State private var showOtherOnly = false
+    @State private var otherSourcesEnabled = true
 
     private var tools: [InstalledTool] { inventory.tools }
+    private var otherPackages: [OtherPackage] { inventory.otherPackages }
+
+    /// The other sources have no categories, so a category filter hides them.
+    private var filteredOthers: [OtherPackage] {
+        guard categoryFilter == nil else { return [] }
+        guard !searchText.isEmpty else { return otherPackages }
+        return otherPackages.filter { package in
+            package.name.localizedCaseInsensitiveContains(searchText)
+                || package.source.label[loc.language].localizedCaseInsensitiveContains(searchText)
+        }
+    }
     private var isLoading: Bool { inventory.isLoading && inventory.tools.isEmpty }
 
     private var filteredTools: [InstalledTool] {
-        tools.filter { tool in
+        guard !showOtherOnly else { return [] }
+        return tools.filter { tool in
             if let categoryFilter, tool.category != categoryFilter { return false }
             if categoryFilter == .libraries, let librarySubcategoryFilter,
                tool.librarySubcategory != librarySubcategoryFilter { return false }
@@ -42,6 +58,7 @@ struct CLIToolsView: View {
     private func selectCategory(_ category: CLIToolCategory?) {
         categoryFilter = (categoryFilter == category) ? nil : category
         librarySubcategoryFilter = nil
+        showOtherOnly = false
     }
 
     var body: some View {
@@ -69,7 +86,10 @@ struct CLIToolsView: View {
         .background(Color(nsColor: .windowBackgroundColor))
         .navigationTitle(UIStrings.navCLITools[loc.language])
         .searchable(text: $searchText, prompt: Text(UIStrings.searchCLITools[loc.language]))
-        .task(id: toolkit.snapshot.lastCheck) { await inventory.load() }
+        .task(id: toolkit.snapshot.lastCheck) {
+            otherSourcesEnabled = ToolkitSettings().otherSourcesEnabled
+            await inventory.load()
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -92,13 +112,20 @@ struct CLIToolsView: View {
                 Text(UIStrings.navCLITools[loc.language])
                     .font(.system(.largeTitle).weight(.bold))
 
-                Text(String(format: UIStrings.cliToolsSummaryFormat[loc.language], tools.count))
+                Text(summary)
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var summary: String {
+        guard !otherPackages.isEmpty else {
+            return String(format: UIStrings.cliToolsSummaryFormat[loc.language], tools.count)
+        }
+        return String(format: UIStrings.otherSourcesSummaryFormat[loc.language], tools.count, otherPackages.count)
     }
 
     /// Nine categories with long Turkish labels routinely overflow the page
@@ -129,6 +156,20 @@ struct CLIToolsView: View {
         ) {
             categoryFilter = nil
             librarySubcategoryFilter = nil
+            showOtherOnly = false
+        }
+
+        if !otherPackages.isEmpty {
+            FilterChip(
+                title: UIStrings.otherSourcesFilter[loc.language],
+                count: otherPackages.count,
+                isSelected: showOtherOnly,
+                tint: .teal
+            ) {
+                showOtherOnly.toggle()
+                categoryFilter = nil
+                librarySubcategoryFilter = nil
+            }
         }
 
         ForEach(CLIToolCategory.allCases.sorted { $0.sortRank < $1.sortRank }) { category in
@@ -226,7 +267,7 @@ struct CLIToolsView: View {
 
     private var toolsList: some View {
         VStack(alignment: .leading, spacing: 16) {
-            if filteredTools.isEmpty {
+            if filteredTools.isEmpty && filteredOthers.isEmpty {
                 Card {
                     Text(UIStrings.noMatches[loc.language])
                         .foregroundStyle(.secondary)
@@ -254,6 +295,19 @@ struct CLIToolsView: View {
                             toolsCard(group.tools)
                         }
                     }
+                }
+
+                if !filteredOthers.isEmpty {
+                    OtherPackagesSection(packages: filteredOthers)
+                }
+            }
+
+            if !otherSourcesEnabled && categoryFilter == nil {
+                Card {
+                    Label(UIStrings.otherSourcesOff[loc.language], systemImage: "info.circle")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

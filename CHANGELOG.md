@@ -74,6 +74,18 @@ The app stopped asking to install itself, and SwiftBar is gone.
 
 ### Added
 
+- **Everything beyond Homebrew, optionally.** The CLI Tools page now lists, below
+  the Homebrew categories, global npm packages, pipx and uv tools, Cargo crates,
+  Go binaries, standalone tools in `~/.local/bin` and friends (Claude Code),
+  command line shims inside apps, and installer package (`.pkg`) receipts.
+  npm reports pending updates, and npm/pipx/uv/Cargo/Go packages can be
+  updated in a terminal (`update_tool`, `run tool`) — only packages the last
+  scan found, with each manager's own fixed command. Homebrew stays the
+  primary source; Settings → Updates → "Also look beyond Homebrew"
+  (`OTHER_SOURCES_ENABLED`) turns the rest off.
+- Installed Apps also finds apps one folder down
+  (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
+
 - **An app icon.** A blue rounded square with white update arrows around a
   download arrow, in `GuideApp/Sources/MacUpdaterGuide/Assets.xcassets`; the
   source drawing is `GuideApp/Design/AppIcon.svg`.
@@ -134,6 +146,9 @@ The app stopped asking to install itself, and SwiftBar is gone.
   which engine updates itself (a terminal install) and which is updated with
   the app. The old SwiftBar screenshots in `img/` and the never-captured
   image placeholders in both READMEs are removed.
+- `run_with_timeout` no longer waits out its whole limit when its output is
+  captured: the watcher's `sleep` kept the captured stdout open, so every
+  `mas outdated` / `mas list` in a cache refresh took the full 30 seconds.
 - Ignoring or restoring a formula reports a failing `brew pin`/`unpin`
   instead of exiting silently; app installs write the eight-field history
   line; the update check rejects a download with no version header.

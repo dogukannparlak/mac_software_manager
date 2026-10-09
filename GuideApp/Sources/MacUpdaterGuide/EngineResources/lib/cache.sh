@@ -11,8 +11,8 @@ CACHE_TTL_WEBSITES=86400   # a homepage practically never changes; check once a 
 
 # Keys per tier (used by the refresh action and the staleness check)
 typeset -a CACHE_KEYS_UPDATES CACHE_KEYS_INSTALLED CACHE_KEYS_APPS CACHE_KEYS_WEBSITES
-CACHE_KEYS_UPDATES=(brew_outdated mas_outdated manual_updates)
-CACHE_KEYS_INSTALLED=(brew_pinned brew_casks brew_formulae brew_leaves brew_formulae_desc brew_casks_desc mas_list brew_status)
+CACHE_KEYS_UPDATES=(brew_outdated mas_outdated manual_updates other_outdated)
+CACHE_KEYS_INSTALLED=(brew_pinned brew_casks brew_formulae brew_leaves brew_formulae_desc brew_casks_desc mas_list brew_status other_packages)
 CACHE_KEYS_APPS=(app_updates)
 CACHE_KEYS_WEBSITES=(cask_homepages github_homepages)
 
@@ -658,6 +658,9 @@ collect_cache_data() {
 
         cache_refresh_entry "brew_outdated"  brew_outdated_normalized
         cache_refresh_entry "manual_updates" collect_manual_updates "$mas_outdated_raw"
+        # Everything outside Homebrew and the App Store (lib/updaters.sh,
+        # section 3c2). Empty when OTHER_SOURCES_ENABLED is off.
+        cache_refresh_entry "other_outdated" collect_other_outdated
     fi
 
     if [[ "$tier" == "installed" || "$tier" == "all" ]]; then
@@ -671,6 +674,7 @@ collect_cache_data() {
         cache_refresh_entry "brew_formulae_desc" brew_formulae_desc_collect
         cache_refresh_entry "brew_casks_desc"    brew_casks_desc_collect
         cache_refresh_entry "brew_status"        collect_brew_status
+        cache_refresh_entry "other_packages"     collect_other_packages
 
         if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
             # Same hang guard as the 'mas outdated' query above: metadata

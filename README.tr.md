@@ -59,9 +59,14 @@ Cache biçimi ikisi arasındaki sözleşmedir ve
   sonuç kaydedilir; başarısız bir güncelleme başarılı sayılmak yerine başarısız
   olarak kaydedilir.
 * **Kaynağıyla birlikte envanter.** Her uygulama; simgesi, sürümü ve nereden
-  geldiğiyle listelenir: Homebrew, App Store, Setapp, Apple ya da elle kurulmuş.
+  geldiğiyle listelenir: Homebrew, App Store, Setapp, Apple ya da elle kurulmuş —
+  bir kurulum programının bir alt klasöre koyduğu uygulamalar da dahil
+  (`/Applications/<Üretici>/<Uygulama>.app`).
 * **CLI araçları kendi sayfasında.** Makinedeki her Homebrew formula'sı,
-  kategorilere ayrılmış hâlde (aşağıya bakın).
+  kategorilere ayrılmış hâlde (aşağıya bakın) — ve altında, başka yerden gelen
+  her şey: npm, pipx, uv, Cargo ve Go kurulumları, Claude Code gibi bağımsız
+  araçlar, uygulamaların içindeki komut satırı araçları ve kurulum paketleri
+  (`.pkg`). Ana kaynak yine Homebrew'dur; gerisi isteğe bağlıdır.
 * **Homebrew'e Taşı.** Elle kurduğunuz uygulamalardan bir Homebrew cask'inin
   güncel tutabileceklerini bulur, her eşleşmeye ne kadar güvendiğini ve taşımanın
   tam olarak ne yapacağını söyler, sonra uygulamayı yerinde devreder.
@@ -257,6 +262,18 @@ eşlemek ya da yoksaymak. Her düzeltme yereldir ve anında uygulanır.
 
 #### Komut Satırı Araçları
 
+**Homebrew dışı.** Sayfa, Homebrew kategorilerinin altında motorun başka her
+yerde bulduklarını listeler (`collect_other_packages`, `lib/updaters.sh`): global
+npm paketleri, pipx ve uv araçları, `cargo install` ile kurulan crate'ler, Go
+ikilileri, `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin` ve (Apple
+Silicon'da) `/usr/local/bin` içindeki bağımsız çalıştırılabilir dosyalar ile
+Apple'a ait olmayan `pkgutil` kurulum paketi kayıtları. Bulunan hiçbir şey
+çalıştırılmaz — yalnızca paket yöneticilerinin kendi listeleme komutları
+çalışır. npm bekleyen güncellemeleri bildirir; npm, pipx, uv, Cargo ve Go için
+satırın menüsünde **Terminalde Güncelle** bulunur ve o yöneticinin kendi
+güncelleme komutunu çalıştırır. Bölümün tamamı **Ayarlar → Güncellemeler →
+Homebrew dışını da tara** (`OTHER_SOURCES_ENABLED`) ile kapatılabilir.
+
 Homebrew'da bir formula'nın kategorisi diye birinci sınıf bir kavram yok; bu
 yüzden bu sayfa Homebrew'un gerçekten sunduğu tek gerçek üstveriye yaslanır:
 `brew leaves` — yani gerçekten sizin istediğiniz şeyler, geçişli olarak
@@ -399,6 +416,7 @@ basıp **2** ile çıkar.
 | `migrate_app_in_terminal <app> <token> [adopt\|replace\|dry]` | Aynısı, seçtiğiniz terminalde — Homebrew'un parola isteyebileceği yerde. |
 | `install_app <app> [live\|dry]` | Terminalinizde `run install` başlatır. |
 | `update_app <args>` | Terminalinizde `run single` başlatır. |
+| `update_tool <source> <name>` | Tek bir npm/pipx/uv/cargo/go paketini terminalinizde günceller (`run tool`); yalnızca son tarama onu listelediyse. |
 | `ignore_app <brew\|cask\|mas\|sparkle> <id> [name]` | Bir formula'yı sabitler ya da ögeyi `ignored_apps.conf` dosyasına ekler. |
 | `unignore_app <type> <id>` | Bunu geri alır. |
 | `toggle_mas` | App Store (`mas`) desteğini açar veya kapatır. |
@@ -452,6 +470,7 @@ tutar.
 | `AUTOSTART` | Eski otomatik başlatma bayrağı. Kimse okumuyor — girişte başlatma uygulamanın kendi ayarı, macOS tarafından tutuluyor. |
 | `CLEANUP_ENABLED` | Her güncellemeden sonra `brew cleanup --prune=all` çalıştır. |
 | `AUTO_INSTALL_APPS` | Kendini güncelleyen uygulama paketlerini doğrudan değiştir. Varsayılan `0`. |
+| `OTHER_SOURCES_ENABLED` | npm, pipx, uv, Cargo, Go, bağımsız araçlar ve `.pkg` kayıtlarını da listele. Varsayılan `1`. |
 | `CODEBERG_USERNAME` | Yedek mirror için kullanıcı adı. Boş = yalnızca GitHub, çift kaynaklı doğrulama yok. |
 
 `setup_mac.sh`'ı yeniden çalıştırmak mevcut değerleri korur.

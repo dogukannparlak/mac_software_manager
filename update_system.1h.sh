@@ -195,6 +195,16 @@ load_config_safely() {
                         ;;
                 esac
                 ;;
+            "OTHER_SOURCES_ENABLED")
+                case "$value" in
+                    "0"|"1")
+                        OTHER_SOURCES_ENABLED="$value"
+                        ;;
+                    *)
+                        add_config_warning "Invalid OTHER_SOURCES_ENABLED value. Using default."
+                        ;;
+                esac
+                ;;
             "CODEBERG_USERNAME")
                 if [[ -z "$value" || "$value" == "YOUR_CODEBERG_USERNAME" ]]; then
                     CODEBERG_USERNAME=""
@@ -223,6 +233,10 @@ CLEANUP_ENABLED="1"
 # Replacing a running application is the riskiest thing this tool can do, so it
 # is opt-in. When off, self-updating apps only ever get a download link.
 AUTO_INSTALL_APPS="0"
+# Look past Homebrew and the App Store too: npm, pipx, uv, cargo, go, .pkg
+# receipts and standalone tools (lib/updaters.sh, section 3c2). Homebrew stays
+# the primary source either way; this only adds to what is listed.
+OTHER_SOURCES_ENABLED="1"
 # Codeberg username for the backup mirror. Empty means no mirror is configured
 # (set via setup_mac.sh or the "CODEBERG_USERNAME" key in settings.conf) - the
 # single source of truth every consumer (this script, setup_mac.sh, the native
@@ -552,6 +566,19 @@ if [[ "$1" == "update_app" ]]; then
     exit 0
 fi
 
+# Update one package from a source other than Homebrew or the App Store
+# (npm, pipx, uv, cargo, go) in the user's terminal.
+# param2 = source, param3 = package name as the last scan listed it
+#
+# Always in a terminal: these package managers may stop to ask for something
+# (a password for a root-owned npm prefix, a compiler for cargo), and their
+# output is the only account of what happened.
+if [[ "$1" == "update_tool" ]]; then
+    load_config_safely
+    launch_in_terminal_or_report "$SCRIPT_FILE" "tool" "$2" "$3" || exit 1
+    exit 0
+fi
+
 # Move an application to Homebrew in the user's terminal.
 # param2 = app name, param3 = cask token, param4 = adopt (default) | replace | dry
 #
@@ -836,7 +863,7 @@ if [[ "$1" == "run" ]]; then
     # General → "Aynı Anda Yapılabilecek Güncelleme Sayısı"), and taking the
     # same exclusive lock here would just serialize them right back to one at
     # a time, defeating that setting.
-    if [[ "$MODE" != "single" && "$MODE" != "install" && "$MODE" != "migrate" ]]; then
+    if [[ "$MODE" != "single" && "$MODE" != "install" && "$MODE" != "migrate" && "$MODE" != "tool" ]]; then
         if ! acquire_lock "update" 20; then
             echo "⏳ Another update is already running."
             echo "   Wait for it to finish, then start this one again."
@@ -858,6 +885,7 @@ if [[ "$1" == "run" ]]; then
         install) run_mode_install "$@" ;;
         single)  run_mode_single "$@" ;;
         migrate) run_mode_migrate "$@" ;;
+        tool)    run_mode_tool "$@" ;;
         plugin)  run_mode_plugin ;;
         system)  run_mode_system ;;
         all)     run_mode_plugin; run_mode_system ;;
@@ -874,7 +902,7 @@ fi
 echo "Usage: ${SCRIPT_FILE:t} <subcommand> [args...]" >&2
 echo "" >&2
 echo "Subcommands: refresh_cache, check_updates, run, launch_update, brew_update," >&2
-echo "             install_app, update_app, ignore_app, unignore_app," >&2
+echo "             install_app, update_app, update_tool, ignore_app, unignore_app," >&2
 echo "             scan_migration, migrate_app, migrate_app_in_terminal," >&2
 echo "             change_terminal, change_branch, toggle_mas, toggle_cleanup," >&2
 echo "             toggle_auto_install, about_dialog" >&2

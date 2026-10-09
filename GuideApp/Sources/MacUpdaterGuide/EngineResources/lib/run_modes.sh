@@ -349,6 +349,49 @@ run_mode_single() {
     exit 0
 }
 
+# --- OTHER PACKAGE UPDATE ---
+# One package from npm, pipx, uv, cargo or go, through that manager's own
+# update command (run_other_package_update, lib/updaters.sh). The package has
+# to be one the last scan found: the name is looked up in the other_packages
+# cache entry before anything runs, so this can only ever update something
+# that is really installed, with a fixed command per source.
+run_mode_tool() {
+    local source="$3" name="$4" line location rc=0
+
+    progress_write "running" "single" "$name" "" ""
+
+    if [[ -z "$name" ]] || ! other_source_is_updatable "$source"; then
+        echo "❌ '$source' packages cannot be updated from here." >&2
+        exit 1
+    fi
+    if ! line=$(other_package_line "$source" "$name"); then
+        echo "❌ $name ($source) is not in the last scan. Refresh, then try again." >&2
+        exit 1
+    fi
+    local -a fields=("${(@s:|:)line}")
+    location="${fields[4]}"
+
+    echo "🚀 Updating $name ($source)..."
+    echo "---------------------------"
+    run_other_package_update "$source" "$name" "$location" || rc=$?
+
+    # Only this source's view can have changed.
+    cache_refresh_entry "other_packages" collect_other_packages
+    cache_refresh_entry "other_outdated" collect_other_outdated
+
+    echo "---------------------------"
+    if (( rc == 0 )); then
+        progress_write "done" "single" "$name" "" ""
+        echo "✅ Update Complete!"
+    else
+        progress_write "failed" "single" "$name" "" ""
+        echo "❌ Update FAILED for $name (exit $rc)." >&2
+    fi
+    echo "Done!"
+    sleep 1
+    exit $rc
+}
+
 # --- PLUGIN UPDATE SECTION ---
 # Replaces the running engine: the main script plus every file in LIB_NAMES,
 # as one all-or-nothing set (install_engine_files, lib/selfupdate.sh).

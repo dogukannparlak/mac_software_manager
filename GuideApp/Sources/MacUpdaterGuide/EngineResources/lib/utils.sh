@@ -108,8 +108,17 @@ run_with_timeout() {
 
     "$@" &
     local pid=$!
-    ( sleep "$secs" 2>/dev/null
-      kill -TERM "$pid" 2>/dev/null && [[ -n "$marker" ]] && : > "$marker" ) &
+    # The watcher's own output goes nowhere, and it takes its 'sleep' down
+    # with it when it is stopped. Without both, a caller capturing output -
+    # output=$(run_with_timeout 30 mas outdated), which is how every cache
+    # entry is filled - waited out the whole limit every time: the orphaned
+    # sleep still held the captured stdout open after the command had long
+    # finished, so a two-second query took thirty.
+    ( sleep "$secs" &
+      local sleeper=$!
+      trap 'kill "$sleeper" 2>/dev/null; exit 0' TERM
+      wait "$sleeper"
+      kill -TERM "$pid" 2>/dev/null && [[ -n "$marker" ]] && : > "$marker" ) >/dev/null 2>&1 &
     local watcher=$!
     local rc=0
     wait "$pid" 2>/dev/null || rc=$?

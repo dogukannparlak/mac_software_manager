@@ -178,24 +178,6 @@ enum InstalledInventory {
         )
     }
 
-    private static func searchDirectories() -> [URL] {
-        var directories = [URL(filePath: "/Applications")]
-
-        let userApps = FileManager.default.homeDirectoryForCurrentUser
-            .appending(path: "Applications", directoryHint: .isDirectory)
-        if FileManager.default.fileExists(atPath: userApps.path(percentEncoded: false)) {
-            directories.append(userApps)
-        }
-
-        // Setapp keeps its catalogue in a subfolder
-        let setapp = URL(filePath: "/Applications/Setapp")
-        if FileManager.default.fileExists(atPath: setapp.path(percentEncoded: false)) {
-            directories.append(setapp)
-        }
-
-        return directories
-    }
-
     /// The user's `app_token_map.conf`, keyed by lowercased application name.
     ///
     /// A name can be impossible to derive - "lghub" is the cask
@@ -454,7 +436,9 @@ enum InstalledInventory {
 
     // MARK: - Cache helpers
 
-    private static func cacheLines(_ name: String) -> [String] {
+    /// Internal so the other-sources list (`OtherPackage`) reads the cache
+    /// through the same helper.
+    static func cacheLines(_ name: String) -> [String] {
         guard let text = try? String(contentsOf: ToolkitPaths.cacheFile(name), encoding: .utf8) else {
             return []
         }
@@ -554,6 +538,10 @@ final class AppIconCache {
 final class InventoryStore {
     private(set) var apps: [InstalledApp] = []
     private(set) var tools: [InstalledTool] = []
+    /// Everything outside Homebrew and the App Store - npm, pipx, uv, cargo,
+    /// go, standalone tools and installer packages. Empty when the engine's
+    /// OTHER_SOURCES_ENABLED is off.
+    private(set) var otherPackages: [OtherPackage] = []
     private(set) var installedCaskTokens: Set<String> = []
     private(set) var isLoading = false
 
@@ -569,12 +557,17 @@ final class InventoryStore {
         let result = await Task.detached(priority: .userInitiated) {
             (
                 inventory: InstalledInventory.load(),
-                tokens: InstalledInventory.installedCaskTokens()
+                tokens: InstalledInventory.installedCaskTokens(),
+                others: OtherPackage.parse(
+                    packages: InstalledInventory.cacheLines("other_packages"),
+                    outdated: InstalledInventory.cacheLines("other_outdated")
+                )
             )
         }.value
 
         apps = result.inventory.apps
         tools = result.inventory.tools
+        otherPackages = result.others
         installedCaskTokens = result.tokens
         isLoading = false
     }
