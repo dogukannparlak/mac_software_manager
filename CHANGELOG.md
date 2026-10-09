@@ -91,6 +91,9 @@ The app stopped asking to install itself, and SwiftBar is gone.
 - Updates beyond Homebrew show on the Updates page too, in their own section,
   and count in its title, the sidebar badge and the menu bar icon. Backup
   files such as `agy.<timestamp>.old` are no longer listed as tools.
+- Updates beyond Homebrew run in the background like Homebrew rows, with a
+  spinner on the row, instead of always opening a terminal; "Run updates in
+  Terminal" still opens one.
 - Installed Apps also finds apps one folder down
   (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
 

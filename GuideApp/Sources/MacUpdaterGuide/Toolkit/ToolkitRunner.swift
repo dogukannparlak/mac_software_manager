@@ -276,6 +276,10 @@ final class ToolkitController {
     /// needs the item's data to render while its "Updated" badge is showing.
     var recentItemsByID: [String: UpdateItem] = [:]
 
+    /// Packages from beyond Homebrew (`OtherPackage.id`) whose background
+    /// update is running right now - what their rows show a spinner for.
+    var updatingOtherPackageIDs: Set<String> = []
+
     /// 0...1 completion for a row's own progress bar, per `UpdateItem.id`.
     /// Real byte progress when a cask download watcher
     /// (`cask_download_watch_start`, lib/cache.sh) has reported one -

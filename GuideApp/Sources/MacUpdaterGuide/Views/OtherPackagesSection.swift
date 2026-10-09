@@ -80,6 +80,8 @@ private struct OtherPackageRow: View {
 
     let package: OtherPackage
 
+    private var isUpdating: Bool { toolkit.updatingOtherPackageIDs.contains(package.id) }
+
     /// The second line: what the package belongs to or where it is.
     private var detail: String? {
         guard let location = package.location else { return nil }
@@ -138,11 +140,14 @@ private struct OtherPackageRow: View {
                 .font(.callout.monospacedDigit())
                 .lineLimit(1)
 
-                Button(UIStrings.updateThis[loc.language]) {
-                    toolkit.updateTool(package)
+                if isUpdating {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button(UIStrings.updateThis[loc.language]) {
+                        toolkit.updateTool(package)
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
-                .disabled(toolkit.isUpdating)
             } else {
                 Text(package.version.isEmpty ? "—" : package.version)
                     .font(.callout.monospacedDigit())
@@ -154,10 +159,10 @@ private struct OtherPackageRow: View {
         .padding(.vertical, 5)
         .contextMenu {
             if package.isUpdatable {
-                Button(UIStrings.updateInTerminal[loc.language]) {
+                Button(UIStrings.updateThis[loc.language]) {
                     toolkit.updateTool(package)
                 }
-                .disabled(toolkit.isUpdating)
+                .disabled(isUpdating)
             }
 
             if let revealURL {

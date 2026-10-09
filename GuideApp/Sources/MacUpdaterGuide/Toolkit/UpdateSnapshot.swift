@@ -120,7 +120,7 @@ struct UpdateSnapshot: Sendable {
         snapshot.installedCount =
             lineCount("brew_casks") + lineCount("brew_formulae") + lineCount("mas_list")
 
-        snapshot.lastCheck = ["brew_outdated", "mas_outdated", "manual_updates", "app_updates"]
+        snapshot.lastCheck = ["brew_outdated", "mas_outdated", "manual_updates", "app_updates", "other_outdated"]
             .compactMap { modificationDate(of: $0) }
             .max()
 

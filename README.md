@@ -270,8 +270,9 @@ packages against PyPI and crates.io, and the standalone tools that update
 themselves (`claude`, `uv`, `bun`) against their registry. They sort to the top
 of their card with an **Update** button. npm, pipx, uv, Cargo and Go packages
 update through their manager's own command; `claude`, `uv`, `bun`, `deno` and
-`rustup` through their own (`claude update`, `uv self update`, …) — always in
-a terminal, and only for a package the last scan listed.
+`rustup` through their own (`claude update`, `uv self update`, …) — in the
+background like a Homebrew row (or in a terminal when "Run updates in
+Terminal" is on), and only for a package the last scan listed.
 
 **Settings → Updates → Also look beyond Homebrew** (`OTHER_SOURCES_ENABLED`)
 turns the whole section off; under it, one checkbox per source picks what is

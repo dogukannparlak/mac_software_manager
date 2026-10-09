@@ -278,8 +278,9 @@ pipx/uv/Cargo paketleri PyPI ve crates.io'ya karşı, kendini güncelleyen bağ�
 araçlar (`claude`, `uv`, `bun`) kendi kayıt depolarına karşı. Bunlar kartlarının
 en üstüne **Güncelle** düğmesiyle çıkar. npm, pipx, uv, Cargo ve Go paketleri
 yöneticilerinin kendi komutuyla; `claude`, `uv`, `bun`, `deno` ve `rustup` kendi
-komutlarıyla (`claude update`, `uv self update`, …) güncellenir — her zaman bir
-terminalde ve yalnızca son taramanın listelediği bir paket için.
+komutlarıyla (`claude update`, `uv self update`, …) güncellenir — bir Homebrew
+satırı gibi arka planda (ya da "Güncellemeleri Terminal'de çalıştır" açıksa
+terminalde) ve yalnızca son taramanın listelediği bir paket için.
 
 **Ayarlar → Güncellemeler → Homebrew dışını da tara** (`OTHER_SOURCES_ENABLED`)
 bölümün tamamını kapatır; altındaki kaynak başına birer onay kutusu neyin
