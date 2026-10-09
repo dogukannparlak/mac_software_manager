@@ -349,9 +349,11 @@ collect_npm_packages() {
     # while still printing the whole list, so the status is not the verdict.
     out=$(run_with_timeout "$OTHER_QUERY_TIMEOUT" npm ls -g --depth=0 --parseable --long 2>/dev/null) || true
     for line in "${(@f)out}"; do
-        # <path>:<name>@<version>[:<extra>] - the root directory line has no
-        # spec and is skipped.
-        [[ "$line" == *:* ]] || continue
+        # <path>:<name>@<version>[:<extra>]. Only paths under node_modules
+        # are packages: the first line is the global prefix itself, and npm
+        # can write it with a spec of its own ("…/lib:lib@"), which read as a
+        # package called "lib".
+        [[ "${line%%:*}" == */node_modules/* ]] || continue
         spec="${line#*:}"
         spec="${spec%%:*}"
         [[ "$spec" == ?*@* ]] || continue

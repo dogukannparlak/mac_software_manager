@@ -21,7 +21,7 @@ run_with_stubs() {
 
 @test "npm: global packages are read from 'npm ls --parseable --long'" {
     stub npm 'cat <<EOF
-/opt/homebrew/lib
+/opt/homebrew/lib:lib@
 /opt/homebrew/lib/node_modules/@anthropic-ai/claude-code:@anthropic-ai/claude-code@2.0.14
 /opt/homebrew/lib/node_modules/npm:npm@10.9.0:undefined
 EOF
