@@ -277,7 +277,11 @@ launch_error_is_permission_denied() {
 # Ask Terminal.app to run the command. Also the fallback every other branch
 # below uses when the terminal the user picked turns out not to be installed.
 launch_via_terminal_app() {
-    local cmd="$1"
+    # Escaped for the AppleScript string it is spliced into: an app name with
+    # a '"' in it ended the literal early (and could run the rest as
+    # AppleScript), and the '\'' that ${(qq)} produces for an apostrophe is a
+    # backslash AppleScript would otherwise eat.
+    local cmd="$(applescript_escape "$1")"
     launch_capture osascript <<EOF
 tell application "Terminal"
     run
@@ -324,6 +328,34 @@ launch_via_terminal_file() {
     return 0
 }
 
+# Run a command in a new Warp window through a Launch Configuration
+# (~/.warp/launch_configurations), opened with Warp's warp://launch/ URI.
+# The file is rewritten on every launch; it holds nothing but this command.
+launch_via_warp() {
+    local cmd="$1"
+    local config_dir="$HOME/.warp/launch_configurations"
+    local config_name="mac-software-manager-run.yaml"
+    # YAML double-quoted scalars use the same escapes as AppleScript strings
+    # for the two characters that matter here: backslash and double quote.
+    local yaml_cmd="$(applescript_escape "$cmd")"
+    local yaml_cwd="$(applescript_escape "$HOME")"
+
+    mkdir -p "$config_dir" 2>/dev/null || return 1
+    {
+        print -r -- "---"
+        print -r -- "name: Mac Software Manager"
+        print -r -- "windows:"
+        print -r -- "  - tabs:"
+        print -r -- "      - title: Mac Software Manager"
+        print -r -- "        layout:"
+        print -r -- "          cwd: \"$yaml_cwd\""
+        print -r -- "          commands:"
+        print -r -- "            - exec: \"$yaml_cmd\""
+    } > "$config_dir/$config_name" 2>/dev/null || return 1
+
+    launch_capture open "warp://launch/$config_name"
+}
+
 # Launch update script in the configured terminal app.
 #
 # Returns LAUNCH_TERMINAL_OK only when the terminal was actually asked to run
@@ -337,7 +369,17 @@ launch_in_terminal() {
     local terminal="${PREFERRED_TERMINAL:-Terminal}"
     local rc=0
 
+    # MSU_LIB_DIR goes along with the command: the terminal starts a fresh
+    # shell that never saw this process's environment, so without it the
+    # script in that window would have to rediscover its library on its own -
+    # and the engine GuideApp ships is pointed at its bundled library only
+    # through this variable. See resolve_lib_dir in update_system.1h.sh.
     local cmd="${(qq)script_path} run ${(@qq)args}"
+    # '/usr/bin/env', not a bare 'VAR=value' prefix: iTerm2 may exec its
+    # command without a shell in between, and env works either way.
+    [[ -n "${LIB_DIR:-}" ]] && cmd="/usr/bin/env MSU_LIB_DIR=${(qq)LIB_DIR} $cmd"
+    # The same command as an AppleScript string literal, for iTerm below.
+    local cmd_as="$(applescript_escape "$cmd")"
 
     LAUNCH_TERMINAL_ERROR=""
 
@@ -350,7 +392,7 @@ tell application "iTerm"
     if not application "iTerm" is running then
         launch
     end if
-    create window with default profile command "$cmd"
+    create window with default profile command "$cmd_as"
     activate
 end tell
 EOF
@@ -361,15 +403,12 @@ EOF
         "Warp")
             # Warp terminal
             if [[ -d "/Applications/Warp.app" ]]; then
-                # Force focus first. Best-effort on purpose: 'open' below
-                # needs no Automation permission, so a refused 'activate'
-                # means the window opens without coming to the front - not a
-                # failed launch, and reporting it as one would send the user
-                # after a permission this branch does not need.
-                osascript -e 'tell application "Warp" to activate' 2>/dev/null || true
-                # Warp accepts args naturally, but constructing a clean command string is safer
-                launch_capture open -a Warp "$script_path" --args run "${args[@]}" || rc=$?
-                osascript -e 'tell application "Warp" to activate' 2>/dev/null || true
+                # 'open -a Warp <script> --args run ...' handed the arguments
+                # to Warp itself, not to the script, so nothing ever ran the
+                # update. Warp runs a command through a Launch Configuration
+                # instead: write one, then open it by URI. Neither step needs
+                # an Automation permission.
+                launch_via_warp "$cmd" || rc=$?
             else
                 launch_via_terminal_app "$cmd" || rc=$?
             fi
@@ -379,7 +418,9 @@ EOF
             if [[ -d "/Applications/Alacritty.app" ]]; then
                 # Force focus first - best-effort, see the Warp branch above
                 osascript -e 'tell application "Alacritty" to activate' 2>/dev/null || true
-                launch_capture open -a Alacritty --args -e zsh -c "$cmd; exec zsh" || rc=$?
+                # -n: 'open' passes --args only to a NEW instance, so with
+                # Alacritty already running the command was silently dropped.
+                launch_capture open -na Alacritty --args -e zsh -c "$cmd; exec zsh" || rc=$?
                 osascript -e 'tell application "Alacritty" to activate' 2>/dev/null || true
             else
 			    # Fallback to Terminal

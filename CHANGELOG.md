@@ -105,6 +105,26 @@ The app stopped asking to install itself, and SwiftBar is gone.
 - `setup_mac.sh` no longer deletes `setup_mac.sh` and `uninstall.sh` out of its
   own support folder when that folder is also the plugin directory. Only
   reachable through the new `--unattended` path, where the two can coincide.
+- Runs launched in a terminal window now load the right engine library. The
+  new shell never saw GuideApp's `MSU_LIB_DIR`, so the bundled script fell
+  back to `$APP_DIR/lib` — an older library, or none ("Missing engine file").
+  The command now carries the variable, and without it the engine looks for
+  its library next to itself first.
+- The self-update and "Update Channel" no longer write into the app bundle.
+  Only an engine installed by `setup_mac.sh` replaces its own files; the one
+  inside the app is updated with the app.
+- "Update Channel" replaces the whole engine (script and `lib/`), not only
+  `update_system.1h.sh`.
+- A second update check answered with 304 no longer clears an update that
+  the first check found and nobody has installed yet.
+- App names containing `"` or `'` no longer break (or inject into) the
+  AppleScript that opens Terminal or iTerm2.
+- Warp now actually runs the update, through a Launch Configuration — the
+  old `--args` went to Warp, not to the script. Alacritty gets `open -n`, so
+  the command is not dropped when it is already running.
+- Ignoring or restoring a formula reports a failing `brew pin`/`unpin`
+  instead of exiting silently; app installs write the eight-field history
+  line; the update check rejects a download with no version header.
 
 ## [1.6.0] - 2026-08-23
 

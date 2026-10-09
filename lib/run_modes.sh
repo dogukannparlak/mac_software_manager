@@ -174,7 +174,8 @@ run_mode_install() {
 
     # Record the outcome the same way Homebrew and App Store updates are
     timestamp=$(date +%s)
-    echo "$timestamp|$app_method|$target_app|$app_local|$app_remote|$target_app|ok" >> "$HISTORY_FILE"
+    # Same eight fields as every other writer (CACHE_FORMAT.md); reason is empty on ok
+    echo "$timestamp|$app_method|$target_app|$app_local|$app_remote|$target_app|ok|" >> "$HISTORY_FILE"
     trim_history_log
 
     echo "✅ $target_app updated to $app_remote."
@@ -349,15 +350,26 @@ run_mode_single() {
 }
 
 # --- PLUGIN UPDATE SECTION ---
-# Replaces the running engine: the main script plus every file in LIB_NAMES.
-# These have to move together or not at all - a new main script paired with a
-# stale lib file (or vice versa) can silently break the moment a function
-# signature changes between versions. So every file is downloaded and
-# verified into a temp location FIRST; only once every single one has passed
-# does anything get moved into place. setup_mac.sh/uninstall.sh are handled
+# Replaces the running engine: the main script plus every file in LIB_NAMES,
+# as one all-or-nothing set (install_engine_files, lib/selfupdate.sh).
+# setup_mac.sh/uninstall.sh are handled
 # separately and best-effort, since a stale copy of either does not affect
 # the engine that is actually running right now.
 run_mode_plugin() {
+    # The engine GuideApp ships lives in its code-signed app bundle and is
+    # updated with the app. Replacing it here would write into that bundle
+    # (breaking its signature) and put the new library in $APP_DIR/lib, where
+    # the bundled script never reads it. See engine_is_self_updatable.
+    if ! engine_is_self_updatable; then
+        rm -f "$PENDING_FLAG"
+        if [[ "$MODE" == "plugin" ]]; then
+            echo "ℹ️ This engine ships inside Mac Software Manager and is updated with the app."
+            sleep 1
+            exit 0
+        fi
+        return 0
+    fi
+
     if [[ -f "$PENDING_FLAG" ]]; then
         echo "🚀 Updating toolkit components..."
 
@@ -371,37 +383,8 @@ run_mode_plugin() {
             fi
         done
 
-        typeset -a engine_files
-        engine_files=("update_system.1h.sh")
-        for lib_name in "${LIB_NAMES[@]}"; do
-            engine_files+=("lib/${lib_name}.sh")
-        done
-
-        typeset -A engine_temp
-        engine_ok=1
-        for f in "${engine_files[@]}"; do
-            engine_temp[$f]="$(mktemp "${TMPDIR:-/tmp}/${f:t}.XXXXXX")"
-            want_header=""
-            [[ "$f" == "update_system.1h.sh" ]] && want_header="bitbar.title"
-            download_verified "$f" "${engine_temp[$f]}" "$want_header" || engine_ok=0
-        done
-
-        # Cleanup only, for the same reason as run_mode_install above: this
-        # trap is function-local, so it cannot see the status an `exit 1`
-        # below is exiting with. The dispatcher's trap finalizes.
-        trap '
-            for f in "${engine_files[@]}"; do rm -f "${engine_temp[$f]}"; done
-        ' EXIT
-
-        if (( engine_ok )); then
-            mkdir -p "$APP_DIR/lib"
-            for f in "${engine_files[@]}"; do
-                if [[ "$f" == "update_system.1h.sh" ]]; then
-                    mv "${engine_temp[$f]}" "$SCRIPT_FILE" && chmod +x "$SCRIPT_FILE"
-                else
-                    mv "${engine_temp[$f]}" "$APP_DIR/$f" && chmod +x "$APP_DIR/$f"
-                fi
-            done
+        # All-or-nothing download, verify and swap: lib/selfupdate.sh.
+        if install_engine_files; then
             rm -f "$PENDING_FLAG"
             echo "✅ Toolkit updated successfully."
 
@@ -414,7 +397,6 @@ run_mode_plugin() {
                 echo "➡️ Proceeding with system apps..."
             fi
         else
-            for f in "${engine_files[@]}"; do rm -f "${engine_temp[$f]}"; done
             echo "❌ Plugin update aborted: not every engine file passed verification. The running version was left untouched."
             if [[ "$MODE" == "plugin" ]]; then
                 notify "Plugin update failed integrity check."

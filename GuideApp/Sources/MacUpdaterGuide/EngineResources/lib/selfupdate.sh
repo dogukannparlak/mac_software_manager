@@ -138,8 +138,64 @@ download_verified() {
     return 0
 }
 
+# Replace the installed engine - the main script plus every file in LIB_NAMES -
+# from whatever URL_PRIMARY_BASE / URL_BACKUP_BASE currently point at.
+#
+# These have to move together or not at all: a new main script paired with a
+# stale lib file (or vice versa) can silently break the moment a function
+# signature changes between versions. So every file is downloaded and verified
+# into a temp location FIRST; only once every single one has passed does
+# anything get moved into place. Shared by the self-update (run_mode_plugin)
+# and the channel switch (change_branch), which used to replace only the main
+# script and leave the previous channel's library under it.
+#
+# Returns 0 when the whole set was installed, 1 when nothing was touched.
+install_engine_files() {
+    typeset -a engine_files
+    typeset -A engine_temp
+    local f lib_name want_header engine_ok=1
+
+    engine_files=("update_system.1h.sh")
+    for lib_name in "${LIB_NAMES[@]}"; do
+        engine_files+=("lib/${lib_name}.sh")
+    done
+
+    for f in "${engine_files[@]}"; do
+        engine_temp[$f]="$(mktemp "${TMPDIR:-/tmp}/${f:t}.XXXXXX")" || { engine_ok=0; break; }
+        want_header=""
+        [[ "$f" == "update_system.1h.sh" ]] && want_header="bitbar.title"
+        download_verified "$f" "${engine_temp[$f]}" "$want_header" || { engine_ok=0; break; }
+    done
+
+    if (( engine_ok )); then
+        mkdir -p "$APP_DIR/lib"
+        for f in "${engine_files[@]}"; do
+            if [[ "$f" == "update_system.1h.sh" ]]; then
+                mv "${engine_temp[$f]}" "$SCRIPT_FILE" && chmod +x "$SCRIPT_FILE"
+            else
+                mv "${engine_temp[$f]}" "$APP_DIR/$f" && chmod +x "$APP_DIR/$f"
+            fi
+        done
+        return 0
+    fi
+
+    for f in "${(@k)engine_temp}"; do
+        rm -f "${engine_temp[$f]}"
+    done
+    return 1
+}
 
 check_for_updates_manual() {
+    # The engine GuideApp ships is updated with the app, never in place - see
+    # engine_is_self_updatable. Reporting a newer engine here would only offer
+    # an install that must not run.
+    if ! engine_is_self_updatable; then
+        rm -f "$PENDING_FLAG"
+        echo "ℹ️ This engine ships inside Mac Software Manager and is updated with the app."
+        notify "The update engine is part of the app and is updated with it."
+        return 0
+    fi
+
     echo "Checking for updates..."
 
     local temp_headers="$(mktemp "${TMPDIR:-/tmp}/update_headers.XXXXXX")"
@@ -161,9 +217,19 @@ check_for_updates_manual() {
         "$URL_PRIMARY_BASE/update_system.1h.sh" || true)
 
     if [[ "$http_code" == "304" ]]; then
-        echo "✅ Status 304: No changes."
-        rm -f "$PENDING_FLAG" "$temp_headers" "$temp_body"
-        notify "Plugin is up to date."
+        # 304 means "the same file as the last check saw" - not "the same file
+        # as the one installed". When that last check found a newer version
+        # and it has not been installed yet, the pending flag it left is still
+        # true; clearing it here used to make every second check announce
+        # "up to date" over an update nobody had installed.
+        rm -f "$temp_headers" "$temp_body"
+        if [[ -f "$PENDING_FLAG" ]]; then
+            echo "ℹ️ Status 304: the update found earlier is still waiting to be installed."
+            notify "An engine update is still waiting to be installed."
+        else
+            echo "✅ Status 304: No changes."
+            notify "Plugin is up to date."
+        fi
         return 0
     fi
 
@@ -171,7 +237,9 @@ check_for_updates_manual() {
     local source_verified="false"
 
     if [[ "$http_code" == "200" ]]; then
-        if curl -s -o "$temp_body" "$URL_PRIMARY_BASE/update_system.1h.sh"; then
+        # -f: an error page served on the second request must not be read as
+        # the script (its version would parse as "Unknown").
+        if curl -fsS --connect-timeout 5 --max-time 30 -o "$temp_body" "$URL_PRIMARY_BASE/update_system.1h.sh"; then
             # '|| true': a response without an ETag header is normal, not fatal.
             grep -i "etag:" "$temp_headers" | awk '{print $2}' | tr -d '"\r\n' > "$ETAG_FILE" || true
             source_verified="true"
@@ -203,8 +271,17 @@ check_for_updates_manual() {
 
     echo "Verify: Local v$local_ver vs Remote v$remote_ver"
 
-    if [[ -z "$local_ver" ]]; then
+    if [[ -z "$local_ver" || "$local_ver" == "Unknown" ]]; then
         echo "❌ Critical Error: Could not determine local version."
+        return 1
+    fi
+
+    # Without a version header the download is not the script at all (a
+    # truncated file, a captive portal page); 'is-at-least' would treat
+    # "Unknown" as newer than anything and announce an update.
+    if [[ "$remote_ver" == "Unknown" ]]; then
+        echo "❌ Error: The downloaded file has no version header."
+        notify "Update check failed: the server returned an unexpected file."
         return 1
     fi
 

@@ -300,11 +300,43 @@ fi
 typeset -a LIB_NAMES
 LIB_NAMES=(utils cache ignored history selfupdate updaters selfupdate_apps app_install migrate run_modes)
 
-# MSU_LIB_DIR overrides where libs are sourced from - used by the bats test
-# suite (tests/test_helper.bash) to point straight at the repo's lib/
-# directory instead of a real install. Production never sets it, so this is
-# always $APP_DIR/lib there.
-LIB_DIR="${MSU_LIB_DIR:-$APP_DIR/lib}"
+# MSU_LIB_DIR overrides where libs are sourced from - GuideApp sets it for the
+# engine it ships, and the bats suite (tests/test_helper.bash) points it at the
+# repo's lib/ directory.
+#
+# Without it, the library is looked for next to this script before falling
+# back to $APP_DIR/lib. That matters whenever the variable is lost on the way:
+# a run launched in the user's terminal (launch_in_terminal) starts in a fresh
+# shell that never saw GuideApp's environment, and used to load an older
+# installed library - or none at all - under the bundled script. The layouts
+# checked are the ones the script actually ships in: <dir>/lib/*.sh (an
+# install, a checkout, a SwiftPM bundle) and <dir>/*.sh (Xcode flattens every
+# resource into Contents/Resources).
+resolve_lib_dir() {
+    local script_dir="${SCRIPT_FILE:h}" candidate
+    if [[ -n "${MSU_LIB_DIR:-}" ]]; then
+        print -r -- "$MSU_LIB_DIR"
+        return 0
+    fi
+    for candidate in "$script_dir/lib" "$script_dir"; do
+        if [[ -r "$candidate/utils.sh" && -r "$candidate/run_modes.sh" ]]; then
+            print -r -- "$candidate"
+            return 0
+        fi
+    done
+    print -r -- "$APP_DIR/lib"
+}
+LIB_DIR="$(resolve_lib_dir)"
+
+# Whether this engine may replace its own files. Only an engine installed by
+# setup_mac.sh - the script and its library both living under $APP_DIR - owns
+# the files it would overwrite. The copy GuideApp runs lives inside a
+# code-signed, read-only app bundle and is updated with the app: writing into
+# it breaks the signature, and writing its library to $APP_DIR/lib instead
+# pairs a new script with the old bundled library.
+engine_is_self_updatable() {
+    [[ "${SCRIPT_FILE:h}" == "$APP_DIR" && "$LIB_DIR" == "$APP_DIR/lib" ]]
+}
 for lib_name in "${LIB_NAMES[@]}"; do
     lib_path="$LIB_DIR/${lib_name}.sh"
     if [[ ! -r "$lib_path" ]]; then
@@ -418,6 +450,13 @@ fi
 
 # Change Update Branch (Stable/Beta)
 if [[ "$1" == "change_branch" ]]; then
+    # A channel is something an installed engine downloads itself from. The
+    # one GuideApp ships comes with the app - see engine_is_self_updatable.
+    if ! engine_is_self_updatable; then
+        notify "The update engine is part of the app, so it has no separate update channel."
+        exit 0
+    fi
+
     # Detect current state for default selection
     CURRENT="${UPDATE_BRANCH:-main}"
     DEFAULT_ITEM="Stable (Main)"
@@ -466,19 +505,17 @@ if [[ "$1" == "change_branch" ]]; then
         URL_BACKUP_BASE=""
     fi
 
-    # Force Download and Overwrite
-    TEMP_TARGET="$(mktemp "${TMPDIR:-/tmp}/update_system.branch_switch.XXXXXX")"
-    # $? has to be read before the cleanup runs, or the status reported is
-    # rm's, not the one this is exiting with. See progress_finalize.
-    trap 'switch_rc=$?; rm -f "$TEMP_TARGET"; progress_finalize $switch_rc' EXIT
+    # $? has to be read before anything else runs, or the status reported is
+    # not the one this is exiting with. See progress_finalize.
+    trap 'switch_rc=$?; progress_finalize $switch_rc' EXIT
 
     echo "⬇️ Downloading version from $NEW_BRANCH..."
 
-    # Same integrity gate as self-update: checksum from the target branch,
-    # cross-checked against the other mirror, plus a zsh parse check.
-    if download_verified "update_system.1h.sh" "$TEMP_TARGET" "bitbar.title"; then
-        mv "$TEMP_TARGET" "$SCRIPT_FILE" && chmod +x "$SCRIPT_FILE"
-
+    # The whole engine, not just this script: the new channel's script on top
+    # of the old channel's lib/ is exactly the mismatch install_engine_files
+    # exists to prevent. Same integrity gate as self-update - checksum from the
+    # target branch, cross-checked against the other mirror, zsh parse check.
+    if install_engine_files; then
         # Clean up flags and stale cached data from the old channel
         rm -f "$PENDING_FLAG"
         rm -f "$ETAG_FILE"
@@ -536,7 +573,12 @@ if [[ "$1" == "ignore_app" ]]; then
 
     case "$type" in
         "brew")
-            brew pin "$id" 2>/dev/null
+            # Said out loud: under 'set -e' a failing 'brew pin' used to end
+            # the run here with its error thrown away and no dialog shown.
+            if ! brew pin "$id"; then
+                echo "❌ Could not ignore $id: 'brew pin' failed." >&2
+                exit 1
+            fi
             ;;
         "cask"|"mas"|"sparkle")
             add_ignored "$type" "$id" "$name"
@@ -555,7 +597,12 @@ if [[ "$1" == "unignore_app" ]]; then
 
     case "$type" in
         "brew")
-            brew unpin "$id" 2>/dev/null
+            # Said out loud: under 'set -e' a failing 'brew unpin' used to end
+            # the run here with its error thrown away and no dialog shown.
+            if ! brew unpin "$id"; then
+                echo "❌ Could not restore $id: 'brew unpin' failed." >&2
+                exit 1
+            fi
             ;;
         "cask"|"mas"|"sparkle")
             remove_ignored "$type" "$id"
