@@ -19,8 +19,9 @@ days, not hours.
 
 ## Supported versions
 
-Only the latest release is supported. `VERSION` is the single source of truth,
-and installed copies self-update from `main`.
+Only the latest release is supported. `VERSION` is the single source of truth.
+Copies installed from a terminal (`setup_mac.sh`) self-update from `main`; the
+engine inside `MacUpdaterGuide.app` is updated with the app.
 
 ## What this toolkit actually verifies
 
@@ -52,13 +53,19 @@ Transport is HTTPS with `--proto '=https' --tlsv1.2` on every request.
   half-pushed mirror is caught, and a disagreement refuses the update.
 * **Not configured:** the download is verified against GitHub alone. This is
   stated rather than hidden — the engine prints
-  `No Codeberg mirror configured: <file> verified against GitHub only`, and the
-  menu carries a "Config Warnings" entry. The guarantee is never silently
-  downgraded.
+  `No Codeberg mirror configured: <file> verified against GitHub only`. The
+  guarantee is never silently downgraded.
 
-The engine's `lib/*.sh` modules are downloaded and verified as one atomic set,
-so a half-updated install — a new dispatcher over old libraries — is not a
-state self-update can leave behind.
+The engine's `lib/*.sh` modules are downloaded and verified as one atomic set
+(`install_engine_files`), by self-update and by the channel switch alike, so a
+half-updated install — a new dispatcher over old libraries — is not a state
+either can leave behind.
+
+**Only a terminal install updates itself.** The engine inside the app lives in
+a code-signed bundle; writing into it would break the signature. When the
+script and its `lib/` are not both under the support folder
+(`engine_is_self_updatable`), `check_updates`, `run plugin` and `change_branch`
+refuse and say so.
 
 **Modifying the scripts yourself** changes their hash and will show a toolkit
 update as available. That is the mechanism working, not a bug.

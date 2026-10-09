@@ -19,13 +19,6 @@ sizin yerinize Homebrew'un yönetip yönetemeyeceğini gösterir. Hepsini tek bi
 yerden, arka planda günceller; elle kurduğunuz uygulamaları ayarlarını
 kaybetmeden Homebrew'a devredebilir.
 
-<!-- Image 1 : img/app_menubar_panel.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_menubar_panel.png" alt="Uygulamanın menü çubuğu paneli" width="100%">
-  <br><sub>Menü çubuğu ögesi MacUpdaterGuide'ın kendisine aittir.</sub>
-</p>
--->
-
 ## Gereksinimler
 
 İki katmanın gereksinimleri farklıdır ve birini diğeri olmadan da
@@ -72,8 +65,10 @@ Cache biçimi ikisi arasındaki sözleşmedir ve
 * **Homebrew'e Taşı.** Elle kurduğunuz uygulamalardan bir Homebrew cask'inin
   güncel tutabileceklerini bulur, her eşleşmeye ne kadar güvendiğini ve taşımanın
   tam olarak ne yapacağını söyler, sonra uygulamayı yerinde devreder.
-* **Doğrulanmış self-update.** Motor kendini ancak indirilen dosya yayımlanmış
-  `SHA256SUMS` ile eşleştikten sonra değiştirir — bkz. [Güvenlik](#güvenlik).
+* **Doğrulanmış self-update.** Terminalden kurulan motor kendini ancak
+  indirilen dosya yayımlanmış `SHA256SUMS` ile eşleştikten sonra değiştirir —
+  bkz. [Güvenlik](#güvenlik). Uygulamanın içindeki motor kendini asla
+  değiştirmez; uygulamayla birlikte güncellenir.
 * **Doğrulanmış uygulama değiştirme (opt-in).** Doğrudan DMG/ZIP indirmesi olan
   uygulamalarda motor güncellemeyi kendisi kurabilir; ancak Team ID, kod imzası,
   Gatekeeper ve (yayımlanmışsa) Sparkle'ın EdDSA imzası geçtikten sonra.
@@ -99,19 +94,11 @@ Cache biçimi ikisi arasındaki sözleşmedir ve
 Simgeyi uygulama çizer (`MacUpdaterGuideApp.swift` içindeki `MenuBarLabel`) ve
 üç durumu vardır:
 
-<!-- Image 1.1 : img/menubar_icon_states.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/menubar_icon_states.png" alt="Üç menü çubuğu simgesi durumu" width="100%">
-  <br><sub>Soldan sağa: güncel, bekleyen güncelleme, yenileniyor.</sub>
-</p>
--->
-
 | Durum | SF Symbol | Anlamı |
 | :--- | :--- | :--- |
 | **Güncel** | `checkmark.circle` | Bekleyen bir şey yok. |
 | **Bekleyen güncelleme** | `arrow.triangle.2.circlepath.circle` + sayı | Bekleyen güncelleme sayısı simgenin yanına yazılır. |
 | **Yenileniyor** | `arrow.triangle.2.circlepath` | Bir cache tazelemesi sürüyor. |
-
 
 ## Kurulum
 
@@ -160,6 +147,10 @@ Bu mümkün, çünkü motor kendi yanına hiçbir şey yazmaz. Sakladığı her 
 `~/Library/Application Support/MacSoftwareUpdater/` altına gider; bu klasörü her
 çalışmasında kendisi oluşturur ve `settings.conf` yokken varsayılanlarla
 çalışır. Uygulama `MSU_LIB_DIR`'i kendi kaynaklarına yöneltip motoru çağırır.
+Terminal penceresinde açılan bir çalışma da aynı değişkeni komut satırında
+taşır; değişken olmadan başlayan motor ise kütüphanesini önce kendi yanında
+arar, ancak bulamazsa destek klasörüne döner — böylece betik ve `lib/` hep aynı
+sürümden gelir.
 
 Uygulamanın yanında getiremediği tek şey Homebrew ve `mas`. Biri eksikse kurulum
 sayfası onları önerir — Homebrew'u resmî kurulum betiğini Terminal'de açarak
@@ -201,7 +192,6 @@ için boş bırakın: indirmeler yine çalışır ve yalnızca GitHub'a karşı 
 menü de bunu sessizce güvenceyi düşürmek yerine açıkça söyler. Bkz.
 [Güvenlik](#güvenlik).
 
-
 ### Geçiş adımı
 
 `setup_mac.sh`, `/Applications` içinde hiçbir paket yöneticisinin sahiplenmediği
@@ -212,13 +202,6 @@ sorar:
 * **[A]pp Store** — elle kurulmuş kopyayı App Store sürümüyle değiştirir.
 * **[B]rew Cask** — ayarları koruyarak bir Homebrew cask'i ile değiştirir.
 * **[L]eave** — uygulamayı olduğu gibi bırakır.
-
-<!-- Image 6 : img/migration_utility.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/migration_utility.png" alt="Terminalde geçiş sihirbazı" width="100%">
-  <br><sub><code>setup_mac.sh</code>, yönetilmeyen bir uygulama için ne yapılacağını soruyor. Depodaki dosya v1.2.4'ten ve hâlâ eski proje adını taşıyor; yorumdan çıkarılmadan önce yeniden çekilmeli.</sub>
-</p>
--->
 
 Herhangi bir geçişten önce yerel bir yedek (`.app.bak`) alır; yeni kurulum
 başarısız olursa yedeği otomatik geri yükler ve yedeği yalnızca kurulum tümüyle
@@ -257,48 +240,20 @@ bir ögeyi ya da hepsini güncelleyin, geride kalmak istediğinizi gizleyin.
 (Check Homebrew) en güncel Homebrew ve tap üstverisini isteğe bağlı olarak
 çeker.
 
-<!-- Image 2 : img/app_updates.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_updates.png" alt="Güncellemeler sayfası" width="100%">
-  <br><sub>Kaynağa göre gruplanmış bekleyen güncellemeler; araç çubuğunda Şimdi Yenile ve Homebrew'u Denetle.</sub>
-</p>
--->
-
 Güncellemeler varsayılan olarak arka planda çalışır; ilerleme şeridi fazı, o an
 kurulan paketi, x/y sayacını ve bir İptal düğmesini gösterir. Toplu bir
 çalışmayı iptal etmek önce onay ister (`ToolkitController.cancelUpdate()`). Terminal penceresi
 isteğe bağlıdır; Ayarlar → Genel altından açılır.
-
-<!-- Image 2.1 : img/app_updates_progress.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_updates_progress.png" alt="Çalışan bir güncelleme" width="100%">
-  <br><sub>Çalışma sırasındaki ilerleme şeridi: faz, o anki paket, sayaç ve İptal.</sub>
-</p>
--->
 
 #### Yüklü Uygulamalar (Installed Apps)
 
 Her uygulama; simgesi, sürümü ve kaynağıyla — Homebrew, App Store, Setapp,
 Apple ya da elle kurulmuş. Kaynağa göre süzün ve arayın.
 
-<!-- Image 3 : img/app_installed.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_installed.png" alt="Yüklü Uygulamalar sayfası" width="100%">
-  <br><sub>Her satırda bir simge, bir sürüm ve uygulamanın nereden geldiğini söyleyen rozet.</sub>
-</p>
--->
-
 Her satırdaki **"…" menüsü** o uygulamaya dair her şeyi barındırır: web
 sitesini veya GitHub sayfasını açmak, bu bağlantıları düzeltmek, güncellemeler
 için nasıl takip edildiğini değiştirmek, bir Homebrew cask'ine yeniden
 eşlemek ya da yoksaymak. Her düzeltme yereldir ve anında uygulanır.
-
-<!-- Image 3.1 : img/app_installed_row_menu.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_installed_row_menu.png" alt="Bir satırın işlem menüsü" width="100%">
-  <br><sub>Bağlantıları Düzenle…, Takip Yöntemini Düzenle…, Homebrew Eşlemesini Düzenle… ve Yoksay, tek bir uygulama üzerinde.</sub>
-</p>
--->
 
 #### Komut Satırı Araçları
 
@@ -321,25 +276,11 @@ Desteği, Ağ ve Güvenlik Kütüphaneleri, Veritabanları, Grafik, Yazı Tipi v
 Kütüphaneleri, Metin, Unicode ve Veri Kütüphaneleri, Sıkıştırma ve Arşivleme,
 AWS SDK Bileşenleri, X11 / Pencereleme, Çekirdek ve Sistem Kütüphaneleri).
 
-<!-- Image 3.2 : img/app_cli_tools.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_cli_tools.png" alt="Komut Satırı Araçları sayfası" width="100%">
-  <br><sub>Kategori süzgeci; leaf kategoriler Kütüphaneler ve Bağımlılıklar kovasından ayrı duruyor.</sub>
-</p>
--->
-
 #### Geçmiş (History)
 
 Son 7 veya 30 günde güncellenenler, güne göre gruplanmış. Başarısızlıklar
 gizlenmez, işaretlenir — bir çalışmadan sonra her paket yeniden denetlenir ve
 kaydedilen şey gerçek sonuçtur.
-
-<!-- Image 4 : img/app_history.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_history.png" alt="Geçmiş sayfası" width="100%">
-  <br><sub>7/30 gün seçimi ve güne göre gruplanmış kayıtlar; aralarında başarısız bir kayıt da var.</sub>
-</p>
--->
 
 #### Rehber (Guide)
 
@@ -358,13 +299,6 @@ Genel sayfasındaki **Aynı Anda Yapılabilecek Güncelleme Sayısı**, tek sat�
 eşzamanlılık sınırını uygulama kendisi uygular
 (`AppPreferences.maxConcurrentUpdates`); toplu kilidi de almak onları yeniden
 teker teker çalışmaya indirgerdi.
-
-<!-- Image 5 : img/app_settings_general.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_settings_general.png" alt="Ayarlar › Genel" width="100%">
-  <br><sub>Dil seçici, denetim aralığı, terminalde çalıştırma anahtarı ve terminal seçici, eşzamanlı güncelleme sayısı, Dock simgesi, açılışta başlat.</sub>
-</p>
--->
 
 #### Ayarlar → Homebrew'e Taşı (Settings → Move to Homebrew)
 
@@ -390,13 +324,6 @@ Sonuçlar üç grupta toplanır:
   sürüm düşürme olacağı durumda sizi uyaran bir onay yaprağının arkasında.
 * **Taşınamaz** — süzülüp atılmak yerine nedeniyle birlikte listelenir, çünkü
   "uygulamam neden listede yok" sorusunu süzülmüş bir liste doğurur.
-
-<!-- Image 5.1 : img/app_settings_migrate.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_settings_migrate.png" alt="Tarama sonrası Homebrew'e Taşı" width="100%">
-  <br><sub>Üç grup bir arada: Taşınmaya hazır, Onayınız gerekiyor ve nedeniyle birlikte Taşınamaz.</sub>
-</p>
--->
 
 **Başarısız bir taşımanın neden hiçbir maliyeti yok.** Varsayılan
 `brew install --cask --adopt`'tur; bu, indirip yerine koymak yerine hâlihazırda
@@ -458,14 +385,14 @@ basıp **2** ile çıkar.
 
 | Çağrı | Ne yapar |
 | --- | --- |
-| `run all` | Önce `plugin`, sonra `system`: self-update denetimi, ardından tam güncelleme. Özel güncelleme kilidini alır. |
+| `run all` | Önce `plugin`, sonra `system`: self-update (yalnızca terminal kurulumlarında), ardından tam güncelleme. Özel güncelleme kilidini alır. |
 | `run system` | Homebrew ve (etkinse) App Store yükseltmeleri, artı isteğe bağlı temizlik. Özel kilit. |
-| `run plugin` | Motor ve `lib/` kümesi için self-update denetimi. Özel kilit. |
+| `run plugin` | Bekleyen motor güncellemesini kurar — betik ve `lib/` kümesi, ya hepsi ya hiçbiri. Yalnızca terminal kurulumlarında; uygulamanın içindeki motor bunu söyleyip çıkar. Özel kilit. |
 | `run single <args>` | Tek bir ögeyi başsız günceller. Özel kilit almaz — eşzamanlılık sınırını uygulama kendi tarafında uygular. |
 | `run install <args>` | Bir uygulamanın güncellemesini DMG/ZIP'inden kurar. Özel kilit almaz. |
 | `run migrate <app> <token> [adopt\|replace\|dry]` | Tek bir uygulamayı Homebrew'a devreder. Özel kilit almaz. |
 | `refresh_cache [auto\|force]` | `auto` (varsayılan) yalnızca bayatlamış katmanları tazeler; `force` (ya da `all`) her şeyi tazeler. Engellemez — zaten bir tazeleme sürüyorsa çıkar. |
-| `check_updates` | Elle self-update denetimi. |
+| `check_updates` | Elle self-update denetimi (yalnızca terminal kurulumlarında). |
 | `brew_update` | Yalnızca `brew update`: hiçbir şeyi yükseltmeden en güncel Homebrew ve tap üstverisini çeker. Bir çalışmayla aynı kilidi alır. |
 | `scan_migration` | Homebrew'un yönetebileceği uygulamaları tarar. Asla arka plan tazelemesinin parçası değildir. Cache kilidini alır. |
 | `migrate_app <app> <token> [adopt\|replace\|dry]` | Tek bir uygulamanın başsız geçişi. Asla `sudo` çalıştırmaz. |
@@ -485,7 +412,10 @@ basıp **2** ile çıkar.
 ### Güncelleme kanalı
 
 `change_branch`, **Stable (Main)** ve **Beta (Develop)** seçeneklerini sunar ve
-`UPDATE_BRANCH` içine `main` ya da `develop` yazar. Ayar var ve çalışıyor, ancak
+`UPDATE_BRANCH` içine `main` ya da `develop` yazar ve o branch'in motorunun
+tamamını (betik ve her `lib/*.sh`, tek bir küme olarak doğrulanarak) kurar.
+Yalnızca terminalden kurulan motor için geçerlidir: uygulamanın içindeki motorun
+kendi kanalı yoktur, uygulamayla birlikte gelir. Ayar var ve çalışıyor, ancak
 **`develop` branch'i şu an yayımda değil** — `origin` üzerinde yalnızca `main` ve
 `feature/debug-page` var — dolayısıyla bugün Beta seçmek self-update'i var
 olmayan bir branch'e yöneltir. Bir `develop` branch'i duyurulana kadar Stable'da
@@ -516,7 +446,7 @@ tutar.
 
 | Anahtar | Anlamı |
 | --- | --- |
-| `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` veya `Ghostty`. |
+| `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` veya `Ghostty`. Warp bir Launch Configuration ile sürülür; bu yüzden onu seçmek `~/.warp/launch_configurations/mac-software-manager-run.yaml` dosyasını yazar — bu araç setinin kendi klasörü dışına yazdığı tek dosya. |
 | `MAS_ENABLED` | App Store güncellemeleri. `1` = açık, `0` = kapalı. |
 | `UPDATE_BRANCH` | Güncelleme kanalı: `main` (stable) veya `develop` (beta). |
 | `AUTOSTART` | Eski otomatik başlatma bayrağı. Kimse okumuyor — girişte başlatma uygulamanın kendi ayarı, macOS tarafından tutuluyor. |
@@ -599,8 +529,13 @@ bir mirror yapılandırılmışsa — ikinci kaynağın `SHA256SUMS` dosyası da
   geçirilmiş ya da yarım gönderilmiş tek bir mirror böyle yakalanır ve ikisi
   uyuşmazsa güncelleme reddedilir.
 * **Ayarlı değilken:** dosya yalnızca GitHub'a karşı doğrulanır. Bu açıkça
-  söylenir — menüde bunu belirten bir "Config Warnings" girdisi çıkar — güvence
-  sessizce düşürülmez.
+  söylenir — motor her denetimde bunu yazar — güvence sessizce düşürülmez.
+
+Kendini yalnızca terminalden kurulan motor günceller — betik ve `lib/` ikisi de
+`~/Library/Application Support/MacSoftwareUpdater/` altındayken. Uygulamanın
+içindeki motor kod imzalı bir pakette durur: içine yazmak imzayı bozar, bu
+yüzden `check_updates`, `run plugin` ve `change_branch` ona dokunmaz; o
+uygulamayla birlikte güncellenir.
 
 İndirmeler HTTPS üzerinden ve TLS 1.2 zorunlu tutularak yapılır. Kurulu
 betikleri kendiniz değiştirirseniz checksum karşılaştırması bunu yakalar ve bir
@@ -610,13 +545,6 @@ araç seti güncellemesi uyarısı görürsünüz.
 
 Varsayılan olarak kapalıdır (`AUTO_INSTALL_APPS=0`); **Ayarlar → Güncellemeler**
 (Settings → Updates) altından açın.
-
-<!-- Image 5.2 : img/app_settings_updates.png (henüz çekilmedi; dosya eklenince bu yorum sarmalayıcısını silin)
-<p align="center">
-  <img src="img/app_settings_updates.png" alt="Ayarlar › Güncellemeler" width="100%">
-  <br><sub>App Store, temizlik ve otomatik kurulum anahtarları, otomatik kurulumun yanındaki uyarı ve güncelleme kanalı seçicisi.</sub>
-</p>
--->
 
 Açıkken bir uygulama paketini değiştirmek
 [lib/app_install.sh](lib/app_install.sh) üzerinden geçer ve diske bir şey

@@ -35,22 +35,28 @@ jobs:
         # SHA256SUMS would silently freeze every installation.
         run: ./tools/generate_checksums.sh --check
 
-      - name: Plugin renders without touching the network
-        # A menu render must never shell out to brew/mas/curl: it reads the
-        # cache only. Running it against an empty HOME proves it still produces
-        # a menu (and does not hang) when no cache exists yet. MSU_LIB_DIR
-        # points the engine at this checkout's lib/ directly, the same way
-        # the bats suite does - no install step needed.
+      - name: Engine starts against an empty HOME
+        # The SwiftBar menu render this step used to check is gone, and with
+        # it the no-argument default: the engine now prints its usage banner
+        # and exits 2. Running that against an empty HOME still proves what
+        # the old step was for - every lib/*.sh sources cleanly, the engine
+        # creates its own state folder, and it neither hangs nor needs the
+        # network to get that far. MSU_LIB_DIR points the engine at this
+        # checkout's lib/ directly, the same way the bats suite does.
         run: |
-          set -e
           export HOME="$RUNNER_TEMP/fakehome"
           export MSU_LIB_DIR="$PWD/lib"
           mkdir -p "$HOME"
           # brew exists on the runner, so the pre-flight check passes
-          output=$(./update_system.1h.sh)
+          status=0
+          output=$(./update_system.1h.sh 2>&1 < /dev/null) || status=$?
           echo "$output" | head -20
-          echo "$output" | grep -q "Refresh now" \
-            || { echo "::error::render did not produce a full menu"; exit 1; }
+          [ "$status" -eq 2 ] \
+            || { echo "::error::expected the usage banner (exit 2), got exit $status"; exit 1; }
+          echo "$output" | grep -q "Usage:" \
+            || { echo "::error::engine did not print its usage banner"; exit 1; }
+          [ -d "$HOME/Library/Application Support/MacSoftwareUpdater/cache" ] \
+            || { echo "::error::engine did not create its state folder"; exit 1; }
 
       - name: Install bats-core
         run: brew install bats-core

@@ -71,14 +71,16 @@ extension GuideContent {
                 blocks: [
                     .paragraph(Localized(
                         """
-                        When a new version of the toolkit is available it tells you in the menu. Before installing, the \
-                        download is compared against the checksum published on GitHub. If the file is damaged or the two \
-                        disagree, the update does not happen and your working version stays as it is.
+                        The toolkit inside this app is updated with the app and never replaces itself. A copy installed \
+                        from a terminal with setup_mac.sh does: when a new version is available it says so, and before \
+                        installing, the download is compared against the checksum published on GitHub. If the file is \
+                        damaged or the two disagree, the update does not happen and your working version stays as it is.
                         """,
                         """
-                        Aracın yeni sürümü çıktığında menüde bildirir. Kurmadan önce indirilen dosya, GitHub'da yayınlanmış \
-                        kontrol toplamıyla karşılaştırılır. Dosya bozuksa veya ikisi uyuşmazsa güncelleme yapılmaz, çalışan \
-                        sürümünüz olduğu gibi kalır.
+                        Bu uygulamanın içindeki araç uygulamayla birlikte güncellenir, kendini asla değiştirmez. \
+                        setup_mac.sh ile terminalden kurulan kopya ise kendini günceller: yeni sürüm çıktığında bildirir ve \
+                        kurmadan önce indirilen dosya, GitHub'da yayınlanmış kontrol toplamıyla karşılaştırılır. Dosya \
+                        bozuksa veya ikisi uyuşmazsa güncelleme yapılmaz, çalışan sürümünüz olduğu gibi kalır.
                         """
                     )),
                     .paragraph(Localized(

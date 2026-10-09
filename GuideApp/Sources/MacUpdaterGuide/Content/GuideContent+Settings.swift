@@ -95,8 +95,8 @@ extension GuideContent {
                             "\"Kendi kendini güncelleyen uygulamaları kur\" — yukarıda anlatılan isteğe bağlı kurulum. Varsayılan kapalı."
                         ),
                         Localized(
-                            "Update channel for the toolkit itself - stable or beta.",
-                            "Aracın kendi güncelleme kanalı — kararlı sürüm veya beta."
+                            "Update channel for a toolkit installed from a terminal - stable or beta. The one inside the app comes with the app.",
+                            "Terminalden kurulan aracın güncelleme kanalı — kararlı sürüm veya beta. Uygulamanın içindeki araç uygulamayla gelir."
                         )
                     ])
                 ]
@@ -169,12 +169,14 @@ extension GuideContent {
                         ),
                         Localized(
                             """
-                            It is also where the toolkit updates itself - \"Check for Updates\", then \"Install \
-                            Update\" - and where the \"Project page\" and \"Mirror\" links live.
+                            It is also where a toolkit installed from a terminal updates itself - \"Check for Updates\", \
+                            then \"Install Update\" - and where the \"Project page\" and \"Mirror\" links live. The \
+                            toolkit inside the app is updated with the app instead.
                             """,
                             """
-                            Aracın kendini güncellediği yer de burasıdır — \"Güncelleme Denetle\", ardından \
-                            \"Güncellemeyi Kur\" — ve \"Proje sayfası\" ile \"Yansı\" bağlantıları da buradadır.
+                            Terminalden kurulan aracın kendini güncellediği yer de burasıdır — \"Güncelleme Denetle\", \
+                            ardından \"Güncellemeyi Kur\" — ve \"Proje sayfası\" ile \"Yansı\" bağlantıları da \
+                            buradadır. Uygulamanın içindeki araç ise uygulamayla birlikte güncellenir.
                             """
                         )
                     ])

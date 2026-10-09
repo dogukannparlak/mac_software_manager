@@ -33,7 +33,7 @@ this working tree", which no published checksum can describe.
 ## Running the tests
 
 ```bash
-bats tests/                          # 271 shell tests (brew install bats-core)
+bats tests/                          # 299 shell tests (brew install bats-core)
 swift test --package-path GuideApp   # 282 XCTest cases
 ```
 
@@ -41,12 +41,14 @@ The bats suite does not need an installed toolkit. It points `MSU_LIB_DIR` at
 the checkout's `lib/` so the engine loads the modules you are editing:
 
 ```bash
-MSU_LIB_DIR="$PWD/lib" ./update_system.1h.sh          # render the menu from this checkout
-MSU_LIB_DIR="$PWD/lib" ./update_system.1h.sh run all  # or drive a real run
+MSU_LIB_DIR="$PWD/lib" ./update_system.1h.sh refresh_cache  # rebuild the cache from this checkout
+MSU_LIB_DIR="$PWD/lib" ./update_system.1h.sh run all        # or drive a real run
 ```
 
-CI does the same thing when it checks that a menu render works against an empty
-`HOME` without touching the network.
+Without `MSU_LIB_DIR` the engine looks for `lib/` next to itself first, so from
+a checkout the variable is optional. CI sets it when it checks that the engine
+starts against an empty `HOME` — sources every module, creates its state folder
+and prints its usage banner (exit 2) — without touching the network.
 
 ## Shell style
 
@@ -118,7 +120,7 @@ manual dispatch. Four jobs:
 
 | Job | Runner | Blocking? | What it does |
 | --- | --- | --- | --- |
-| **Syntax, versions and checksums** | macOS | **Yes** | `zsh -n` over every script; `sync_version.sh --check`; `generate_checksums.sh --check`; a menu render against an empty `HOME` with `MSU_LIB_DIR` set, asserting the output contains `Refresh now` (proves the render neither hits the network nor hangs); then `bats tests/`. |
+| **Syntax, versions and checksums** | macOS | **Yes** | `zsh -n` over every script; `sync_version.sh --check`; `generate_checksums.sh --check`; the engine started with no subcommand against an empty `HOME` with `MSU_LIB_DIR` set, asserting the usage banner, exit status 2 and a created state folder (proves every module sources and the start neither hits the network nor hangs); then `bats tests/`. |
 | **Swift unit tests (GuideApp)** | macOS | **Yes** | `swift test --package-path GuideApp`. |
 | **shellcheck (advisory)** | Ubuntu | **No** — `continue-on-error: true` | Runs shellcheck as bash. There is no zsh mode, so it flags genuine quoting problems *and* zsh-only syntax. Read it, do not obey it blindly. |
 | **SwiftLint** | macOS | **Only on errors** | `.swiftlint.yml` draws the line: a line over 200 characters or a type body over 400 lines is an error and fails the job. The warning tier (150 / 300, `file_length`, `identifier_name` and the rest) is reported and passes — there is no `--strict`. The error count is at zero; keep it there. |

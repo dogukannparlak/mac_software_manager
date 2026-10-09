@@ -19,13 +19,6 @@ Homebrew could be managing it instead of you. It updates them from one place,
 in the background, and can hand hand-installed apps over to Homebrew without
 losing their settings.
 
-<!-- Image 1 : img/app_menubar_panel.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_menubar_panel.png" alt="The app's menu bar panel" width="100%">
-  <br><sub>The menu bar item belongs to MacUpdaterGuide itself.</sub>
-</p>
--->
-
 ## Requirements
 
 The two halves have different requirements, and you can use either one without
@@ -72,8 +65,10 @@ The cache format is the contract between them, documented in
 * **Move to Homebrew.** Finds hand-installed apps a Homebrew cask could keep
   updated, says how sure each pairing is and exactly what moving would do, then
   hands them over in place.
-* **Verified self-update.** The engine only replaces itself after the download
-  matches the published `SHA256SUMS` — see [Security](#security).
+* **Verified self-update.** An engine installed from a terminal only replaces
+  itself after the download matches the published `SHA256SUMS` — see
+  [Security](#security). The engine inside the app never replaces itself; it is
+  updated with the app.
 * **Verified app replacement, opt-in.** For apps with a direct DMG/ZIP
   download, the engine can install the update itself, but only after Team ID,
   code signature, Gatekeeper and (where published) Sparkle's EdDSA signature
@@ -99,19 +94,11 @@ The cache format is the contract between them, documented in
 The icon is drawn by the app (`MenuBarLabel` in `MacUpdaterGuideApp.swift`) and
 carries three states:
 
-<!-- Image 1.1 : img/menubar_icon_states.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/menubar_icon_states.png" alt="The three menu bar icon states" width="100%">
-  <br><sub>Left to right: up to date, updates pending, refreshing.</sub>
-</p>
--->
-
 | State | SF Symbol | Meaning |
 | :--- | :--- | :--- |
 | **Up to date** | `checkmark.circle` | Nothing pending. |
 | **Updates pending** | `arrow.triangle.2.circlepath.circle` + count | The number of waiting updates is drawn next to the icon. |
 | **Refreshing** | `arrow.triangle.2.circlepath` | A cache refresh is in flight. |
-
 
 ## Installation
 
@@ -159,7 +146,11 @@ never disagree about what the other writes.
 That works because the engine never writes beside itself. Everything it stores
 goes to `~/Library/Application Support/MacSoftwareUpdater/`, which it creates on
 its own on every run, and it runs on defaults when there is no `settings.conf`.
-The app points `MSU_LIB_DIR` at its own resources and calls it.
+The app points `MSU_LIB_DIR` at its own resources and calls it. A run opened
+in a terminal window carries the same variable on its command line, and an
+engine started without it looks for its library next to itself before falling
+back to the support folder — so the script and its `lib/` always come from the
+same release.
 
 The only things the app cannot bring with it are Homebrew and `mas`. If either
 is missing, a setup sheet offers them — Homebrew by opening its official
@@ -202,7 +193,6 @@ blank to skip: downloads still work and are verified against GitHub alone, and
 the menu says so rather than silently downgrading the guarantee. See
 [Security](#security).
 
-
 ### The migration step
 
 `setup_mac.sh` scans `/Applications` for software no package manager owns, and
@@ -212,13 +202,6 @@ For every unmanaged app it asks what to do:
 * **[A]pp Store** — replace the manual copy with the App Store version.
 * **[B]rew Cask** — replace it with a Homebrew cask, preserving settings.
 * **[L]eave** — keep it exactly as it is.
-
-<!-- Image 6 : img/migration_utility.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/migration_utility.png" alt="The migration wizard in a terminal" width="100%">
-  <br><sub><code>setup_mac.sh</code> asking what to do with an unmanaged app. The file in the repository is from v1.2.4 and still carries the old project name, so it needs re-shooting before this is uncommented.</sub>
-</p>
--->
 
 Before any migration it makes a local backup (`.app.bak`) and restores it
 automatically if the new installation fails, removing the backup only after a
@@ -250,48 +233,20 @@ Everything waiting, grouped by source, with real app icons. Update one item or
 all of them, or hide one you want to stay behind on. **Refresh** re-reads the
 cache; **Check Homebrew** pulls the latest Homebrew and tap metadata on demand.
 
-<!-- Image 2 : img/app_updates.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_updates.png" alt="The Updates page" width="100%">
-  <br><sub>Pending updates grouped by source, with Refresh and Check Homebrew in the toolbar.</sub>
-</p>
--->
-
 Updates run in the background by default, with a progress banner naming the
 phase and the package currently being installed, an x/y counter, and a Cancel
 button. Cancelling a bulk run asks for confirmation first
 (`ToolkitController.cancelUpdate()`). A terminal window is opt-in, under Settings → General.
-
-<!-- Image 2.1 : img/app_updates_progress.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_updates_progress.png" alt="A run in progress" width="100%">
-  <br><sub>The progress banner during a run: phase, current package, counter and Cancel.</sub>
-</p>
--->
 
 #### Installed Apps
 
 Every application with its icon, version and origin — Homebrew, App Store,
 Setapp, Apple, or installed by hand. Filter by source and search.
 
-<!-- Image 3 : img/app_installed.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_installed.png" alt="The Installed Apps page" width="100%">
-  <br><sub>Each row carries an icon, a version and the badge saying where the app came from.</sub>
-</p>
--->
-
 Each row's **"…" menu** is everything for that one app: open its website or
 GitHub page, correct those links, change how it is tracked for updates, remap
 it to a Homebrew cask, or ignore it. Every correction is local and applied
 immediately.
-
-<!-- Image 3.1 : img/app_installed_row_menu.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_installed_row_menu.png" alt="A row's actions menu" width="100%">
-  <br><sub>Edit Links…, Edit Tracking Method…, Edit Homebrew Mapping… and Ignore, all on one app.</sub>
-</p>
--->
 
 #### CLI Tools
 
@@ -312,25 +267,11 @@ most machines, so it is broken down further into its own sub-headings
 (runtime support, networking & security, databases, graphics & media, text &
 data, compression, AWS SDK, windowing, core).
 
-<!-- Image 3.2 : img/app_cli_tools.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_cli_tools.png" alt="The CLI Tools page" width="100%">
-  <br><sub>The category filter, with the leaf categories separated from the Libraries &amp; Dependencies bucket.</sub>
-</p>
--->
-
 #### History
 
 What was updated over the last 7 or 30 days, grouped by day. Failures are
 marked, not hidden — after a run each package is re-checked and the real
 outcome is what gets logged.
-
-<!-- Image 4 : img/app_history.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_history.png" alt="The History page" width="100%">
-  <br><sub>The 7/30 day selector and day-grouped entries, including a failed one.</sub>
-</p>
--->
 
 #### Guide
 
@@ -347,13 +288,6 @@ own config files, so the app and the terminal never disagree.
 from the engine's exclusive lock: the app caps how many run at once itself
 (`AppPreferences.maxConcurrentUpdates`), and taking the bulk lock as well would
 just serialize them back to one at a time.
-
-<!-- Image 5 : img/app_settings_general.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_settings_general.png" alt="Settings › General" width="100%">
-  <br><sub>Language, check interval, run-in-terminal switch and terminal picker, concurrent update count, Dock icon, open at login.</sub>
-</p>
--->
 
 #### Settings → Move to Homebrew
 
@@ -380,13 +314,6 @@ The results land in three groups:
 * **Cannot be moved** — listed with the reason rather than filtered out,
   because "why is my app not in the list" is the question a filtered list
   creates.
-
-<!-- Image 5.1 : img/app_settings_migrate.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_settings_migrate.png" alt="Move to Homebrew after a scan" width="100%">
-  <br><sub>All three groups at once: Ready to move, Needs your confirmation, and Cannot be moved with its reason.</sub>
-</p>
--->
 
 **Why a failed move costs nothing.** The default is
 `brew install --cask --adopt`, which takes over the bundle that is already
@@ -447,14 +374,14 @@ the subcommands below; anything else prints the usage banner and exits **2**.
 
 | Invocation | What it does |
 | --- | --- |
-| `run all` | `plugin` then `system`: self-update check, then the full update. Takes the exclusive update lock. |
+| `run all` | `plugin` then `system`: self-update (terminal installs only), then the full update. Takes the exclusive update lock. |
 | `run system` | Homebrew and (if enabled) App Store upgrades, plus optional cleanup. Exclusive lock. |
-| `run plugin` | Self-update check for the engine and its `lib/` set. Exclusive lock. |
+| `run plugin` | Installs a pending engine update — the script and its `lib/` set, all or nothing. Terminal installs only; the engine inside the app says so and exits. Exclusive lock. |
 | `run single <args>` | Update one item, headless. No exclusive lock — the app enforces its own concurrency limit. |
 | `run install <args>` | Install one app's update from its DMG/ZIP. No exclusive lock. |
 | `run migrate <app> <token> [adopt\|replace\|dry]` | Hand one app over to Homebrew. No exclusive lock. |
 | `refresh_cache [auto\|force]` | `auto` (the default) refreshes only the stale tiers; `force` (or `all`) refreshes everything. Non-blocking — exits if a refresh is already running. |
-| `check_updates` | Manual self-update check. |
+| `check_updates` | Manual self-update check (terminal installs only). |
 | `brew_update` | `brew update` only: pulls the latest Homebrew and tap metadata without upgrading anything. Takes the same lock a run does. |
 | `scan_migration` | Scans for apps Homebrew could manage. Never part of a background refresh. Takes the cache lock. |
 | `migrate_app <app> <token> [adopt\|replace\|dry]` | Headless migration of one app. Never runs `sudo`. |
@@ -474,7 +401,10 @@ the subcommands below; anything else prints the usage banner and exits **2**.
 ### Update channel
 
 `change_branch` offers **Stable (Main)** and **Beta (Develop)**, writing
-`main` or `develop` into `UPDATE_BRANCH`. The setting exists and works, but
+`main` or `develop` into `UPDATE_BRANCH` and installing that branch's whole
+engine (the script and every `lib/*.sh`, verified as one set). It applies only
+to an engine installed from a terminal: the engine inside the app has no
+channel of its own and comes with the app. The setting exists and works, but
 **the `develop` branch is not currently published** — `origin` has `main` and
 `feature/debug-page` only — so selecting Beta today points self-update at a
 branch that is not there. Stay on Stable unless a `develop` branch is
@@ -504,7 +434,7 @@ Exactly what `setup_mac.sh` writes:
 
 | Key | Meaning |
 | --- | --- |
-| `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` or `Ghostty`. |
+| `PREFERRED_TERMINAL` | `Terminal`, `iTerm2`, `Warp`, `Alacritty` or `Ghostty`. Warp is driven through a Launch Configuration, so choosing it writes `~/.warp/launch_configurations/mac-software-manager-run.yaml` — the one file this toolkit writes outside its own folder. |
 | `MAS_ENABLED` | App Store updates. `1` = enabled, `0` = disabled. |
 | `UPDATE_BRANCH` | Update channel: `main` (stable) or `develop` (beta). |
 | `AUTOSTART` | Legacy autostart flag. Nothing reads it — starting at login is the app's own setting, recorded by macOS. |
@@ -582,8 +512,14 @@ configured — the second source's `SHA256SUMS` has to agree.
   single compromised or half-pushed mirror is caught, and the update is
   refused if they disagree.
 * **Without it:** the file is verified against GitHub only. That is stated out
-  loud — the menu shows a "Config Warnings" entry saying so — rather than
-  quietly downgrading the guarantee.
+  loud — the engine prints it on every check — rather than quietly downgrading
+  the guarantee.
+
+Only an engine installed from a terminal — the script and `lib/` both under
+`~/Library/Application Support/MacSoftwareUpdater/` — updates itself. The
+engine inside the app lives in a code-signed bundle: writing into it would
+break the signature, so `check_updates`, `run plugin` and `change_branch` leave
+it alone and it is updated with the app.
 
 Downloads use HTTPS with TLS 1.2 enforced. Modifying the installed scripts
 yourself will trip the checksum comparison and show a toolkit-update prompt.
@@ -592,13 +528,6 @@ yourself will trip the checksum comparison and show a toolkit-update prompt.
 
 Off by default (`AUTO_INSTALL_APPS=0`); turn it on under **Settings →
 Updates**.
-
-<!-- Image 5.2 : img/app_settings_updates.png (not yet captured; delete this comment wrapper once the file exists)
-<p align="center">
-  <img src="img/app_settings_updates.png" alt="Settings › Updates" width="100%">
-  <br><sub>The App Store, cleanup and automatic-installation switches, the warning next to automatic installation, and the update channel picker.</sub>
-</p>
--->
 
 When enabled, replacing an app bundle passes through
 [lib/app_install.sh](lib/app_install.sh), where every check must pass before

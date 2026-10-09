@@ -122,6 +122,14 @@ The app stopped asking to install itself, and SwiftBar is gone.
 - Warp now actually runs the update, through a Launch Configuration — the
   old `--args` went to Warp, not to the script. Alacritty gets `open -n`, so
   the command is not dropped when it is already running.
+- CI's "Plugin renders without touching the network" step still expected the
+  SwiftBar menu (`Refresh now`), which went with `lib/menu.sh`; with no
+  subcommand the engine now prints its usage banner and exits 2. The step
+  now checks exactly that, plus the state folder it creates.
+- README, README.tr, SECURITY, CONTRIBUTING and the in-app guide describe
+  which engine updates itself (a terminal install) and which is updated with
+  the app. The old SwiftBar screenshots in `img/` and the never-captured
+  image placeholders in both READMEs are removed.
 - Ignoring or restoring a formula reports a failing `brew pin`/`unpin`
   instead of exiting silently; app installs write the eight-field history
   line; the update check rejects a download with no version header.
