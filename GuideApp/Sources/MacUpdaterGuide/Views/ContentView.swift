@@ -143,7 +143,11 @@ struct ContentView: View {
                 .tag(SidebarItem.updates)
 
                 Label {
-                    Text(UIStrings.navInstalled[loc.language])
+                    HStack {
+                        Text(UIStrings.navInstalled[loc.language])
+                        Spacer(minLength: 4)
+                        sidebarCount(inventory.apps.count)
+                    }
                 } icon: {
                     Image(systemName: "square.grid.2x2")
                         .symbolRenderingMode(.hierarchical)
@@ -155,11 +159,9 @@ struct ContentView: View {
                     HStack {
                         Text(UIStrings.navCLITools[loc.language])
                         Spacer(minLength: 4)
-                        if !inventory.tools.isEmpty {
-                            Text("\(inventory.tools.count)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                        }
+                        // Homebrew formulae plus everything beyond Homebrew -
+                        // the same total the page itself lists.
+                        sidebarCount(inventory.tools.count + inventory.otherPackages.count)
                     }
                 } icon: {
                     Image(systemName: "terminal")
@@ -223,6 +225,21 @@ struct ContentView: View {
             }
         }
         .listStyle(.sidebar)
+        // The counts above come from the inventory, which only the Installed
+        // Apps and CLI Tools pages used to reload - so after a refresh they
+        // stayed at whatever they were until one of those pages was opened.
+        .task(id: toolkit.snapshot.lastCheck) { await inventory.load() }
+    }
+
+    /// A plain grey count next to a sidebar entry; nothing while it is zero,
+    /// which is also what an inventory that has not loaded yet looks like.
+    @ViewBuilder
+    private func sidebarCount(_ count: Int) -> some View {
+        if count > 0 {
+            Text("\(count)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var appHeader: some View {
