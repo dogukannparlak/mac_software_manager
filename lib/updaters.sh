@@ -443,6 +443,12 @@ collect_pkg_receipts() {
 # Anything another collector already accounts for (Homebrew, pipx, uv, npm,
 # cargo) is skipped; a shim into an application bundle is reported as that
 # app's ("app"), since it updates with the app.
+#
+# Homebrew's own bin folder is scanned too, for what other installers drop
+# there because it is on PATH (Antigravity's 'agy' is a plain 178 MB binary
+# in /opt/homebrew/bin). Homebrew itself only ever puts symlinks into that
+# folder, so a symlink resolving inside the prefix is Homebrew's and is
+# skipped, while a regular file there is somebody else's.
 collect_local_tools() {
     local brew_prefix="" dir f target name ver app
     typeset -A seen
@@ -453,6 +459,7 @@ collect_local_tools() {
 
     dirs=("$HOME/.local/bin" "$HOME/bin" "$HOME/.bun/bin" "$HOME/.deno/bin")
     [[ "$brew_prefix" != "/usr/local" ]] && dirs+=("/usr/local/bin")
+    [[ -n "$brew_prefix" ]] && dirs+=("$brew_prefix/bin")
 
     for dir in "${dirs[@]}"; do
         [[ -d "$dir" ]] || continue
@@ -464,7 +471,7 @@ collect_local_tools() {
             case "$target" in
                 */Cellar/*|*/Caskroom/*|*/pipx/*|*/uv/tools/*|*/node_modules/*|*/.cargo/*) continue ;;
             esac
-            [[ -n "$brew_prefix" && "$target" == "$brew_prefix"/* ]] && continue
+            [[ -n "$brew_prefix" && -L "$f" && "$target" == "$brew_prefix"/* ]] && continue
             seen[$name]=1
 
             if [[ "$target" == *.app/Contents/* ]]; then

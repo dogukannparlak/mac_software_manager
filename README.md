@@ -259,7 +259,9 @@ immediately.
 engine finds everywhere else (`collect_other_packages`, `lib/updaters.sh`):
 global npm packages, pipx and uv tools, `cargo install` crates, Go binaries,
 standalone executables in `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin`
-and (on Apple Silicon) `/usr/local/bin`, and non-Apple installer package
+and (on Apple Silicon) `/usr/local/bin`, files another installer dropped into
+Homebrew's own `bin` (Homebrew only ever links there, so its own entries are
+skipped), and non-Apple installer package
 receipts from `pkgutil`. Nothing found is ever executed — only the package
 managers' own listing commands run. npm reports pending updates; for npm,
 pipx, uv, Cargo and Go a row's menu offers **Update in Terminal**, which runs

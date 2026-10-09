@@ -120,3 +120,20 @@ exit 1'
     [ "$status" -eq 0 ]
     assert_contains "npm install -g typescript@latest" "$(cat "$BATS_TEST_TMPDIR/npm_calls")"
 }
+
+@test "a regular file in Homebrew's bin folder is listed; Homebrew's own links are not" {
+    local prefix="$TEST_HOME/brewprefix"
+    mkdir -p "$prefix/bin" "$prefix/Cellar/jq/1.7/bin" "$prefix/Homebrew/bin"
+    printf '#!/bin/sh\n' > "$prefix/Homebrew/bin/brew"
+    printf '#!/bin/sh\n' > "$prefix/Cellar/jq/1.7/bin/jq"
+    printf '#!/bin/sh\n' > "$prefix/bin/agy"
+    chmod +x "$prefix/Homebrew/bin/brew" "$prefix/Cellar/jq/1.7/bin/jq" "$prefix/bin/agy"
+    ln -s ../Homebrew/bin/brew "$prefix/bin/brew"
+    ln -s ../Cellar/jq/1.7/bin/jq "$prefix/bin/jq"
+
+    run run_zsh_snippet "path=('$prefix/bin' \$path); collect_local_tools"
+    [ "$status" -eq 0 ]
+    assert_contains "local|agy||$prefix/bin/agy" "$output"
+    refute_contains "|jq|" "$output"
+    refute_contains "|brew|" "$output"
+}

@@ -266,7 +266,9 @@ eşlemek ya da yoksaymak. Her düzeltme yereldir ve anında uygulanır.
 yerde bulduklarını listeler (`collect_other_packages`, `lib/updaters.sh`): global
 npm paketleri, pipx ve uv araçları, `cargo install` ile kurulan crate'ler, Go
 ikilileri, `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin` ve (Apple
-Silicon'da) `/usr/local/bin` içindeki bağımsız çalıştırılabilir dosyalar ile
+Silicon'da) `/usr/local/bin` içindeki bağımsız çalıştırılabilir dosyalar,
+başka bir kurulum programının Homebrew'un kendi `bin` klasörüne bıraktığı
+dosyalar (Homebrew oraya yalnızca bağlantı koyar, onun kendi girdileri atlanır) ile
 Apple'a ait olmayan `pkgutil` kurulum paketi kayıtları. Bulunan hiçbir şey
 çalıştırılmaz — yalnızca paket yöneticilerinin kendi listeleme komutları
 çalışır. npm bekleyen güncellemeleri bildirir; npm, pipx, uv, Cargo ve Go için
