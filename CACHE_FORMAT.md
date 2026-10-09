@@ -443,9 +443,13 @@ A reader skips sources it does not know, so a newer engine can add one.
 ```
 source|name|current|latest
 ```
-Only `npm` reports this today (`npm outdated -g`). Example:
+`npm` answers in one call (`npm outdated -g`); `pipx`, `uv`, `cargo` and the
+self-updating standalone tools (`claude`, `uv`, `bun`) are looked up one by
+one in PyPI, crates.io or the npm registry, from the last `other_packages`
+scan. Only a strictly newer version is written. Example:
 ```
 npm|typescript|5.4.5|5.6.3
+local|claude|2.1.290|2.1.295
 ```
 - Writer: `collect_other_outdated()`, `lib/updaters.sh`.
 - Swift reader: `OtherPackage.parse(packages:outdated:)`, `OtherPackage.swift`.

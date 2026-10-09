@@ -33,8 +33,8 @@ this working tree", which no published checksum can describe.
 ## Running the tests
 
 ```bash
-bats tests/                          # 309 shell tests (brew install bats-core)
-swift test --package-path GuideApp   # 308 XCTest cases
+bats tests/                          # 316 shell tests (brew install bats-core)
+swift test --package-path GuideApp   # 311 XCTest cases
 ```
 
 The bats suite does not need an installed toolkit. It points `MSU_LIB_DIR` at

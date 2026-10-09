@@ -675,6 +675,9 @@ collect_cache_data() {
         cache_refresh_entry "brew_casks_desc"    brew_casks_desc_collect
         cache_refresh_entry "brew_status"        collect_brew_status
         cache_refresh_entry "other_packages"     collect_other_packages
+        # Its registry lookups read the list just written, so a fresh scan
+        # is checked straight away rather than at the next update-tier pass.
+        cache_refresh_entry "other_outdated"     collect_other_outdated
 
         if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
             # Same hang guard as the 'mas outdated' query above: metadata

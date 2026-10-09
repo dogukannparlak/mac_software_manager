@@ -86,6 +86,17 @@ struct OtherPackage: Identifiable, Hashable, Sendable {
 
     var isOutdated: Bool { latestVersion != nil }
 
+    /// Standalone tools that update themselves (`claude update`, `uv self
+    /// update`, …). Kept in step with `local_tool_is_updatable` in
+    /// lib/updaters.sh, which is what actually decides.
+    static let selfUpdatingTools: Set<String> = ["claude", "uv", "bun", "deno", "rustup"]
+
+    /// Whether the engine has an update command for this package: every
+    /// package-manager install, plus the self-updating standalone tools.
+    var isUpdatable: Bool {
+        source.isUpdatable || (source == .local && Self.selfUpdatingTools.contains(name))
+    }
+
     /// Parses the two cache entries. Lines from a source this build does not
     /// know, and lines with fewer than three fields, are skipped rather than
     /// guessed at: a newer engine may add sources before this app knows how

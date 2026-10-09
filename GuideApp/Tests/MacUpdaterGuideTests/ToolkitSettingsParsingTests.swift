@@ -72,6 +72,20 @@ final class ToolkitSettingsParsingTests: XCTestCase {
         XCTAssertTrue(settings.autoInstallApps)
     }
 
+    func testOtherSourcesListIsParsedAndWrittenBackInOrder() {
+        let settings = ToolkitSettings()
+        settings.apply(key: "OTHER_SOURCES_LIST", value: "pkg,npm,unknown")
+        XCTAssertEqual(settings.otherSourceList, [.npm, .pkg])
+        XCTAssertEqual(ToolkitSettings.sourceListValue(settings.otherSourceList), "npm,pkg")
+    }
+
+    func testAnEmptyOtherSourcesListMeansAll() {
+        let settings = ToolkitSettings()
+        settings.otherSourceList = [.npm]
+        settings.apply(key: "OTHER_SOURCES_LIST", value: "")
+        XCTAssertEqual(settings.otherSourceList, Set(PackageSource.allCases))
+    }
+
     func testOtherSourcesFlagIsApplied() {
         let settings = ToolkitSettings()
         settings.otherSourcesEnabled = true

@@ -269,12 +269,21 @@ ikilileri, `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin` ve (Apple
 Silicon'da) `/usr/local/bin` içindeki bağımsız çalıştırılabilir dosyalar,
 başka bir kurulum programının Homebrew'un kendi `bin` klasörüne bıraktığı
 dosyalar (Homebrew oraya yalnızca bağlantı koyar, onun kendi girdileri atlanır) ile
-Apple'a ait olmayan `pkgutil` kurulum paketi kayıtları. Bulunan hiçbir şey
-çalıştırılmaz — yalnızca paket yöneticilerinin kendi listeleme komutları
-çalışır. npm bekleyen güncellemeleri bildirir; npm, pipx, uv, Cargo ve Go için
-satırın menüsünde **Terminalde Güncelle** bulunur ve o yöneticinin kendi
-güncelleme komutunu çalıştırır. Bölümün tamamı **Ayarlar → Güncellemeler →
-Homebrew dışını da tara** (`OTHER_SOURCES_ENABLED`) ile kapatılabilir.
+Apple'a ait olmayan `pkgutil` kurulum paketi kayıtları. Tarama bulduğu hiçbir
+şeyi çalıştırmaz — yalnızca paket yöneticilerinin kendi listeleme komutları
+çalışır.
+
+Bekleyen güncellemeler de denetlenir: npm tek bir `npm outdated -g` ile,
+pipx/uv/Cargo paketleri PyPI ve crates.io'ya karşı, kendini güncelleyen bağımsız
+araçlar (`claude`, `uv`, `bun`) kendi kayıt depolarına karşı. Bunlar kartlarının
+en üstüne **Güncelle** düğmesiyle çıkar. npm, pipx, uv, Cargo ve Go paketleri
+yöneticilerinin kendi komutuyla; `claude`, `uv`, `bun`, `deno` ve `rustup` kendi
+komutlarıyla (`claude update`, `uv self update`, …) güncellenir — her zaman bir
+terminalde ve yalnızca son taramanın listelediği bir paket için.
+
+**Ayarlar → Güncellemeler → Homebrew dışını da tara** (`OTHER_SOURCES_ENABLED`)
+bölümün tamamını kapatır; altındaki kaynak başına birer onay kutusu neyin
+listeleneceğini seçer (`OTHER_SOURCES_LIST`).
 
 Homebrew'da bir formula'nın kategorisi diye birinci sınıf bir kavram yok; bu
 yüzden bu sayfa Homebrew'un gerçekten sunduğu tek gerçek üstveriye yaslanır:
@@ -473,6 +482,7 @@ tutar.
 | `CLEANUP_ENABLED` | Her güncellemeden sonra `brew cleanup --prune=all` çalıştır. |
 | `AUTO_INSTALL_APPS` | Kendini güncelleyen uygulama paketlerini doğrudan değiştir. Varsayılan `0`. |
 | `OTHER_SOURCES_ENABLED` | npm, pipx, uv, Cargo, Go, bağımsız araçlar ve `.pkg` kayıtlarını da listele. Varsayılan `1`. |
+| `OTHER_SOURCES_LIST` | Bunlardan hangilerinin listeleneceği, virgülle: `npm,pipx,uv,cargo,go,local,app,pkg`. Boş = hepsi. |
 | `CODEBERG_USERNAME` | Yedek mirror için kullanıcı adı. Boş = yalnızca GitHub, çift kaynaklı doğrulama yok. |
 
 `setup_mac.sh`'ı yeniden çalıştırmak mevcut değerleri korur.

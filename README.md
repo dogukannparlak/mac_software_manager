@@ -262,11 +262,20 @@ standalone executables in `~/.local/bin`, `~/bin`, `~/.bun/bin`, `~/.deno/bin`
 and (on Apple Silicon) `/usr/local/bin`, files another installer dropped into
 Homebrew's own `bin` (Homebrew only ever links there, so its own entries are
 skipped), and non-Apple installer package
-receipts from `pkgutil`. Nothing found is ever executed — only the package
-managers' own listing commands run. npm reports pending updates; for npm,
-pipx, uv, Cargo and Go a row's menu offers **Update in Terminal**, which runs
-that manager's own update command. Turn the whole section off under
-**Settings → Updates → Also look beyond Homebrew** (`OTHER_SOURCES_ENABLED`).
+receipts from `pkgutil`. Nothing found is ever executed by the scan — only
+the package managers' own listing commands run.
+
+Pending updates are checked too: npm in one `npm outdated -g`, pipx/uv/Cargo
+packages against PyPI and crates.io, and the standalone tools that update
+themselves (`claude`, `uv`, `bun`) against their registry. They sort to the top
+of their card with an **Update** button. npm, pipx, uv, Cargo and Go packages
+update through their manager's own command; `claude`, `uv`, `bun`, `deno` and
+`rustup` through their own (`claude update`, `uv self update`, …) — always in
+a terminal, and only for a package the last scan listed.
+
+**Settings → Updates → Also look beyond Homebrew** (`OTHER_SOURCES_ENABLED`)
+turns the whole section off; under it, one checkbox per source picks what is
+listed (`OTHER_SOURCES_LIST`).
 
 Homebrew has no first-class notion of a category for a formula, so this page
 leans on the one piece of real metadata Homebrew does expose: `brew leaves` —
@@ -460,6 +469,7 @@ Exactly what `setup_mac.sh` writes:
 | `CLEANUP_ENABLED` | Run `brew cleanup --prune=all` after each update. |
 | `AUTO_INSTALL_APPS` | Replace self-updating app bundles directly. `0` by default. |
 | `OTHER_SOURCES_ENABLED` | Also list npm, pipx, uv, Cargo, Go, standalone tools and `.pkg` receipts. `1` by default. |
+| `OTHER_SOURCES_LIST` | Which of those to list, comma separated: `npm,pipx,uv,cargo,go,local,app,pkg`. Empty means all. |
 | `CODEBERG_USERNAME` | Username for the backup mirror. Blank = GitHub only, no dual-source verification. |
 
 Re-running `setup_mac.sh` preserves the existing values.

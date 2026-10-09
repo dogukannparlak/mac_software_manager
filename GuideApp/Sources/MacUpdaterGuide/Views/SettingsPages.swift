@@ -242,6 +242,10 @@ struct UpdateSettingsPage: View {
                         // page follows the switch now, not at the next refresh.
                         onChange: { toolkit.refresh(force: true) }
                     )
+
+                    if settings.otherSourcesEnabled {
+                        otherSourcePicker
+                    }
                 }
             }
 
@@ -268,6 +272,35 @@ struct UpdateSettingsPage: View {
             }
         }
         .task { settings.load() }
+    }
+
+    /// One checkbox per source beyond Homebrew. The last one left cannot be
+    /// switched off: an empty list means "all" to the engine, so that is
+    /// what the master switch above is for.
+    private var otherSourcePicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(UIStrings.otherSourcesPick[loc.language])
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(PackageSource.allCases.sorted { $0.sortRank < $1.sortRank }) { source in
+                Toggle(source.label[loc.language], isOn: Binding(
+                    get: { settings.otherSourceList.contains(source) },
+                    set: { enabled in
+                        if enabled {
+                            settings.otherSourceList.insert(source)
+                        } else {
+                            settings.otherSourceList.remove(source)
+                        }
+                        settings.save()
+                        toolkit.refresh(force: true)
+                    }
+                ))
+                .toggleStyle(.checkbox)
+                .disabled(settings.otherSourceList == [source])
+            }
+        }
+        .padding(.leading, 22)
     }
 
     private func settingToggle(

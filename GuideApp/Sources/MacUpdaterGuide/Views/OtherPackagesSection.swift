@@ -12,11 +12,18 @@ struct OtherPackagesSection: View {
     private var groups: [(source: PackageSource, packages: [OtherPackage])] {
         Dictionary(grouping: packages, by: \.source)
             .map { source, members in
-                (source: source,
-                 packages: members.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending })
+                (source: source, packages: members.sorted(by: Self.outdatedFirst))
             }
             .sorted { $0.source.sortRank < $1.source.sortRank }
     }
+
+    /// What can be updated now goes to the top of its card, then by name.
+    private static func outdatedFirst(_ lhs: OtherPackage, _ rhs: OtherPackage) -> Bool {
+        if lhs.isOutdated != rhs.isOutdated { return lhs.isOutdated }
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private var outdatedCount: Int { packages.filter(\.isOutdated).count }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -28,6 +35,14 @@ struct OtherPackagesSection: View {
                 Text("\(packages.count)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if outdatedCount > 0 {
+                    Text(String(format: UIStrings.otherSourcesUpdatesFormat[loc.language], outdatedCount))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.orange))
+                }
             }
             .padding(.top, 4)
 
@@ -138,7 +153,7 @@ private struct OtherPackageRow: View {
         }
         .padding(.vertical, 5)
         .contextMenu {
-            if package.source.isUpdatable {
+            if package.isUpdatable {
                 Button(UIStrings.updateInTerminal[loc.language]) {
                     toolkit.updateTool(package)
                 }

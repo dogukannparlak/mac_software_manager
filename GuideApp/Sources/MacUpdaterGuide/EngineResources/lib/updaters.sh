@@ -329,6 +329,17 @@ collect_manual_updates() {
 # binary without running it. Every query gets the same hang guard 'mas' does.
 OTHER_QUERY_TIMEOUT=${OTHER_QUERY_TIMEOUT:-30}
 
+# Every source this section knows. OTHER_SOURCES_LIST in settings.conf picks
+# a subset (comma separated); unset means all of them.
+OTHER_SOURCES_ALL="npm,pipx,uv,cargo,go,local,app,pkg"
+
+# Is this source switched on? Both the master switch and the list have to say
+# yes.
+other_source_enabled() {
+    [[ "${OTHER_SOURCES_ENABLED:-1}" == "1" ]] || return 1
+    [[ ",${OTHER_SOURCES_LIST:-$OTHER_SOURCES_ALL}," == *",$1,"* ]]
+}
+
 # The first dotted-numeric component of a path ("…/versions/2.0.14" -> 2.0.14),
 # which is how most self-installing tools lay out their versions.
 version_from_path() {
@@ -475,10 +486,12 @@ collect_local_tools() {
             seen[$name]=1
 
             if [[ "$target" == *.app/Contents/* ]]; then
+                other_source_enabled app || continue
                 app="${target%%.app/Contents/*}.app"
                 ver=$(plist_value "$app/Contents/Info.plist" CFBundleShortVersionString) || ver=""
                 print -r -- "app|$name|$ver|$app"
             else
+                other_source_enabled local || continue
                 ver=$(version_from_path "$target") || ver=""
                 print -r -- "local|$name|$ver|$target"
             fi
@@ -488,48 +501,124 @@ collect_local_tools() {
 }
 
 collect_other_packages() {
-    [[ "${OTHER_SOURCES_ENABLED:-1}" == "1" ]] || return 0
-    collect_npm_packages
-    collect_pipx_packages
-    collect_uv_tools
-    collect_cargo_packages
-    collect_go_binaries
-    collect_local_tools
-    collect_pkg_receipts
+    other_source_enabled npm   && collect_npm_packages
+    other_source_enabled pipx  && collect_pipx_packages
+    other_source_enabled uv    && collect_uv_tools
+    other_source_enabled cargo && collect_cargo_packages
+    other_source_enabled go    && collect_go_binaries
+    { other_source_enabled local || other_source_enabled app; } && collect_local_tools
+    other_source_enabled pkg   && collect_pkg_receipts
     return 0
 }
 
-# What has a newer version waiting, for the sources that can say so without
-# installing anything: source|name|current|latest. Only npm answers this
-# cheaply today; the others list what is installed, not what is new.
-collect_other_outdated() {
-    [[ "${OTHER_SOURCES_ENABLED:-1}" == "1" ]] || return 0
-    command -v npm &> /dev/null || return 0
-    local out line current latest
-    # Exits 1 whenever something IS outdated - that is the answer, not an error.
-    out=$(run_with_timeout 60 npm outdated -g --parseable --depth=0 2>/dev/null) || true
-    for line in "${(@f)out}"; do
-        # <path>:<name>@<wanted>:<name>@<current>:<name>@<latest>[:…]
-        local -a f=("${(@s/:/)line}")
-        (( ${#f} >= 4 )) || continue
-        current="${f[3]##*@}"
-        latest="${f[4]##*@}"
-        [[ -n "$latest" && "$current" != "$latest" ]] || continue
-        print -r -- "npm|${f[4]%@*}|$current|$latest"
-    done
-    return 0
-}
-
-# Whether a source has an update command at all.
-other_source_is_updatable() {
+# Standalone tools that know how to update themselves, by the name they are
+# installed under. Kept in step with OtherPackage.selfUpdatingTools in the app.
+# Only these are offered an update; any other standalone tool is listed and
+# left alone.
+local_tool_is_updatable() {
     case "$1" in
-        npm|pipx|uv|cargo|go) return 0 ;;
+        claude|uv|bun|deno|rustup) return 0 ;;
     esac
     return 1
 }
 
-# Update one package through its own package manager. A fixed command per
-# source, run directly (never through eval); the caller has already checked
+# Whether this package has an update command here at all.
+other_package_is_updatable() {
+    local source="$1" name="$2"
+    case "$source" in
+        npm|pipx|uv|cargo|go) return 0 ;;
+        local) local_tool_is_updatable "$name" ;;
+        *) return 1 ;;
+    esac
+}
+
+# GET a JSON document and print the value at one key path (plutil syntax,
+# "info.version"). Non-zero when the request or the key fails.
+json_url_value() {
+    local url="$1" key="$2" file value=""
+    file="$(mktemp "${TMPDIR:-/tmp}/msu_json.XXXXXX")" || return 1
+    if curl -fsSL --proto '=https' --tlsv1.2 --connect-timeout 5 --max-time 15 \
+        -H "User-Agent: $USER_AGENT" "$url" -o "$file" 2>/dev/null; then
+        value=$(plutil -extract "$key" raw -o - "$file" 2>/dev/null) || value=""
+    fi
+    rm -f "$file"
+    [[ -n "$value" ]] || return 1
+    print -r -- "$value"
+}
+
+# The newest published version of one package, from its registry - or
+# non-zero when the source has no registry to ask.
+other_latest_version() {
+    local source="$1" name="$2"
+    case "$source" in
+        pipx|uv) json_url_value "https://pypi.org/pypi/${name}/json" "info.version" ;;
+        cargo)   json_url_value "https://crates.io/api/v1/crates/${name}" "crate.max_stable_version" ;;
+        local)
+            case "$name" in
+                claude) json_url_value "https://registry.npmjs.org/@anthropic-ai/claude-code/latest" "version" ;;
+                uv)     json_url_value "https://pypi.org/pypi/uv/json" "info.version" ;;
+                bun)    json_url_value "https://registry.npmjs.org/bun/latest" "version" ;;
+                *)      return 1 ;;
+            esac
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+# What has a newer version waiting: source|name|current|latest.
+#
+# npm answers for all its packages in one call. pipx, uv, cargo and the
+# self-updating standalone tools are looked up one by one in their public
+# registries (PyPI, crates.io, npm), from the last scan. Three failed lookups
+# in a row mean the network is not there, and the rest are skipped rather
+# than each waiting out its own timeout.
+collect_other_outdated() {
+    local out line current latest source name failures=0
+
+    if other_source_enabled npm && command -v npm &> /dev/null; then
+        # Exits 1 whenever something IS outdated - that is the answer, not an error.
+        out=$(run_with_timeout 60 npm outdated -g --parseable --depth=0 2>/dev/null) || true
+        for line in "${(@f)out}"; do
+            # <path>:<name>@<wanted>:<name>@<current>:<name>@<latest>[:…]
+            local -a f=("${(@s/:/)line}")
+            (( ${#f} >= 4 )) || continue
+            current="${f[3]##*@}"
+            latest="${f[4]##*@}"
+            [[ -n "$latest" && "$current" != "$latest" ]] || continue
+            print -r -- "npm|${f[4]%@*}|$current|$latest"
+        done
+    fi
+
+    for line in "${(@f)$(cache_get other_packages 2>/dev/null)}"; do
+        (( failures < 3 )) || break
+        local -a f=("${(@s:|:)line}")
+        source="${f[1]}"; name="${f[2]}"; current="${f[3]#v}"
+        case "$source" in
+            pipx|uv|cargo) ;;
+            local) local_tool_is_updatable "$name" || continue ;;
+            *) continue ;;
+        esac
+        other_source_enabled "$source" || continue
+        [[ -n "$name" && -n "$current" ]] || continue
+
+        if ! latest=$(other_latest_version "$source" "$name"); then
+            failures=$(( failures + 1 ))
+            continue
+        fi
+        failures=0
+        latest="${latest#v}"
+        # Newer only: a tool ahead of its registry (a prerelease, a local
+        # build) is not "outdated".
+        [[ "$latest" != "$current" ]] || continue
+        is-at-least "$latest" "$current" && continue
+        print -r -- "$source|$name|$current|$latest"
+    done
+    return 0
+}
+
+# Update one package. A fixed command per source - or, for a self-updating
+# standalone tool, that tool's own update command, run from the file the scan
+# found - run directly, never through eval. The caller has already checked
 # the package against the last scan (other_package_line).
 run_other_package_update() {
     local source="$1" name="$2" location="$3"
@@ -541,6 +630,17 @@ run_other_package_update() {
         cargo) cargo install "$name" ;;
         go)    [[ -n "$location" ]] || return 1
                go install "${location}@latest" ;;
+        local)
+            [[ -n "$location" && -x "$location" ]] || return 1
+            case "$name" in
+                claude) "$location" update ;;
+                uv)     "$location" self update ;;
+                bun)    "$location" upgrade ;;
+                deno)   "$location" upgrade ;;
+                rustup) "$location" update ;;
+                *)      return 1 ;;
+            esac
+            ;;
         *)     return 1 ;;
     esac
 }

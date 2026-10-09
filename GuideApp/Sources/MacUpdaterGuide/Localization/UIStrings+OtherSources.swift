@@ -9,10 +9,12 @@ extension UIStrings {
         "Homebrew dışını da tara"
     )
     static let otherSourcesHelp = Localized(
-        "Lists npm, pipx, uv, Cargo and Go installs, standalone tools such as Claude Code, and installer packages (.pkg). Homebrew stays the primary source.",
-        "npm, pipx, uv, Cargo ve Go kurulumlarını, Claude Code gibi bağımsız araçları ve kurulum paketlerini (.pkg) da listeler. Homebrew yine ana kaynak olarak kalır."
+        "Lists npm, pipx, uv, Cargo and Go installs, standalone tools such as Claude Code, and installer packages (.pkg), and checks them for updates. Homebrew stays the primary source.",
+        "npm, pipx, uv, Cargo ve Go kurulumlarını, Claude Code gibi bağımsız araçları ve kurulum paketlerini (.pkg) da listeler ve güncellemelerini denetler. Homebrew yine ana kaynak olarak kalır."
     )
 
+    static let otherSourcesPick = Localized("List these sources:", "Şu kaynakları listele:")
+    static let otherSourcesUpdatesFormat = Localized("%d updates", "%d güncelleme")
     static let otherSourcesSection = Localized("Beyond Homebrew", "Homebrew dışı")
     static let otherSourcesFilter = Localized("Beyond Homebrew", "Homebrew dışı")
     static let otherSourcesOff = Localized(

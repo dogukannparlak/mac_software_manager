@@ -4,7 +4,7 @@ import Foundation
 extension ToolkitController {
 
     /// Runs the package's own update command (`npm install -g`, `pipx
-    /// upgrade`, …) in the user's terminal, through the engine's
+    /// upgrade`, `claude update`, …) in the user's terminal, through the engine's
     /// `update_tool` - which only acts on a package its last scan found.
     ///
     /// Always a terminal window, never a background run: these managers can
@@ -12,7 +12,7 @@ extension ToolkitController {
     /// compiler for cargo), and their output is the only account of what
     /// happened.
     func updateTool(_ package: OtherPackage) {
-        guard package.source.isUpdatable else { return }
+        guard package.isUpdatable else { return }
         guard let script = scriptURL else {
             return report(.updateItem, subject: package.name, .toolkitMissing)
         }

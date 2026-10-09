@@ -205,6 +205,15 @@ load_config_safely() {
                         ;;
                 esac
                 ;;
+            "OTHER_SOURCES_LIST")
+                # Comma separated subset of npm,pipx,uv,cargo,go,local,app,pkg
+                # (empty means all of them, like an unset key).
+                if printf '%s\n' "$value" | grep -qE '^(npm|pipx|uv|cargo|go|local|app|pkg)?(,(npm|pipx|uv|cargo|go|local|app|pkg))*$'; then
+                    OTHER_SOURCES_LIST="$value"
+                else
+                    add_config_warning "Invalid OTHER_SOURCES_LIST value. Using default."
+                fi
+                ;;
             "CODEBERG_USERNAME")
                 if [[ -z "$value" || "$value" == "YOUR_CODEBERG_USERNAME" ]]; then
                     CODEBERG_USERNAME=""
@@ -237,6 +246,8 @@ AUTO_INSTALL_APPS="0"
 # receipts and standalone tools (lib/updaters.sh, section 3c2). Homebrew stays
 # the primary source either way; this only adds to what is listed.
 OTHER_SOURCES_ENABLED="1"
+# Which of those sources to list; unset means all (OTHER_SOURCES_ALL).
+OTHER_SOURCES_LIST=""
 # Codeberg username for the backup mirror. Empty means no mirror is configured
 # (set via setup_mac.sh or the "CODEBERG_USERNAME" key in settings.conf) - the
 # single source of truth every consumer (this script, setup_mac.sh, the native

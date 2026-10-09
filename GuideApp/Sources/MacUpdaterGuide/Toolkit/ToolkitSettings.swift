@@ -63,6 +63,10 @@ final class ToolkitSettings {
     /// pipx, uv, cargo, go, standalone tools, .pkg receipts). Homebrew stays
     /// the primary source either way.
     var otherSourcesEnabled = true
+    /// Which of those sources to list. Never empty: an empty
+    /// OTHER_SOURCES_LIST means "all" to the engine, so the settings page
+    /// does not let the last one be switched off.
+    var otherSourceList: Set<PackageSource> = Set(PackageSource.allCases)
     /// Empty means no Codeberg mirror is configured: downloads and self-update
     /// fall back to GitHub only, and the shell engine surfaces that in its
     /// own config warning.
@@ -117,6 +121,9 @@ final class ToolkitSettings {
             autoInstallApps = (value == "1")
         case "OTHER_SOURCES_ENABLED":
             otherSourcesEnabled = (value == "1")
+        case "OTHER_SOURCES_LIST":
+            let parsed = Set(value.split(separator: ",").compactMap { PackageSource(rawValue: String($0)) })
+            otherSourceList = parsed.isEmpty ? Set(PackageSource.allCases) : parsed
         case "CODEBERG_USERNAME":
             codebergUsername = (value == "YOUR_CODEBERG_USERNAME") ? "" : value
         default:
@@ -157,6 +164,9 @@ final class ToolkitSettings {
         # Also list npm, pipx, uv, cargo, go, standalone tools and .pkg receipts (1=Enabled, 0=Disabled)
         OTHER_SOURCES_ENABLED="\(otherSourcesEnabled ? "1" : "0")"
 
+        # Which of those to list (comma separated: npm,pipx,uv,cargo,go,local,app,pkg)
+        OTHER_SOURCES_LIST="\(Self.sourceListValue(otherSourceList))"
+
         # Codeberg username for the backup mirror (blank = GitHub only, no dual-source verification)
         CODEBERG_USERNAME="\(codebergUsername)"
 
@@ -176,6 +186,16 @@ final class ToolkitSettings {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// The sources in display order, comma separated - what the engine's
+    /// OTHER_SOURCES_LIST check expects.
+    static func sourceListValue(_ sources: Set<PackageSource>) -> String {
+        PackageSource.allCases
+            .filter { sources.contains($0) }
+            .sorted { $0.sortRank < $1.sortRank }
+            .map(\.rawValue)
+            .joined(separator: ",")
     }
 
     private static func timestamp() -> String {

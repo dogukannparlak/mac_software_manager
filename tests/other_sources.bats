@@ -137,3 +137,79 @@ exit 1'
     refute_contains "|jq|" "$output"
     refute_contains "|brew|" "$output"
 }
+
+@test "OTHER_SOURCES_LIST limits which sources are scanned" {
+    stub npm 'echo "/x/node_modules/typescript:typescript@5.4.5"'
+    stub pipx 'printf "black 24.4.2\n"'
+    run_with_stubs 'OTHER_SOURCES_LIST=pipx; collect_other_packages'
+    [ "$status" -eq 0 ]
+    assert_contains "pipx|black|24.4.2|" "$output"
+    refute_contains "npm|" "$output"
+}
+
+@test "an invalid OTHER_SOURCES_LIST is warned about and ignored" {
+    local cfg="$TEST_HOME/Library/Application Support/MacSoftwareUpdater"
+    mkdir -p "$cfg"
+    printf 'OTHER_SOURCES_LIST="npm,brew"\n' > "$cfg/settings.conf"
+    run run_zsh_snippet 'print "list=[$OTHER_SOURCES_LIST]"; print -l -- "${CONFIG_WARNINGS[@]}"'
+    assert_contains "list=[]" "$output"
+    assert_contains "Invalid OTHER_SOURCES_LIST" "$output"
+}
+
+# Registry lookups: curl is stubbed to write a body, plutil to answer with the
+# version, so this pins the comparison rather than the network.
+stub_registry() {
+    local latest="$1"
+    stub curl 'while [ $# -gt 0 ]; do [ "$1" = "-o" ] && { echo "{}" > "$2"; exit 0; }; shift; done; exit 1'
+    stub plutil "echo $latest"
+}
+
+@test "pipx, uv, cargo and self-updating tools are checked against their registries" {
+    stub_registry 25.1.0
+    local cache="$TEST_HOME/Library/Application Support/MacSoftwareUpdater/cache"
+    mkdir -p "$cache"
+    printf 'pipx|black|24.4.2|\nuv|ruff|0.6.0|\ncargo|ripgrep|14.1.0|\nlocal|claude|2.0.14|/x/claude\nlocal|hf||/x/hf\npkg|com.x|1.0|/\n' > "$cache/other_packages"
+
+    run_with_stubs 'OTHER_SOURCES_LIST=pipx,uv,cargo,local; collect_other_outdated'
+    [ "$status" -eq 0 ]
+    assert_contains "pipx|black|24.4.2|25.1.0" "$output"
+    assert_contains "uv|ruff|0.6.0|25.1.0" "$output"
+    assert_contains "cargo|ripgrep|14.1.0|25.1.0" "$output"
+    assert_contains "local|claude|2.0.14|25.1.0" "$output"
+    # No updater known for it, and .pkg receipts are never checked.
+    refute_contains "|hf|" "$output"
+    refute_contains "pkg|" "$output"
+}
+
+@test "a tool already ahead of its registry is not reported as outdated" {
+    stub_registry 1.0.0
+    local cache="$TEST_HOME/Library/Application Support/MacSoftwareUpdater/cache"
+    mkdir -p "$cache"
+    printf 'pipx|black|24.4.2|\n' > "$cache/other_packages"
+    run_with_stubs 'OTHER_SOURCES_LIST=pipx; collect_other_outdated; print end'
+    [ "$status" -eq 0 ]
+    [ "$output" = "end" ]
+}
+
+@test "run tool updates claude with its own 'update' command, from the scanned file" {
+    local fake="$BATS_TEST_TMPDIR/claude-bin"
+    printf '#!/bin/sh\necho "claude $*" >> "%s/calls"\n' "$BATS_TEST_TMPDIR" > "$fake"
+    chmod +x "$fake"
+    local cache="$TEST_HOME/Library/Application Support/MacSoftwareUpdater/cache"
+    mkdir -p "$cache"
+    printf 'local|claude|2.0.14|%s\n' "$fake" > "$cache/other_packages"
+    STUB_BIN="$BATS_TEST_TMPDIR/bin"; mkdir -p "$STUB_BIN"
+
+    run_with_stubs 'run_mode_tool run tool local claude' < /dev/null
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/calls")" = "claude update" ]
+}
+
+@test "run tool refuses a standalone tool with no known updater" {
+    local cache="$TEST_HOME/Library/Application Support/MacSoftwareUpdater/cache"
+    mkdir -p "$cache"
+    printf 'local|hf||/x/hf\n' > "$cache/other_packages"
+    run run_zsh_snippet 'run_mode_tool run tool local hf' < /dev/null
+    [ "$status" -eq 1 ]
+    assert_contains "cannot be updated from here" "$output"
+}

@@ -360,8 +360,8 @@ run_mode_tool() {
 
     progress_write "running" "single" "$name" "" ""
 
-    if [[ -z "$name" ]] || ! other_source_is_updatable "$source"; then
-        echo "❌ '$source' packages cannot be updated from here." >&2
+    if [[ -z "$name" ]] || ! other_package_is_updatable "$source" "$name"; then
+        echo "❌ $name ($source) cannot be updated from here." >&2
         exit 1
     fi
     if ! line=$(other_package_line "$source" "$name"); then

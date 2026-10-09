@@ -83,6 +83,11 @@ The app stopped asking to install itself, and SwiftBar is gone.
   scan found, with each manager's own fixed command. Homebrew stays the
   primary source; Settings → Updates → "Also look beyond Homebrew"
   (`OTHER_SOURCES_ENABLED`) turns the rest off.
+- **Updates beyond Homebrew.** pipx, uv and Cargo packages are checked against
+  PyPI and crates.io, and `claude`, `uv` and `bun` installed on their own
+  against their registry; outdated ones sort to the top with an Update button.
+  `claude`, `uv`, `bun`, `deno` and `rustup` update through their own command.
+  Settings → Updates picks which sources are listed (`OTHER_SOURCES_LIST`).
 - Installed Apps also finds apps one folder down
   (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
 

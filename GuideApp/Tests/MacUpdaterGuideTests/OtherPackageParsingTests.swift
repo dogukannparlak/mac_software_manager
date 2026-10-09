@@ -57,6 +57,14 @@ final class OtherPackageParsingTests: XCTestCase {
         XCTAssertEqual(packages[0].version, "14.1.0")
     }
 
+    func testSelfUpdatingStandaloneToolsAreUpdatableOthersAreNot() {
+        let packages = OtherPackage.parse(
+            packages: ["local|claude|2.0.14|/x/claude", "local|hf||/x/hf", "app|ollama|0.4|/Applications/Ollama.app"],
+            outdated: []
+        )
+        XCTAssertEqual(packages.map(\.isUpdatable), [true, false, false])
+    }
+
     func testOnlyPackageManagersAreUpdatable() {
         XCTAssertTrue(PackageSource.npm.isUpdatable)
         XCTAssertTrue(PackageSource.go.isUpdatable)
