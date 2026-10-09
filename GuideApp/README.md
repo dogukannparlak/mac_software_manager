@@ -33,7 +33,7 @@ build actually fails:
 | `./run.sh -n` | Launch what is already built, no rebuild. |
 | `./run.sh -r` | Build Release instead of Debug. |
 | `./run.sh --install` | Build Release and copy into `/Applications`. |
-| `./run.sh --clean` | Remove `DerivedData/` first. |
+| `./run.sh --clean` | Remove `DerivedData.noindex/` first. The `.noindex` suffix keeps the builds out of Spotlight, so search shows only the installed app. |
 
 It stops any running copy before launching, so you never end up with two menu
 bar icons. Login items only work reliably from `/Applications`, so use

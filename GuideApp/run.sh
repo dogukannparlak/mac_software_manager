@@ -17,7 +17,17 @@ set -o pipefail
 APP_NAME="MacUpdaterGuide"
 PROJECT_DIR="${0:a:h}"
 PROJECT="$PROJECT_DIR/$APP_NAME.xcodeproj"
-DERIVED="$PROJECT_DIR/DerivedData"
+# ".noindex" keeps Spotlight out: otherwise every build here shows up as one
+# more MacUpdaterGuide next to the installed one in search results.
+DERIVED="$PROJECT_DIR/DerivedData.noindex"
+
+# The folder builds used to go to, before it carried that suffix. Only ever
+# this script's own output, so it goes - with it, the extra copies Spotlight
+# was still listing.
+if [[ -d "$PROJECT_DIR/DerivedData" ]]; then
+    echo "🧹 Removing the old build folder (DerivedData) so Spotlight stops listing its copies..."
+    rm -rf "$PROJECT_DIR/DerivedData"
+fi
 
 CONFIGURATION="Debug"
 DO_BUILD=1

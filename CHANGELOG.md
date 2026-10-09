@@ -97,6 +97,9 @@ The app stopped asking to install itself, and SwiftBar is gone.
 - Updates beyond Homebrew are written to the history log (source is the
   manager's name: `npm`, `pipx`, `uv`, …), and the History page links each to
   its registry page (npm, PyPI, crates.io, pkg.go.dev).
+- Builds from `run.sh` and `build_release.sh` go to `*.noindex` folders, so
+  Spotlight no longer lists every build as another MacUpdaterGuide; `run.sh`
+  removes the old `DerivedData` folder once.
 - Installed Apps also finds apps one folder down
   (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
 

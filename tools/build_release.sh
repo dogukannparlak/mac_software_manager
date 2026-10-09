@@ -21,7 +21,8 @@ autoload -U colors && colors
 REPO_ROOT="${0:a:h:h}"
 APP_NAME="MacUpdaterGuide"
 PROJECT="$REPO_ROOT/GuideApp/$APP_NAME.xcodeproj"
-DERIVED="$REPO_ROOT/GuideApp/DerivedData-release"
+# ".noindex": keeps the build out of Spotlight (see GuideApp/run.sh)
+DERIVED="$REPO_ROOT/GuideApp/DerivedData-release.noindex"
 DIST="$REPO_ROOT/dist"
 VERSION="$(<"$REPO_ROOT/VERSION")"
 BASENAME="$APP_NAME-$VERSION-macOS-universal"

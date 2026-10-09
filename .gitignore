@@ -44,9 +44,11 @@ Temporary Items
 # ==============================================================================
 
 DerivedData/
+DerivedData.noindex/
 # tools/build_release.sh builds into its own derived data folder so a release
 # build never reuses (or clobbers) the Debug one run.sh leaves behind.
 DerivedData-release/
+DerivedData-release.noindex/
 build/
 
 # Per-user window layout, breakpoints and scheme state
