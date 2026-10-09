@@ -26,8 +26,21 @@ struct HistoryEntry: Identifiable, Hashable, Sendable {
     /// Reuses `ItemRunResult.Reason` - the shell writes the exact same
     /// tokens into both the per-run result file and this log line.
     let reason: ItemRunResult.Reason
+    /// Set when the line came from a package beyond Homebrew (`run tool`
+    /// logs the manager's own name - npm, pipx, uv, …). `source` reads those
+    /// back as `.formula`, the closest fit: a command line tool.
+    var otherSource: PackageSource?
 
     var link: URL? {
+        if let otherSource {
+            switch otherSource {
+            case .npm: return URL(string: "https://www.npmjs.com/package/\(name)")
+            case .pipx, .uv: return URL(string: "https://pypi.org/project/\(name)/")
+            case .cargo: return URL(string: "https://crates.io/crates/\(name)")
+            case .go: return identifier.isEmpty ? nil : URL(string: "https://pkg.go.dev/\(identifier)")
+            case .app, .local, .pkg: return nil
+            }
+        }
         switch source {
         case .formula: return URL(string: "https://formulae.brew.sh/formula/\(name)")
         case .cask:
@@ -75,7 +88,8 @@ struct UpdateHistory: Sendable {
                     identifier: fields.count >= 6 ? fields[5] : "",
                     succeeded: status != "fail",
                     isMigration: fields[1] == "migrate",
-                    reason: ItemRunResult.Reason(rawValue: reasonToken) ?? .none
+                    reason: ItemRunResult.Reason(rawValue: reasonToken) ?? .none,
+                    otherSource: PackageSource(rawValue: fields[1])
                 )
             )
         }

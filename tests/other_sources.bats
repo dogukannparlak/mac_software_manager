@@ -119,6 +119,21 @@ exit 1'
     run_with_stubs 'run_mode_tool run tool npm typescript' < /dev/null
     [ "$status" -eq 0 ]
     assert_contains "npm install -g typescript@latest" "$(cat "$BATS_TEST_TMPDIR/npm_calls")"
+    # Logged like any other update: source, name, versions, status.
+    assert_matches "*|npm|typescript|5.4.5|*|typescript|ok|" \
+        "$(tail -n 1 "$TEST_HOME/Library/Application Support/MacSoftwareUpdater/update_history.log")"
+}
+
+@test "a failed tool update is logged as failed" {
+    stub pipx 'exit 3'
+    local cache="$TEST_HOME/Library/Application Support/MacSoftwareUpdater/cache"
+    mkdir -p "$cache"
+    printf 'pipx|black|24.4.2|\n' > "$cache/other_packages"
+
+    run_with_stubs 'run_mode_tool run tool pipx black' < /dev/null
+    [ "$status" -eq 3 ]
+    assert_matches "*|pipx|black|24.4.2|*|black|fail|command-failed" \
+        "$(tail -n 1 "$TEST_HOME/Library/Application Support/MacSoftwareUpdater/update_history.log")"
 }
 
 @test "a regular file in Homebrew's bin folder is listed; Homebrew's own links are not" {

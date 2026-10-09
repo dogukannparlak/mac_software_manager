@@ -370,6 +370,7 @@ run_mode_tool() {
     fi
     local -a fields=("${(@s:|:)line}")
     location="${fields[4]}"
+    local old_ver="${fields[3]}" new_ver="" entry_status="ok" reason=""
 
     echo "🚀 Updating $name ($source)..."
     echo "---------------------------"
@@ -378,6 +379,23 @@ run_mode_tool() {
     # Only this source's view can have changed.
     cache_refresh_entry "other_packages" collect_other_packages
     cache_refresh_entry "other_outdated" collect_other_outdated
+
+    # The version the rescan now sees, for the history line.
+    if line=$(other_package_line "$source" "$name"); then
+        local -a after=("${(@s:|:)line}")
+        new_ver="${after[3]}"
+    fi
+    (( rc == 0 )) || { entry_status="fail"; reason="command-failed"; }
+
+    # Same eight fields as every other writer (CACHE_FORMAT.md); the source
+    # is the package manager's own name, which GuideApp reads back as such.
+    # The identifier is the go module path where there is one.
+    local identifier="$name"
+    [[ "$source" == "go" && -n "$location" ]] && identifier="$location"
+    if echo "$EPOCHSECONDS|$source|$name|${old_ver:-?}|${new_ver:-?}|$identifier|$entry_status|$reason" >> "$HISTORY_FILE"; then
+        trim_history_log
+        echo "📝 Added to history log ($entry_status)."
+    fi
 
     echo "---------------------------"
     if (( rc == 0 )); then

@@ -94,6 +94,9 @@ The app stopped asking to install itself, and SwiftBar is gone.
 - Updates beyond Homebrew run in the background like Homebrew rows, with a
   spinner on the row, instead of always opening a terminal; "Run updates in
   Terminal" still opens one.
+- Updates beyond Homebrew are written to the history log (source is the
+  manager's name: `npm`, `pipx`, `uv`, …), and the History page links each to
+  its registry page (npm, PyPI, crates.io, pkg.go.dev).
 - Installed Apps also finds apps one folder down
   (`/Applications/<Vendor>/<App>.app`, `/Applications/Utilities`).
 
