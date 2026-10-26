@@ -17,6 +17,20 @@ The app stopped asking to install itself, and SwiftBar is gone.
   `simdutf`), so the later one died with "Operation already in progress".
   Single-item `brew upgrade` runs now wait for each other; downloads and the
   work after the upgrade still overlap.
+- **Homebrew rows wait as "Queued", not on a stalled bar.** The app now holds
+  a second formula/cask update back itself instead of leaving it on
+  "Updating" while the engine's lock makes it wait; App Store updates queued
+  behind it are not held up.
+- **A Homebrew lock collision is retried.** If another `brew` (a terminal,
+  another tool) holds the package, the upgrade waits 5 s, then 10 s, and tries
+  again instead of failing.
+- **A failed row keeps its explanation for 30 s**, up from 8 s, long enough to
+  read a two-line Homebrew error.
+- **`1.1.0, 1.1.0.tmp -> 1.1.1`.** Leftover `.tmp` Cellar directories from an
+  interrupted upgrade are no longer listed as installed versions.
+- Tests: the engine-in-place test no longer calls a subcommand that was
+  removed, and the shared test home is path-resolved so `/var` vs
+  `/private/var` no longer fails the standalone-tool tests.
 
 ### Removed
 

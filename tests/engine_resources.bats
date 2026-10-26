@@ -86,9 +86,13 @@ engine_library_names() {
     [ ! -d "$TEST_HOME/Library/Application Support/MacSoftwareUpdater" ]
 
     run env HOME="$TEST_HOME" MSU_LIB_DIR="$RESOURCES/lib" \
-        zsh "$RESOURCES/update_system.1h.sh" get_settings < /dev/null
+        zsh "$RESOURCES/update_system.1h.sh" no_such_subcommand < /dev/null
 
-    [ "$status" -eq 0 ]
+    # No read-only subcommand exists to call, so an unknown one stands in: it
+    # is only reached once the library has loaded and the state directory
+    # exists, and it exits 2 with the usage text (update_system.1h.sh, 6).
+    [ "$status" -eq 2 ]
+    assert_contains "Usage:" "$output"
     refute_contains "Missing engine file" "$output"
     # The engine created its own state directory on the way through, which is
     # what makes an install step unnecessary.

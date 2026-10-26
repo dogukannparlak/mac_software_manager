@@ -17,7 +17,9 @@ extension ToolkitController {
 
         recentItemsByID[item.id] = item
 
-        guard progress?.isRunning != true, activeProcesses.count < preferences.maxConcurrentUpdates else {
+        guard progress?.isRunning != true,
+              activeProcesses.count < preferences.maxConcurrentUpdates,
+              !(item.usesHomebrewLock && homebrewSlotBusy) else {
             itemStatuses[item.id] = .queued
             queuedItemIDs.append(item.id)
             queuedLaunchers[item.id] = launch
@@ -36,13 +38,31 @@ extension ToolkitController {
     func drainQueue() {
         defer { syncQueueDrainWatch() }
         guard progress?.isRunning != true else { return }
-        while activeProcesses.count < preferences.maxConcurrentUpdates, let nextID = queuedItemIDs.first {
-            queuedItemIDs.removeFirst()
+        while activeProcesses.count < preferences.maxConcurrentUpdates {
+            // The first waiting item that may start now: one that needs
+            // Homebrew's lock is passed over while another holds it, so it
+            // does not hold up an App Store update queued behind it.
+            guard let index = queuedItemIDs.firstIndex(where: { id in
+                !(recentItemsByID[id]?.usesHomebrewLock == true && homebrewSlotBusy)
+            }) else { return }
+            let nextID = queuedItemIDs.remove(at: index)
             guard let launch = queuedLaunchers.removeValue(forKey: nextID) else { continue }
             itemStatuses[nextID] = .updating
             beginFractionSimulation(for: nextID)
             launch()
         }
+    }
+
+    /// Whether a run that holds Homebrew's lock is going right now.
+    ///
+    /// Homebrew locks per package and per dependency, so two `brew upgrade`s
+    /// at once can collide (`node` also upgrades its dependency `simdutf`),
+    /// and the later one fails with "Operation already in progress". The
+    /// engine serializes them too (`brew-upgrade` lock, lib/run_modes.sh),
+    /// but waiting there left the row on a stalled "Updating" bar; holding
+    /// the item here shows it as "Queued", which is what it is.
+    private var homebrewSlotBusy: Bool {
+        activeProcesses.keys.contains { recentItemsByID[$0]?.usesHomebrewLock == true }
     }
 
     /// How often a queue held up by a bulk run re-checks whether that run is
@@ -336,10 +356,11 @@ extension ToolkitController {
     /// A failure gets longer than a success: "Updated" is a confirmation and
     /// is read at a glance, while a failed row is carrying the only per-row
     /// explanation there is (`itemFailureReasons`, rendered under the row)
-    /// and needs long enough to actually be read. The banner keeps that
+    /// and needs long enough to actually be read (8s was gone before a
+    /// two-line Homebrew error could be). The banner keeps that
     /// reason afterwards either way.
     func scheduleStatusClear(for id: String) {
-        let seconds: Double = itemStatuses[id] == .failed ? 8 : 3
+        let seconds: Double = itemStatuses[id] == .failed ? 30 : 3
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             await MainActor.run {

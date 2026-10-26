@@ -44,6 +44,10 @@ brew_outdated_normalized() {
 
             for (( inst_idx = 0; inst_idx < inst_count; inst_idx++ )); do
                 inst_ver=$(plutil -extract "${kind}.${idx}.installed_versions.${inst_idx}" raw -o - "$json_file" 2>/dev/null) || continue
+                # An interrupted upgrade leaves "<version>.tmp" behind in the
+                # Cellar. It is not a version anyone installed, and it made the
+                # menu say "1.1.0, 1.1.0.tmp -> 1.1.1".
+                [[ "$inst_ver" == *.tmp ]] && continue
                 [[ -n "$versions" ]] && versions+=", "
                 versions+="$inst_ver"
             done
@@ -109,6 +113,36 @@ brew_is_outdated() {
         [[ "$tok" == "$target" ]] && return 0
     done
     return 1
+}
+
+# 'brew upgrade' for one token, retried when Homebrew's own lock says another
+# brew process holds the package (or one of its dependencies):
+#     Error: Operation already in progress for <name>
+# That is a "try again in a moment", not a failure - and the other process may
+# not be ours (a terminal, another tool), so the brew-upgrade lock in
+# run_mode_single cannot cover it. Any other failure returns at once.
+# stderr is replayed after each attempt (the app reads it for the failure
+# reason); stdout is untouched and live. Waits 5s, then 10s; BREW_LOCK_RETRY_DELAY=0 in tests.
+brew_upgrade_retrying() {
+    local id="$1" attempt=1 max=3 rc errf
+    errf="$(mktemp "${TMPDIR:-/tmp}/brew_upgrade_err.XXXXXX")" || { brew upgrade "$id"; return $?; }
+
+    while true; do
+        rc=0
+        brew upgrade "$id" 2> "$errf" || rc=$?
+        cat "$errf" >&2
+        (( rc == 0 )) && break
+        if (( attempt < max )) && grep -qE "already in progress|Another active Homebrew" "$errf"; then
+            echo "⏳ Homebrew is busy with another package; retrying ($attempt/$((max - 1)))..." >&2
+            sleep $(( ${BREW_LOCK_RETRY_DELAY:-5} * attempt ))
+            (( attempt++ ))
+            continue
+        fi
+        break
+    done
+
+    rm -f "$errf"
+    return $rc
 }
 
 mas_is_outdated() {

@@ -22,7 +22,10 @@ setup() {
     # A throwaway HOME per test: the script derives APP_DIR/CACHE_DIR/etc.
     # from $HOME, so this keeps every test isolated from the real
     # ~/Library/Application Support/MacSoftwareUpdater and from each other.
-    TEST_HOME="$BATS_TEST_TMPDIR/home"
+    # Resolved: macOS keeps $TMPDIR under /var, a symlink to /private/var, and
+    # the engine reports real paths (zsh :A) - so a test comparing a path it
+    # built from a symlinked home against engine output never matched.
+    TEST_HOME="$(cd "$BATS_TEST_TMPDIR" && pwd -P)/home"
     mkdir -p "$TEST_HOME"
 }
 

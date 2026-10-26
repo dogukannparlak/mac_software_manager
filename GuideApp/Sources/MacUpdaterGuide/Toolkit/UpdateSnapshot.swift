@@ -51,6 +51,10 @@ struct UpdateItem: Identifiable, Hashable, Sendable {
     /// `UpdateSnapshot.load()`, once real description/leaf data is available.
     /// The parsing helpers below default it to `.other`.
     var category: CLIToolCategory = .other
+
+    /// Runs `brew upgrade`, which takes Homebrew's per-package locks: two of
+    /// these at once can collide, so the queue lets only one go at a time.
+    var usesHomebrewLock: Bool { source == .formula || source == .cask }
 }
 
 /// Everything the menu bar shows, read from the cache the shell scripts write.

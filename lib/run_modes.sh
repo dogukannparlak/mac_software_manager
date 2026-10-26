@@ -252,7 +252,7 @@ run_mode_single() {
         # casks and everything after the upgrade still overlap.
         acquire_lock "brew-upgrade" "${BREW_UPGRADE_LOCK_WAIT:-900}" || true
         [[ "$type" == "cask" ]] && cask_download_watch_start "$id" "$name"
-        brew upgrade "$id" || update_rc=$?
+        brew_upgrade_retrying "$id" || update_rc=$?
         [[ "$type" == "cask" ]] && cask_download_watch_stop
         release_lock "brew-upgrade"
         (( update_rc == 0 )) || update_reason="command-failed"

@@ -490,3 +490,60 @@ latest_result_snippet='
     '
     assert_contains "RESULT: NONE" "$output"
 }
+
+# --- brew_upgrade_retrying ---------------------------------------------------
+# Homebrew locks per package and per dependency; a second 'brew upgrade' that
+# collides exits 1 with "Operation already in progress". Users saw that as a
+# failed row that worked on the second or third press.
+
+@test "brew_upgrade_retrying retries a lock collision and then succeeds" {
+    run run_zsh_snippet '
+        BREW_LOCK_RETRY_DELAY=0
+        calls=$(mktemp)
+        brew() {
+            print x >> "$calls"
+            if (( $(wc -l < "$calls") < 2 )); then
+                echo "Error: Operation already in progress for node" >&2
+                return 1
+            fi
+            echo "STUB upgraded $2"
+        }
+        brew_upgrade_retrying node
+        echo "rc=$? calls=$(wc -l < "$calls" | tr -d " ")"
+    '
+    assert_contains "STUB upgraded node" "$output"
+    assert_contains "rc=0 calls=2" "$output"
+}
+
+@test "brew_upgrade_retrying gives up after three lock collisions" {
+    run run_zsh_snippet '
+        BREW_LOCK_RETRY_DELAY=0
+        brew() { echo "Error: Operation already in progress for node" >&2; return 1; }
+        brew_upgrade_retrying node
+        echo "rc=$?"
+    '
+    assert_contains "rc=1" "$output"
+}
+
+@test "brew_upgrade_retrying does not retry an ordinary failure" {
+    run run_zsh_snippet '
+        BREW_LOCK_RETRY_DELAY=0
+        calls=$(mktemp)
+        brew() { print x >> "$calls"; echo "Error: no such formula" >&2; return 1; }
+        brew_upgrade_retrying node
+        echo "rc=$? calls=$(wc -l < "$calls" | tr -d " ")"
+    '
+    assert_contains "rc=1 calls=1" "$output"
+}
+
+@test "brew_outdated_normalized drops a leftover .tmp Cellar directory from installed versions" {
+    run run_zsh_snippet '
+        brew() {
+            cat <<JSON
+{"formulae":[{"name":"aws-c-mqtt","installed_versions":["1.1.0","1.1.0.tmp"],"current_version":"1.1.1","pinned":false}],"casks":[]}
+JSON
+        }
+        brew_outdated_normalized
+    '
+    assert_contains "brew|aws-c-mqtt|1.1.0|1.1.1|0" "$output"
+}
