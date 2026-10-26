@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The app stopped asking to install itself, and SwiftBar is gone.
 
+### Fixed
+
+- **Updates that failed the first time and worked on the second or third
+  press.** Two background updates could run `brew upgrade` at once, and
+  Homebrew locks per formula and per dependency (`node` also upgrades
+  `simdutf`), so the later one died with "Operation already in progress".
+  Single-item `brew upgrade` runs now wait for each other; downloads and the
+  work after the upgrade still overlap.
+
 ### Removed
 
 - **SwiftBar, everywhere.** The menu bar item has belonged to

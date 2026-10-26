@@ -240,9 +240,21 @@ run_mode_single() {
         # counter would rarely have anything to show; casks are where the
         # real, often multi-gigabyte downloads are, so only they get a
         # watcher.
+        # One brew upgrade at a time. GuideApp runs several single-item
+        # updates side by side, and Homebrew locks per formula *and* per
+        # dependency: 'brew upgrade node' also upgrades its outdated
+        # dependency simdutf, so a second run on either one died at once with
+        # "Operation already in progress" - exit 1, "failed", and fine on the
+        # next press once the other run had finished. Waiting here turns that
+        # collision into a short "Updating..." instead. Bounded, so a wedged
+        # run cannot hold the queue forever; going ahead after the wait is no
+        # worse than before. Held only around brew itself: the downloads of
+        # casks and everything after the upgrade still overlap.
+        acquire_lock "brew-upgrade" "${BREW_UPGRADE_LOCK_WAIT:-900}" || true
         [[ "$type" == "cask" ]] && cask_download_watch_start "$id" "$name"
         brew upgrade "$id" || update_rc=$?
         [[ "$type" == "cask" ]] && cask_download_watch_stop
+        release_lock "brew-upgrade"
         (( update_rc == 0 )) || update_reason="command-failed"
         # Exit code alone is not proof: verify the package left the outdated list
         if (( update_rc == 0 )) && brew_is_outdated "$id"; then
