@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The app stopped asking to install itself, and SwiftBar is gone.
 
+### Added
+
+- **The app updates itself from GitHub Releases.** Once a day (and on
+  demand from Settings › About) it checks the latest published release,
+  downloads the `.zip` in the background and verifies it against the
+  release's `SHA256SUMS.txt`, its bundle identifier and version, and its code
+  signature. "Restart and Update" then swaps the app and relaunches it - only
+  when no update run is active. Settings, history and cache are outside the
+  app and untouched; the previous version is kept, and restored automatically
+  if the new one cannot be moved into place.
+
 ### Changed
 
 - **"Update Everything" starts upgrading right away.** It used to run

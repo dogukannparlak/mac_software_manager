@@ -12,11 +12,14 @@ struct MacUpdaterGuideApp: App {
     @State private var navigation = NavigationStore()
     @State private var inventory = InventoryStore()
     @State private var onboarding = OnboardingStore()
+    @State private var appUpdater: AppUpdater
 
     init() {
         let preferences = AppPreferences()
         _preferences = State(initialValue: preferences)
-        _toolkit = State(initialValue: ToolkitController(preferences: preferences))
+        let toolkit = ToolkitController(preferences: preferences)
+        _toolkit = State(initialValue: toolkit)
+        _appUpdater = State(initialValue: AppUpdater(toolkit: toolkit))
     }
 
     var body: some Scene {
@@ -32,10 +35,13 @@ struct MacUpdaterGuideApp: App {
                 .environment(navigation)
                 .environment(inventory)
                 .environment(onboarding)
+                .environment(appUpdater)
                 .frame(minWidth: 920, minHeight: 600)
                 .task {
                     toolkit.reload()
                     toolkit.startScheduler()
+                    // Idempotent; the first check waits a little on its own.
+                    appUpdater.start()
                     await inventory.load()
                     // No cache on disk yet means this app has never actually
                     // scanned this Mac - run the real thing now instead of
@@ -88,6 +94,7 @@ struct MacUpdaterGuideApp: App {
                 .environment(navigation)
                 .environment(inventory)
                 .environment(onboarding)
+                .environment(appUpdater)
         } label: {
             MenuBarLabel(
                 pending: toolkit.snapshot.count + inventory.otherPackages.filter(\.isOutdated).count,

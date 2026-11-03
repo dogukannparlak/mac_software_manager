@@ -112,6 +112,24 @@ is why the README tells people to right-click → Open the first time.
 `dist/` is gitignored. Its contents are uploaded to the GitHub release, never
 committed.
 
+### What the in-app updater needs from a release
+
+The app updates itself from GitHub Releases (`AppUpdater.swift`), and it only
+sees what `releases/latest` returns - so:
+
+- **Publish** the release. Drafts and pre-releases are invisible to it.
+- Tag it `v<VERSION>`, the same version `sync_version.sh` wrote into the
+  project. The downloaded app's `CFBundleShortVersionString` must match the
+  tag, or the download is discarded.
+- Upload **both** `MacUpdaterGuide-<VERSION>-macOS-universal.zip` and
+  `SHA256SUMS.txt` from `dist/`. Without the checksum file the release is never
+  offered; with a checksum that does not match the `.zip`, the download is
+  thrown away.
+
+Installing swaps only the `.app` (the previous one is kept under
+`~/Library/Application Support/MacSoftwareUpdater/app-update/previous`), and only
+when the user presses "Restart and Update" with no update run in progress.
+
 ## CI
 
 [.github/workflows/ci.yml](.github/workflows/ci.yml) runs on pushes to `main`

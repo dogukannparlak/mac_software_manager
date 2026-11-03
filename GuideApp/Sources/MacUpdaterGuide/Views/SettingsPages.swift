@@ -629,8 +629,15 @@ struct AboutPage: View {
                 }
             }
 
+            AppUpdateCard()
+
             HomebrewStatusCard()
 
+            // The engine's own self-update. The engine bundled in the app is
+            // updated with the app (AppUpdateCard above) and refuses to
+            // replace itself, so this card only means something for a script
+            // picked by hand under Settings › Advanced.
+            if usesExternalEngine {
             Card {
                 VStack(alignment: .leading, spacing: 10) {
                     if updatePending {
@@ -661,6 +668,7 @@ struct AboutPage: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
             }
 
             Card {
@@ -693,6 +701,13 @@ struct AboutPage: View {
             updatePending = toolkit.toolkitUpdatePending
             settings.load()
         }
+    }
+
+    private var usesExternalEngine: Bool {
+        guard let script = toolkit.scriptURL else { return false }
+        guard let bundled = BundledEngine.scriptURL else { return true }
+        return script.standardizedFileURL.path(percentEncoded: false)
+            != bundled.standardizedFileURL.path(percentEncoded: false)
     }
 }
 

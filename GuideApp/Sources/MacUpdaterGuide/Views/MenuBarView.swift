@@ -11,6 +11,7 @@ struct MenuBarView: View {
     @Environment(LocalizationStore.self) private var loc
     @Environment(ToolkitController.self) private var toolkit
     @Environment(NavigationStore.self) private var navigation
+    @Environment(AppUpdater.self) private var appUpdater
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -225,6 +226,22 @@ struct MenuBarView: View {
                 symbol: "arrow.clockwise"
             ) {
                 toolkit.refresh(force: true)
+            }
+
+            // Only once a new version is downloaded and verified - the
+            // checking and downloading are not worth a row here. Opens the
+            // About page rather than installing straight from a menu: that
+            // page says what will happen and why it may have to wait.
+            if let version = appUpdater.readyVersion {
+                MenuActionButton(
+                    title: String(format: UIStrings.appUpdateMenuFormat[loc.language], version),
+                    symbol: "arrow.down.app",
+                    showsDisclosure: true
+                ) {
+                    navigation.show(.settings(.about))
+                    openWindow(id: "guide")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
             }
 
             MenuActionButton(
