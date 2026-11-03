@@ -1,16 +1,16 @@
 import CryptoKit
 import Foundation
 
-/// The pure half of the app's self-update: what a GitHub release says, which
-/// of its files is the app, and whether a download is the file it claims to
-/// be. No network, no AppKit, no file swapping - those live in `AppUpdater` -
-/// so every decision here is unit-testable on its own.
-///
-/// The update source is GitHub Releases, not the repository's raw files. The
-/// app is a compiled, signed bundle: replacing individual files inside it
-/// would break its signature, and the Swift half cannot be "pulled" at all.
-/// What `tools/build_release.sh` produces - the universal `.zip` and the
-/// `SHA256SUMS.txt` describing it - is exactly the unit that can be swapped.
+// The pure half of the app's self-update: what a GitHub release says, which
+// of its files is the app, and whether a download is the file it claims to
+// be. No network, no AppKit, no file swapping - those live in `AppUpdater` -
+// so every decision here is unit-testable on its own.
+//
+// The update source is GitHub Releases, not the repository's raw files. The
+// app is a compiled, signed bundle: replacing individual files inside it
+// would break its signature, and the Swift half cannot be "pulled" at all.
+// What `tools/build_release.sh` produces - the universal `.zip` and the
+// `SHA256SUMS.txt` describing it - is exactly the unit that can be swapped.
 
 // MARK: - Versions
 
@@ -66,23 +66,11 @@ struct AppVersion: Comparable, CustomStringConvertible, Sendable {
 /// That endpoint already skips drafts and pre-releases; `isInstallable`
 /// checks again rather than trusting a response it did not ask for.
 struct AppRelease: Decodable, Sendable {
-    struct Asset: Decodable, Sendable {
-        let name: String
-        let size: Int
-        let downloadURL: URL
-
-        enum CodingKeys: String, CodingKey {
-            case name
-            case size
-            case downloadURL = "browser_download_url"
-        }
-    }
-
     let tagName: String
     let pageURL: URL?
     let isDraft: Bool
     let isPrerelease: Bool
-    let assets: [Asset]
+    let assets: [AppReleaseAsset]
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
@@ -104,14 +92,14 @@ struct AppRelease: Decodable, Sendable {
     /// The app archive: `MacUpdaterGuide-<version>-macOS-universal.zip`.
     /// The `.dmg` is for people dragging the app in by hand; the `.zip` is
     /// smaller and `ditto` unpacks it without mounting anything.
-    func appArchive(appName: String) -> Asset? {
+    func appArchive(appName: String) -> AppReleaseAsset? {
         assets.first {
             $0.name.hasPrefix("\(appName)-")
                 && $0.name.hasSuffix("-macOS-universal.zip")
         }
     }
 
-    var checksumFile: Asset? {
+    var checksumFile: AppReleaseAsset? {
         assets.first { $0.name == Self.checksumFileName }
     }
 
@@ -124,6 +112,19 @@ struct AppRelease: Decodable, Sendable {
               appArchive(appName: appName) != nil,
               checksumFile != nil else { return false }
         return true
+    }
+}
+
+/// One downloadable file of a release.
+struct AppReleaseAsset: Decodable, Sendable {
+    let name: String
+    let size: Int
+    let downloadURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case size
+        case downloadURL = "browser_download_url"
     }
 }
 
