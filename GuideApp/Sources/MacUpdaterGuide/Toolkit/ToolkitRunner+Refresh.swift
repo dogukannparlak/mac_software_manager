@@ -44,9 +44,15 @@ extension ToolkitController {
     /// install itself are included; GitHub-only releases and App Store
     /// ghosts still are not, exactly as their rows have no Update button.
     ///
+    /// Packages from beyond Homebrew and the App Store (npm, pipx, uv,
+    /// Cargo, self-updating tools - `otherPackages`, which live in the
+    /// inventory rather than the snapshot) are included too, one after
+    /// another (`updateTools`).
+    ///
     /// Terminal mode keeps the single bulk run in one window - one window
-    /// per package would be a wall of terminals.
-    func updateEverything() {
+    /// per package would be a wall of terminals - and that run covers
+    /// Homebrew and the App Store only.
+    func updateEverything(otherPackages: [OtherPackage] = []) {
         if preferences.runUpdatesInTerminal {
             launchUpdate(scope: "all")
             return
@@ -54,6 +60,7 @@ extension ToolkitController {
         for item in snapshot.items where item.canUpdateInApp {
             updateSingle(item)
         }
+        updateTools(otherPackages.filter { $0.isOutdated && $0.isUpdatable })
     }
 
     /// Runs the bulk update (terminal-mode "Update Everything" / a toolkit component).

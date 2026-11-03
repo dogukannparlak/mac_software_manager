@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bulk job behind idle rows: every row shows Queued, its spinner and progress
   bar, then Updated or Failed with the reason. The concurrency setting and
   one-Homebrew-upgrade-at-a-time rule still apply, and Sparkle apps the app
-  can install are now included. With "Run updates in Terminal" on it is still
-  one bulk run in one window.
+  can install are now included, as are npm, pipx, uv, Cargo and
+  self-updating tools from "Other sources" (one after another, so two runs
+  of the same manager never write the same folder). The button also appears
+  when only those are pending. With "Run updates in Terminal" on it is still
+  one bulk run in one window, covering Homebrew and the App Store.
 
 ## [1.6.1] - 2026-11-03
 

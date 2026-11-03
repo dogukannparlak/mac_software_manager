@@ -12,6 +12,7 @@ struct MenuBarView: View {
     @Environment(ToolkitController.self) private var toolkit
     @Environment(NavigationStore.self) private var navigation
     @Environment(AppUpdater.self) private var appUpdater
+    @Environment(InventoryStore.self) private var inventory
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -195,15 +196,19 @@ struct MenuBarView: View {
 
     // MARK: - Footer
 
+    /// npm, pipx, uv, Cargo and self-updating tools with an update waiting -
+    /// part of "Update Everything" (`ToolkitController.updateEverything`).
+    private var otherUpdates: [OtherPackage] { inventory.otherPackages.filter(\.isOutdated) }
+
     private var footer: some View {
         VStack(spacing: 0) {
-            if !toolkit.snapshot.isEmpty {
+            if !toolkit.snapshot.isEmpty || !otherUpdates.isEmpty {
                 MenuActionButton(
                     title: UIStrings.updateEverything[loc.language],
                     symbol: "arrow.triangle.2.circlepath",
                     isProminent: true
                 ) {
-                    toolkit.updateEverything()
+                    toolkit.updateEverything(otherPackages: otherUpdates)
                 }
 
                 // A real native NSMenu flyout, not more SwiftUI - system
@@ -212,12 +217,14 @@ struct MenuBarView: View {
                 // It stays a quick glance/one-tap-update list; the full
                 // per-row progress bars and queueing live in the Updates
                 // page, one tap away via its own "Open Full App" row.
-                MenuActionButton(
-                    title: String(format: UIStrings.pendingUpdatesFormat[loc.language], toolkit.snapshot.count),
-                    symbol: "list.bullet.rectangle",
-                    showsDisclosure: true
-                ) {
-                    showPendingUpdatesMenu()
+                if !toolkit.snapshot.isEmpty {
+                    MenuActionButton(
+                        title: String(format: UIStrings.pendingUpdatesFormat[loc.language], toolkit.snapshot.count),
+                        symbol: "list.bullet.rectangle",
+                        showsDisclosure: true
+                    ) {
+                        showPendingUpdatesMenu()
+                    }
                 }
             }
 
