@@ -22,8 +22,8 @@ extension GuideContent {
                 blocks: [
                     .steps([
                         Localized(
-                            "Choose \"Update Everything\" to update all of them in order.",
-                            "Hepsini sırayla güncellemek için \"Hepsini Güncelle\" seçin."
+                            "Choose \"Update Everything\" to start every row's own update at once.",
+                            "Her satırın kendi güncellemesini tek seferde başlatmak için \"Hepsini Güncelle\" seçin."
                         ),
                         Localized(
                             """
@@ -90,12 +90,16 @@ extension GuideContent {
                     )),
                     .note(Localized(
                         """
-                        Only two things run alone: an update in Terminal, and \"Update Everything\". While the bulk run \
-                        is going, single updates you start are queued behind it.
+                        \"Update Everything\" presses every row's Update button for you, so each row shows its own \
+                        progress and result, within the same limit. Only a run in Terminal goes alone: with Settings › \
+                        General › \"Run updates in Terminal\" on, \"Update Everything\" is one bulk run in one window, \
+                        and single updates you start meanwhile are queued behind it.
                         """,
                         """
-                        Yalnızca iki şey tek başına çalışır: Terminal'deki bir güncelleme ve \"Hepsini Güncelle\". Toplu \
-                        çalıştırma sürerken başlattığınız tek uygulama güncellemeleri onun arkasında kuyruğa girer.
+                        \"Hepsini Güncelle\" her satırın Güncelle butonuna sizin yerinize basar; her satır kendi ilerlemesini \
+                        ve sonucunu aynı sınır içinde gösterir. Yalnızca Terminal'deki çalıştırma tek başına gider: Ayarlar › \
+                        Genel › \"Güncellemeleri Terminal'de çalıştır\" açıkken \"Hepsini Güncelle\" tek pencerede tek bir \
+                        toplu çalıştırmadır ve bu sırada başlattığınız tek güncellemeler onun arkasında kuyruğa girer.
                         """
                     ))
                 ]

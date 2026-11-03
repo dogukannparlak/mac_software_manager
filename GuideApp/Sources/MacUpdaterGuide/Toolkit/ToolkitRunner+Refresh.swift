@@ -30,7 +30,33 @@ extension ToolkitController {
         }
     }
 
-    /// Runs the bulk update ("Update Everything" / a toolkit component).
+    /// "Update Everything".
+    ///
+    /// Background mode presses every row's own Update button: each
+    /// updatable item goes through `updateSingle`, the same path a row's
+    /// button takes, so every row shows its own Queued / spinner / progress
+    /// bar / Updated / Failed - instead of the rows sitting idle while one
+    /// opaque bulk run works through them. The concurrency limit (Settings →
+    /// General) and the one-Homebrew-upgrade-at-a-time rule still apply;
+    /// anything past them shows as Queued and starts on its own. Rows that
+    /// are already queued or updating are left alone (`startOrQueue`), so
+    /// pressing it twice does nothing extra. Sparkle apps the app can
+    /// install itself are included; GitHub-only releases and App Store
+    /// ghosts still are not, exactly as their rows have no Update button.
+    ///
+    /// Terminal mode keeps the single bulk run in one window - one window
+    /// per package would be a wall of terminals.
+    func updateEverything() {
+        if preferences.runUpdatesInTerminal {
+            launchUpdate(scope: "all")
+            return
+        }
+        for item in snapshot.items where item.canUpdateInApp {
+            updateSingle(item)
+        }
+    }
+
+    /// Runs the bulk update (terminal-mode "Update Everything" / a toolkit component).
     ///
     /// Background by default: the same `run <scope>` the terminal path would
     /// execute, just without a terminal window - the in-app progress bar is

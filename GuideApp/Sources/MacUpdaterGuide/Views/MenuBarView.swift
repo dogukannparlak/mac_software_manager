@@ -203,7 +203,7 @@ struct MenuBarView: View {
                     symbol: "arrow.triangle.2.circlepath",
                     isProminent: true
                 ) {
-                    toolkit.launchUpdate(scope: "all")
+                    toolkit.updateEverything()
                 }
 
                 // A real native NSMenu flyout, not more SwiftUI - system
@@ -340,7 +340,7 @@ struct MenuBarView: View {
     private func menuItem(for item: UpdateItem) -> NSMenuItem {
         let title = "\(item.name)  \(item.currentVersion) → \(item.newVersion)"
 
-        if canUpdateDirectly(item) {
+        if item.canUpdateInApp {
             return ClosureMenuItem(title: title, symbol: item.source.symbol) {
                 toolkit.updateSingle(item, forceTerminal: true)
             }
@@ -357,13 +357,6 @@ struct MenuBarView: View {
         return plain
     }
 
-    private func canUpdateDirectly(_ item: UpdateItem) -> Bool {
-        switch item.source {
-        case .formula, .cask, .appStore: return true
-        case .sparkle: return item.link?.pathExtension == "dmg" || item.link?.pathExtension == "zip"
-        case .manual, .github: return false
-        }
-    }
 }
 
 /// `NSMenuItem` has no closure-based action, only target/action - this fills

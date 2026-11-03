@@ -223,7 +223,7 @@ struct UpdatesView: View {
 
             if !toolkit.snapshot.isEmpty {
                 Button {
-                    toolkit.launchUpdate(scope: "all")
+                    toolkit.updateEverything()
                 } label: {
                     Label(UIStrings.updateEverything[loc.language], systemImage: "arrow.triangle.2.circlepath")
                 }
@@ -567,17 +567,7 @@ private struct UpdateDetailRow: View {
         toolkit.preferences.runUpdatesInTerminal && toolkit.isUpdating
     }
 
-    /// App Store ghosts and GitHub-only releases cannot be installed from here.
-    private var canUpdateHere: Bool {
-        switch item.source {
-        case .formula, .cask, .appStore:
-            return true
-        case .sparkle:
-            return item.link?.pathExtension == "dmg" || item.link?.pathExtension == "zip"
-        case .manual, .github:
-            return false
-        }
-    }
+    private var canUpdateHere: Bool { item.canUpdateInApp }
 
     private var ignoreType: String? {
         switch item.source {

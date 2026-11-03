@@ -55,6 +55,21 @@ struct UpdateItem: Identifiable, Hashable, Sendable {
     /// Runs `brew upgrade`, which takes Homebrew's per-package locks: two of
     /// these at once can collide, so the queue lets only one go at a time.
     var usesHomebrewLock: Bool { source == .formula || source == .cask }
+
+    /// Whether this app can install the update itself. App Store ghosts and
+    /// GitHub-only releases cannot be; a Sparkle feed only when it points at
+    /// a `.dmg` or `.zip`. Decides both the row's own Update button and which
+    /// rows "Update Everything" presses (`ToolkitController.updateEverything`).
+    var canUpdateInApp: Bool {
+        switch source {
+        case .formula, .cask, .appStore:
+            return true
+        case .sparkle:
+            return link?.pathExtension == "dmg" || link?.pathExtension == "zip"
+        case .manual, .github:
+            return false
+        }
+    }
 }
 
 /// Everything the menu bar shows, read from the cache the shell scripts write.
