@@ -1,7 +1,7 @@
 <div align="center" markdown="1">
 
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.6.0-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
+[![Version](https://img.shields.io/badge/version-1.6.1-blue)](https://github.com/dogukannparlak/mac_software_manager/releases)
 
 ![Engine](https://img.shields.io/badge/engine-zsh%20%2B%20Homebrew-blue?logo=homebrew&logoColor=white)
 ![App](https://img.shields.io/badge/app-macOS%2014.0%2B-blue?logo=apple&logoColor=white)

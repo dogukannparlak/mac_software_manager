@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-03
+
 The app stopped asking to install itself, and SwiftBar is gone.
 
 ### Added
