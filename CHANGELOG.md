@@ -22,6 +22,13 @@ The app stopped asking to install itself, and SwiftBar is gone.
 
 ### Changed
 
+- **"Update Everything" lights up every row.** In the default background
+  mode it now presses each row's own Update button instead of running one
+  bulk job behind idle rows: every row shows Queued, its spinner and progress
+  bar, then Updated or Failed with the reason. The concurrency setting and
+  one-Homebrew-upgrade-at-a-time rule still apply, and Sparkle apps the app
+  can install are now included. With "Run updates in Terminal" on it is still
+  one bulk run in one window.
 - **"Update Everything" starts upgrading right away.** It used to run
   `brew update`, re-query `brew outdated` and `mas outdated`, and afterwards
   rebuild the whole cache (descriptions, self-updating apps, homepages) before
