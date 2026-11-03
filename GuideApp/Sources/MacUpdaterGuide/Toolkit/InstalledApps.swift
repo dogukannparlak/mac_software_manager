@@ -122,6 +122,9 @@ enum InstalledInventory {
 
     static func load() -> (apps: [InstalledApp], tools: [InstalledTool]) {
         let caskTokens = caskVersionsByToken()
+        // Homebrew's own record of which app each cask installed - see
+        // CaskIndex. Also fills in installed casks the cache has not listed.
+        let casks = CaskIndex.load(cachedTokens: Set(caskTokens.keys))
         let pinned = Set(cacheLines("brew_pinned"))
         let overrides = tokenOverrides()
         let caskMeta = caskMetadataByToken()
@@ -133,7 +136,7 @@ enum InstalledInventory {
         for directory in searchDirectories() {
             apps += scan(
                 directory: directory,
-                caskTokens: Set(caskTokens.keys),
+                casks: casks,
                 overrides: overrides,
                 caskMeta: caskMeta,
                 githubHomepages: githubHomepages,
@@ -282,7 +285,7 @@ enum InstalledInventory {
 
     private static func scan(
         directory: URL,
-        caskTokens: Set<String>,
+        casks: CaskIndex,
         overrides: [String: String],
         caskMeta: [String: CaskMeta],
         githubHomepages: [String: URL],
@@ -314,11 +317,15 @@ enum InstalledInventory {
             // on the strength of a typo.
             var matchedToken: String?
             var isManualMatch = false
-            if let override = overrides[name.lowercased()], caskTokens.contains(override) {
+            if let override = overrides[name.lowercased()], casks.tokens.contains(override) {
                 matchedToken = override
                 isManualMatch = true
-            } else if !caskTokens.isEmpty {
-                matchedToken = caskCandidates(for: name).first { caskTokens.contains($0) }
+            } else if let owner = casks.owner(of: url) {
+                // What Homebrew itself recorded installing - exact, where
+                // the name guess below is only ever a guess.
+                matchedToken = owner
+            } else if !casks.tokens.isEmpty {
+                matchedToken = caskCandidates(for: name).first { casks.tokens.contains($0) }
             }
 
             let source = resolveSource(

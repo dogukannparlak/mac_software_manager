@@ -502,11 +502,7 @@ migration_scan() {
 
     # Installed cask tokens, for the "already managed" check - the same source
     # collect_app_updates reads it from.
-    typeset -gA INSTALLED_CASK_TOKENS
-    INSTALLED_CASK_TOKENS=()
-    for cask_line in "${(@f)$(cache_get "brew_casks")}"; do
-        [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
-    done
+    load_installed_casks
 
     for app_path in ${(f)"$(migration_app_paths)"}; do
         [[ -n "$app_path" ]] || continue

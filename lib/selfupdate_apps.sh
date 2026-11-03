@@ -143,12 +143,98 @@ app_cask_candidates() {
     print -rl -- "${(@u)out}"
 }
 
+# The Caskroom folders Homebrew keeps one directory per installed cask in.
+# CASKROOM_DIRS can be overridden (tests).
+typeset -a CASKROOM_DIRS
+(( ${#CASKROOM_DIRS} )) || CASKROOM_DIRS=(/opt/homebrew/Caskroom /usr/local/Caskroom)
+
+# The .app names one installed cask put in Applications, one per line, read
+# from the copy of its definition Homebrew keeps in the Caskroom:
+#     <Caskroom>/<token>/.metadata/<version>/<timestamp>/Casks/<token>.json|.rb
+# Newest timestamp first; the first definition that names an app wins.
+# "app" with a "target:" is reported under the target's name, since that is
+# what the bundle is called in Applications. The same reading as CaskIndex in
+# GuideApp (Toolkit/Caskroom.swift).
+cask_app_names() {
+    local cask_dir="$1" token="${1:t}"
+    local -a definitions
+    local definition text app target rest
+
+    definitions=("$cask_dir"/.metadata/*/*/Casks/"$token".{json,rb}(N))
+    (( ${#definitions} )) || return 0
+    # Newest first by the timestamp directory (…/<version>/<timestamp>/Casks/x),
+    # not by the whole path - the version folder would sort first otherwise.
+    local d
+    definitions=(${(f)"$(for d in "${definitions[@]}"; do print -r -- "${d:h:h:t}"$'\t'"$d"; done | sort -r | cut -f2-)"})
+
+    for definition in "${definitions[@]}"; do
+        text="$(<"$definition")" 2>/dev/null || continue
+        local -a found=()
+        if [[ "$definition" == *.json ]]; then
+            # Collapse whitespace so one pattern fits pretty and compact JSON.
+            text="${text//$'\n'/}"
+            text="$(print -r -- "$text" | sed -E 's/[[:space:]]*([][{}:,])[[:space:]]*/\1/g')"
+            rest="$text"
+            while [[ "$rest" =~ '"app":\["([^"]+)"(,\{"target":"([^"]+)"\})?' ]]; do
+                app="${match[1]}"
+                target="${match[3]}"
+                found+=("${${target:-$app}:t}")
+                rest="${rest#*"$MATCH"}"
+            done
+        else
+            local line
+            for line in "${(@f)text}"; do
+                [[ "$line" =~ '^[[:space:]]*app[[:space:]]+"([^"]+)"([[:space:]]*,[[:space:]]*target:[[:space:]]*"([^"]+)")?' ]] || continue
+                app="${match[1]}"
+                target="${match[3]}"
+                found+=("${${target:-$app}:t}")
+            done
+        fi
+        if (( ${#found} )); then
+            print -rl -- "${found[@]}"
+            return 0
+        fi
+    done
+}
+
+# Fills the two lookups the "is this a Homebrew app?" check reads:
+#   INSTALLED_CASK_TOKENS  token -> 1, from the brew_casks cache entry plus
+#                          every token directory in the Caskroom
+#   BREW_OWNED_APPS        lowercased "Name.app" -> token, from each cask's
+#                          own recorded definition (cask_app_names)
+# The second is exact where the name-based app_cask_candidates can only
+# guess: Docker.app is the cask docker-desktop, and no rewriting of "Docker"
+# gets there.
+load_installed_casks() {
+    typeset -gA INSTALLED_CASK_TOKENS BREW_OWNED_APPS
+    INSTALLED_CASK_TOKENS=()
+    BREW_OWNED_APPS=()
+    local cask_line root cask_dir token app
+
+    for cask_line in "${(@f)$(cache_get "brew_casks")}"; do
+        [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
+    done
+
+    for root in "${CASKROOM_DIRS[@]}"; do
+        for cask_dir in "$root"/*(N/); do
+            token="${cask_dir:t}"
+            INSTALLED_CASK_TOKENS[$token]=1
+            for app in "${(@f)$(cask_app_names "$cask_dir")}"; do
+                [[ -n "$app" ]] && BREW_OWNED_APPS[${app:l}]="$token"
+            done
+        done
+    done
+}
+
 # Is this app already managed by a Homebrew cask?
 # Reported Sparkle updates for cask apps would contradict the Homebrew section
 # and, if acted on, desynchronise brew's metadata.
 app_is_brew_managed() {
     local app_name="$1"
     local candidate
+
+    # Homebrew's own record first (load_installed_casks).
+    [[ -n "${BREW_OWNED_APPS[${app_name:l}.app]}" ]] && return 0
 
     (( ${#INSTALLED_CASK_TOKENS} > 0 )) || return 1
 
@@ -365,11 +451,7 @@ collect_github_homepages() {
     local app_path app_name repo homepage cask_line
     local result=""
 
-    typeset -gA INSTALLED_CASK_TOKENS
-    INSTALLED_CASK_TOKENS=()
-    for cask_line in "${(@f)$(cache_get "brew_casks")}"; do
-        [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
-    done
+    load_installed_casks
 
     for app_path in /Applications/*.app(N) /Applications/*/*.app(N); do
         app_name="${${app_path:t}%.app}"
@@ -458,11 +540,7 @@ collect_app_updates() {
     ensure_tracked_apps_file
 
     # Installed cask tokens, for the "managed elsewhere" check
-    typeset -gA INSTALLED_CASK_TOKENS
-    INSTALLED_CASK_TOKENS=()
-    for cask_line in "${(@f)$(cache_get "brew_casks")}"; do
-        [[ -n "$cask_line" ]] && INSTALLED_CASK_TOKENS[${cask_line%% *}]=1
-    done
+    load_installed_casks
 
     for app_path in /Applications/*.app(N) /Applications/*/*.app(N); do
         app_name="${${app_path:t}%.app}"

@@ -20,6 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when only those are pending. With "Run updates in Terminal" on it is still
   one bulk run in one window, covering Homebrew and the App Store.
 
+### Fixed
+
+- **Homebrew apps showing as "Installed manually".** Which cask owns an app
+  was guessed from the app's name, so apps named unlike their cask (Docker
+  / `docker-desktop`) were labelled manual, offered for "Move to Homebrew"
+  and scanned as self-updating apps. Both the app and the engine now read the
+  exact `.app` each cask installed from Homebrew's own record in the
+  Caskroom, and count every Caskroom folder as an installed cask even before
+  the cache lists it. The name guess remains only as a fallback.
+
 ## [1.6.1] - 2026-11-03
 
 The app stopped asking to install itself, and SwiftBar is gone.
