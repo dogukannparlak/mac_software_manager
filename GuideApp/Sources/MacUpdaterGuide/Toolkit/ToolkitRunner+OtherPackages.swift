@@ -39,11 +39,37 @@ extension ToolkitController {
             if !outcome.succeeded {
                 self.report(.updateItem, subject: package.name, .from(outcome))
             }
+            self.startNextQueuedTool()
             // The run rewrote other_packages/other_outdated; re-reading the
             // snapshot moves its last-check time, which is what reloads the
             // inventory these rows come from.
             self.reload()
         }
+    }
+
+    /// Lines several packages up to update one after another - what "Update
+    /// Everything" does with this section (`updateEverything`).
+    ///
+    /// One at a time, not side by side: two of the same manager at once
+    /// (two `npm install -g` into one prefix, two `cargo install`) write the
+    /// same directories. A row's own Update button still starts at once; the
+    /// queue just waits until nothing from this section is running.
+    func updateTools(_ packages: [OtherPackage]) {
+        for package in packages where package.isUpdatable
+            && !updatingOtherPackageIDs.contains(package.id)
+            && !queuedOtherPackages.contains(where: { $0.id == package.id }) {
+            queuedOtherPackages.append(package)
+        }
+        startNextQueuedTool()
+    }
+
+    func isQueuedTool(_ package: OtherPackage) -> Bool {
+        queuedOtherPackages.contains { $0.id == package.id }
+    }
+
+    func startNextQueuedTool() {
+        guard updatingOtherPackageIDs.isEmpty, !queuedOtherPackages.isEmpty else { return }
+        updateTool(queuedOtherPackages.removeFirst())
     }
 
     /// The same update in the user's terminal (`update_tool`).

@@ -39,10 +39,10 @@ struct UpdatesView: View {
     }
 
     /// Pending updates from outside Homebrew and the App Store (npm, pipx,
-    /// uv, Cargo, self-updating tools). Not part of `UpdateSnapshot`: they
-    /// update one at a time, in a terminal, through their own managers - so
-    /// they get their own section below, with the same rows the CLI Tools
-    /// page shows.
+    /// uv, Cargo, self-updating tools). Not part of `UpdateSnapshot` - they
+    /// come from the inventory scan - so they get their own section below,
+    /// with the same rows the CLI Tools page shows. "Update Everything"
+    /// includes them, one after another (`ToolkitController.updateTools`).
     private var otherUpdates: [OtherPackage] { inventory.otherPackages.filter(\.isOutdated) }
 
     /// Everything waiting, both kinds - what the title and the icon count.
@@ -221,9 +221,9 @@ struct UpdatesView: View {
 
             Spacer(minLength: 0)
 
-            if !toolkit.snapshot.isEmpty {
+            if !toolkit.snapshot.isEmpty || !otherUpdates.isEmpty {
                 Button {
-                    toolkit.updateEverything()
+                    toolkit.updateEverything(otherPackages: otherUpdates)
                 } label: {
                     Label(UIStrings.updateEverything[loc.language], systemImage: "arrow.triangle.2.circlepath")
                 }

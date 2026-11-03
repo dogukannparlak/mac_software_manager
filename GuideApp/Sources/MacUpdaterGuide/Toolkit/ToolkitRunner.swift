@@ -280,6 +280,10 @@ final class ToolkitController {
     /// update is running right now - what their rows show a spinner for.
     var updatingOtherPackageIDs: Set<String> = []
 
+    /// Packages "Update Everything" has lined up behind the one running -
+    /// see `updateTools`. Their rows show "Queued".
+    var queuedOtherPackages: [OtherPackage] = []
+
     /// 0...1 completion for a row's own progress bar, per `UpdateItem.id`.
     /// Real byte progress when a cask download watcher
     /// (`cask_download_watch_start`, lib/cache.sh) has reported one -

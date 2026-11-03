@@ -142,6 +142,10 @@ private struct OtherPackageRow: View {
 
                 if isUpdating {
                     ProgressView().controlSize(.small)
+                } else if toolkit.isQueuedTool(package) {
+                    Label(UIStrings.queuedRowStatus[loc.language], systemImage: "clock")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.secondary)
                 } else {
                     Button(UIStrings.updateThis[loc.language]) {
                         toolkit.updateTool(package)
