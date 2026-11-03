@@ -8,6 +8,14 @@ CACHE_TTL_UPDATES=3600     # brew outdated / mas outdated / iTunes lookups
 CACHE_TTL_INSTALLED=21600  # brew list / mas list / pinned formulae
 CACHE_TTL_APPS=21600       # one HTTP request per self-updating app: keep it rare
 CACHE_TTL_WEBSITES=86400   # a homepage practically never changes; check once a day
+# How old Homebrew's own metadata may be before a refresh pulls it again
+# ('brew update', brew_update_if_stale) - and, the other way round, how recent
+# it must be for "Update Everything" to skip its own pull. Homebrew's default
+# auto-update interval is 24h; this stays well inside it.
+BREW_METADATA_TTL=${BREW_METADATA_TTL:-21600}
+# Upper bound for that background 'brew update', so a hung network cannot pin
+# the cache lock.
+BREW_UPDATE_TIMEOUT=${BREW_UPDATE_TIMEOUT:-180}
 
 # Keys per tier (used by the refresh action and the staleness check)
 typeset -a CACHE_KEYS_UPDATES CACHE_KEYS_INSTALLED CACHE_KEYS_APPS CACHE_KEYS_WEBSITES
@@ -656,6 +664,10 @@ collect_cache_data() {
         fi
         mas_outdated_raw="$(cache_get "mas_outdated")"
 
+        # Pull fresh Homebrew metadata first (only when the last pull is older
+        # than BREW_METADATA_TTL), so the list shown is the list a bulk run
+        # will actually upgrade - and the bulk run can skip its own pull.
+        brew_update_if_stale
         cache_refresh_entry "brew_outdated"  brew_outdated_normalized
         cache_refresh_entry "manual_updates" collect_manual_updates "$mas_outdated_raw"
         # Everything outside Homebrew and the App Store (lib/updaters.sh,
@@ -778,6 +790,37 @@ collect_cache_for_item() {
             fi
             ;;
     esac
+
+    release_lock "cache"
+    return 0
+}
+
+# The bulk-run counterpart of collect_cache_for_item.
+#
+# run_mode_system has already rewritten brew_outdated and mas_outdated itself
+# (its verify pass needs exactly those lists, so it stores what it read rather
+# than querying twice). What is left is the installed lists the rows read their
+# new versions from - not collect_cache_data "all", which also re-ran 'brew
+# desc' over every package, rescanned every self-updating app and refetched
+# homepages: whole seconds after the last upgrade, none of it changed by one.
+#
+# Usage: collect_cache_after_bulk_run <brew_changed 0|1> <mas_changed 0|1>
+collect_cache_after_bulk_run() {
+    setopt local_options no_err_exit
+    local brew_changed="${1:-1}" mas_changed="${2:-1}"
+
+    acquire_lock "cache" "$CACHE_LOCK_WAIT"
+
+    if (( brew_changed )); then
+        cache_refresh_entry "brew_casks"    brew list --cask --versions
+        cache_refresh_entry "brew_formulae" brew list --formula --versions
+    fi
+    # Cheap, and the run may have pulled new metadata.
+    cache_refresh_entry "brew_status" collect_brew_status
+
+    if (( mas_changed )) && [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
+        cache_refresh_entry "mas_list" run_with_timeout "$MAS_QUERY_TIMEOUT" mas list
+    fi
 
     release_lock "cache"
     return 0

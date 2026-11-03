@@ -174,6 +174,7 @@ brew_update_with_retry() {
     while (( retry_count < max_retries )); do
         if update_output=$(brew update 2>&1); then
             echo "$update_output"
+            brew_metadata_mark_fresh
             return 0
         fi
 
@@ -189,6 +190,34 @@ brew_update_with_retry() {
     done
 
     return 1
+}
+
+# When this engine last pulled Homebrew's metadata ('brew update').
+#
+# HOMEBREW_NO_AUTO_UPDATE is set for the whole engine, so nothing refreshes
+# that metadata behind our back: the only pulls are the ones below. Recording
+# them lets the bulk run ("Update Everything") skip its own 'brew update' when
+# the background refresh already did one recently - that pull, plus the
+# 'brew outdated' it invalidates, used to be most of the wait between pressing
+# the button and the first package actually upgrading.
+#
+# Stored as a cache entry so its mtime is the timestamp (cache_mtime,
+# cache_fresh); the content is the same epoch, for anyone reading by hand.
+brew_metadata_mark_fresh() {
+    cache_put "brew_metadata" "$EPOCHSECONDS" 2>/dev/null || true
+}
+
+brew_metadata_fresh() {
+    cache_fresh "brew_metadata" "$BREW_METADATA_TTL"
+}
+
+# Background-refresh variant: one bounded attempt, no output, no retry sleeps.
+# A refresh that cannot reach the network just leaves the stamp stale, and the
+# next bulk run falls back to its own retrying 'brew update'.
+brew_update_if_stale() {
+    brew_metadata_fresh && return 0
+    run_with_timeout "$BREW_UPDATE_TIMEOUT" brew update >/dev/null 2>&1 || return 0
+    brew_metadata_mark_fresh
 }
 
 # ------------------------------------------------------------------------------

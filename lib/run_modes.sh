@@ -490,17 +490,39 @@ run_mode_system() {
 	echo "🚀 Starting System Update (Homebrew & MAS)..."
 	echo "---------------------------"
 
-	progress_write "running" "brew-update" "" "" ""
-	echo "📦 Updating Homebrew Database..."
-	if ! brew_update_with_retry; then
-		echo "❌ Error: Homebrew update failed after multiple retries."
-		notify "Homebrew failed to refresh after several retries - the update did not run." "Update Failed"
-		exit 1
+	# Fast path. The background refresh pulls Homebrew metadata and rebuilds
+	# the outdated lists on its own schedule (collect_cache_data), so in the
+	# common case the list on screen is already current: upgrade exactly
+	# that, straight away, instead of pulling the metadata again and
+	# re-deriving the same list first. The full pull still happens whenever
+	# the last one is older than BREW_METADATA_TTL (or never happened).
+	if brew_metadata_fresh; then
+		echo "⚡ Homebrew metadata is fresh - skipping 'brew update'."
+	else
+		progress_write "running" "brew-update" "" "" ""
+		echo "📦 Updating Homebrew Database..."
+		if ! brew_update_with_retry; then
+			echo "❌ Error: Homebrew update failed after multiple retries."
+			notify "Homebrew failed to refresh after several retries - the update did not run." "Update Failed"
+			exit 1
+		fi
 	fi
 
 	# Analyze pending updates to create a snapshot before upgrading
 	progress_write "running" "analyze" "" "" ""
 	echo "🔍 Analyzing pending updates..."
+
+	# The cached list is only reused when it is younger than its own TTL AND
+	# was built after the latest metadata pull - a pull that just happened
+	# above makes it stale by definition. The '|| true's keep 'set -e' from
+	# ending the run on a failed query: an empty list just means nothing to do.
+	typeset brew_outdated_list=""
+	if cache_fresh "brew_outdated" "$CACHE_TTL_UPDATES" \
+		&& (( $(cache_mtime "brew_outdated") >= $(cache_mtime "brew_metadata") )); then
+		brew_outdated_list="$(cache_get "brew_outdated")" || true
+	else
+		brew_outdated_list="$(brew_outdated_normalized)" || true
+	fi
 	typeset -a update_log_buffer
 	integer count_brew_pending=0
     integer count_mas_pending=0
@@ -509,7 +531,7 @@ run_mode_system() {
 	# Structured 'brew outdated --json=v2' data: src|token|old|new|pinned
     typeset -a brew_targets
     typeset -a outdated_fields
-	for line in "${(@f)$(brew_outdated_normalized)}"; do
+	for line in "${(@f)brew_outdated_list}"; do
 		[[ -n "$line" ]] || continue
 		outdated_fields=("${(@s:|:)line}")
 		(( ${#outdated_fields[@]} >= 5 )) || continue
@@ -539,8 +561,13 @@ run_mode_system() {
 
 	# Parse 'mas outdated' output
 	if [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
-		# Redirect stderr to /dev/null to suppress warnings completely
-		raw_mas_outdated=$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null || true)
+		# Same reuse rule as brew_outdated above (no metadata pull to compare
+		# against here). stderr goes to /dev/null to suppress mas warnings.
+		if cache_fresh "mas_outdated" "$CACHE_TTL_UPDATES"; then
+			raw_mas_outdated="$(cache_get "mas_outdated")" || true
+		else
+			raw_mas_outdated=$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null || true)
+		fi
 		for line in "${(@f)raw_mas_outdated}"; do
 			# Ignore non-application lines. Valid lines MUST start with a number (App ID)
 			[[ ! "$line" =~ ^[[:space:]]*[0-9]+ ]] && continue
@@ -646,7 +673,8 @@ run_mode_system() {
 		if [[ "$has_ignored_mas" == "true" ]]; then
 			# Update each non-ignored app individually to respect ignore list
 			echo "   (Updating apps individually to respect ignore list)"
-			run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null | while read -r line; do
+			# The list analyzed above, not a second 'mas outdated' query.
+			printf '%s\n' "$raw_mas_outdated" | while read -r line; do
 				[[ ! "$line" =~ ^[[:space:]]*[0-9]+ ]] && continue
 				app_id=${line%% *}
 				# Skip if this app is in our ignore list
@@ -678,29 +706,48 @@ run_mode_system() {
 		fi
 	fi
 
+	# Re-read what is still outdated, once. The same lists serve the verify
+	# pass below and go straight into the cache GuideApp reads, so the rows
+	# resolve without a second round of queries. A query that fails leaves its
+	# list empty (every item counted as updated, as before) and the cache
+	# entry untouched for the next background refresh to fix.
+	progress_write "running" "verify" "" "" ""
+	typeset post_brew_outdated="" post_mas_outdated=""
+	if post_brew_outdated="$(brew_outdated_normalized)"; then
+		cache_put "brew_outdated" "$post_brew_outdated" || true
+	else
+		post_brew_outdated=""
+	fi
+	if (( count_mas_pending > 0 )) && [[ "$MAS_ENABLED" == "1" ]] && command -v mas &> /dev/null; then
+		if post_mas_outdated="$(run_with_timeout "$MAS_QUERY_TIMEOUT" mas outdated 2>/dev/null)"; then
+			cache_put "mas_outdated" "$post_mas_outdated" || true
+		else
+			post_mas_outdated=""
+		fi
+	fi
+
 	# Verify the outcome before writing history.
 	# Anything still on the outdated list did NOT update, whatever brew/mas returned.
 	integer count_failed=0
 	if [[ ${#update_log_buffer[@]} -gt 0 ]]; then
-		progress_write "running" "verify" "" "" ""
 		echo "🔎 Verifying results..."
 
 		# NOTE: the map key must be built in a variable first. An unquoted
 		# '|' inside an assignment subscript is parsed as a pipe by zsh.
 		typeset -A still_outdated
-		typeset map_key=""
-		for tok in "${(@f)$(brew_outdated_tokens)}"; do
-			[[ -n "$tok" ]] || continue
-			map_key="brew|$tok"
+		typeset map_key="" verify_line="" verify_trimmed=""
+		for verify_line in "${(@f)post_brew_outdated}"; do
+			[[ -n "$verify_line" ]] || continue
+			map_key="brew|${${(s:|:)verify_line}[2]}"
 			still_outdated[$map_key]=1
 		done
-		if [[ "$MAS_ENABLED" == "1" ]]; then
-			for verify_id in "${(@f)$(mas_outdated_ids)}"; do
-				[[ -n "$verify_id" ]] || continue
-				map_key="mas|$verify_id"
-				still_outdated[$map_key]=1
-			done
-		fi
+		# Same id extraction as mas_ids_from (lib/updaters.sh).
+		for verify_line in "${(@f)post_mas_outdated}"; do
+			verify_trimmed="${verify_line#"${verify_line%%[![:space:]]*}"}"
+			[[ "$verify_trimmed" =~ ^[0-9]+ ]] || continue
+			map_key="mas|${verify_trimmed%% *}"
+			still_outdated[$map_key]=1
+		done
 
 		typeset -a verified_log
 		typeset -a entry_fields
@@ -740,9 +787,10 @@ run_mode_system() {
         fi
     fi
 
-    # Menu data is cached: rebuild it so the refresh below shows the new state
+    # The outdated lists were already stored above; refresh only the
+    # installed lists an upgrade can change (collect_cache_after_bulk_run).
     echo "🗂️ Refreshing cached data..."
-    collect_cache_data "all"
+    collect_cache_after_bulk_run "$(( count_brew_pending > 0 ))" "$(( count_mas_pending > 0 ))"
 
     # Not unconditionally "done": count_failed items were still outdated when
     # the verify pass re-checked them, and a green tick for that is a lie.

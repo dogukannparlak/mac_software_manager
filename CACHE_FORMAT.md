@@ -323,7 +323,7 @@ lockstep, not just the writer:
 
 - Writer: `brew_outdated_normalized()` (`lib/updaters.sh`)
 - `brew_outdated_tokens()` (`lib/updaters.sh`) - `${${(s:|:)line}[2]}`
-- The system update flow (`run_mode_system`, `lib/run_modes.sh`) - `outdated_fields[1..5]`
+- The system update flow (`run_mode_system`, `lib/run_modes.sh`) - `outdated_fields[1..5]`, plus its verify pass - `${${(s:|:)verify_line}[2]}`
 - The menu-render filtering pass (`render_menu`, `lib/menu.sh`) - `entry_fields[1..5]`
 - The menu-render display pass (`lib/menu.sh`, the monitored-items submenu) - `entry_fields[1..4]`
 - Swift reader: `UpdateSnapshot.homebrewItems()` in `UpdateSnapshot.swift`
@@ -338,8 +338,24 @@ formula has multiple versions installed; `pinned` is `0`/`1`. Example:
 ```
 cask|alt-tab|11.4.3|11.4.4|0
 ```
-- Writer: `brew_outdated_normalized()`, `lib/updaters.sh`.
+- Writer: `brew_outdated_normalized()`, `lib/updaters.sh` (through
+  `collect_cache_data`, `collect_cache_for_item`, and `run_mode_system`'s
+  verify pass, which stores the list it re-read after upgrading).
 - Swift reader: `UpdateSnapshot.homebrewItems()`, `UpdateSnapshot.swift`.
+
+### `brew_metadata`
+
+```
+epoch
+```
+When this engine last ran a successful `brew update`. Only the file's mtime is
+read (`brew_metadata_fresh`); the content is the same epoch, for humans. While
+it is younger than `BREW_METADATA_TTL`, "Update Everything" skips its own
+`brew update` and upgrades the cached `brew_outdated` list as-is (provided
+that list is itself fresh and was built after this stamp).
+- Writers: `brew_metadata_mark_fresh()` via `brew_update_with_retry()` and
+  `brew_update_if_stale()`, `lib/updaters.sh`.
+- No Swift reader.
 
 ### `brew_status`
 

@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 The app stopped asking to install itself, and SwiftBar is gone.
 
+### Changed
+
+- **"Update Everything" starts upgrading right away.** It used to run
+  `brew update`, re-query `brew outdated` and `mas outdated`, and afterwards
+  rebuild the whole cache (descriptions, self-updating apps, homepages) before
+  reporting done. The background refresh now keeps Homebrew's metadata fresh
+  (at most every 6 hours), so the bulk run upgrades the list already on
+  screen, reuses the post-upgrade check for the cache, and refreshes only the
+  installed lists. It still pulls metadata itself when the last pull is stale.
+
 ### Fixed
 
 - **Updates that failed the first time and worked on the second or third
