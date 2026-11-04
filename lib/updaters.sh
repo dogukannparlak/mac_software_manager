@@ -301,6 +301,42 @@ brew_formulae_desc_collect() {
     brew desc "${tokens[@]}" 2>/dev/null
 }
 
+# Installed casks as "token version...", the shape of
+# 'brew list --cask --versions' - which GuideApp's Installed Apps page reads to
+# tell Homebrew apps from manually installed ones.
+#
+# That command does not skip a broken cask, it aborts the whole listing: one
+# half-removed cask (a Caskroom folder holding only .metadata, as an
+# interrupted uninstall leaves behind) makes it print "Error: Cask 'x' is not
+# installed." and exit 1 with nothing on stdout. Every app on the machine then
+# showed up as "Installed manually". So when it fails, read the Caskroom
+# directly - the version folders are what brew itself reports - and skip any
+# cask that has no version folder left.
+#
+# Non-zero only when nothing at all could be listed, so cache_refresh_entry
+# keeps the previous entry instead of blanking it.
+brew_casks_versions() {
+    local output
+    if output=$(brew list --cask --versions 2>/dev/null); then
+        [[ -n "$output" ]] && print -r -- "$output"
+        return 0
+    fi
+
+    local caskroom dir found=0
+    local -a versions
+    caskroom=$(brew --caskroom 2>/dev/null) || return 1
+    [[ -n "$caskroom" && -d "$caskroom" ]] || return 1
+
+    for dir in "$caskroom"/*(N/); do
+        versions=("$dir"/*(N/:t))
+        (( ${#versions[@]} > 0 )) || continue
+        print -r -- "${dir:t} ${(j: :)versions}"
+        found=1
+    done
+
+    (( found ))
+}
+
 # Same as brew_formulae_desc_collect above, for installed casks - drives
 # category grouping for apps in the same "token: description" shape.
 brew_casks_desc_collect() {

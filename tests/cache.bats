@@ -278,7 +278,7 @@ load "test_helper"
         collect_cache_for_item "cask" "firefox"
     '
     assert_contains "ENTRY: brew_outdated brew_outdated_normalized" "$output"
-    assert_contains "ENTRY: brew_casks brew list --cask --versions" "$output"
+    assert_contains "ENTRY: brew_casks brew_casks_versions" "$output"
     refute_contains "brew_formulae" "$output"
     refute_contains "homepages" "$output"
 }
@@ -474,4 +474,36 @@ load "test_helper"
     [ "$status" -eq 0 ]
     assert_contains "survived" "$output"
     assert_contains "pid cleared" "$output"
+}
+
+@test "brew_casks_versions reads the Caskroom when one broken cask aborts 'brew list'" {
+    run run_zsh_snippet '
+        room="$HOME/Caskroom"
+        mkdir -p "$room/anki/26.09.3" "$room/anki/.metadata" \
+                 "$room/broken-cask/.metadata" \
+                 "$room/visual-studio-code/1.105.0"
+        brew() {
+            case "$1" in
+                list) print -u2 "Error: Cask '\''broken-cask'\'' is not installed."; return 1 ;;
+                --caskroom) print -r -- "$room"; return 0 ;;
+            esac
+        }
+        brew_casks_versions
+        echo "rc=$?"
+    '
+    [ "$status" -eq 0 ]
+    assert_contains "anki 26.09.3" "$output"
+    assert_contains "visual-studio-code 1.105.0" "$output"
+    refute_contains "broken-cask" "$output"
+    refute_contains ".metadata" "$output"
+    assert_contains "rc=0" "$output"
+}
+
+@test "brew_casks_versions passes 'brew list' output through when it works" {
+    run run_zsh_snippet '
+        brew() { print -r -- "firefox 140.0"; }
+        brew_casks_versions
+    '
+    [ "$status" -eq 0 ]
+    [ "$output" = "firefox 140.0" ]
 }

@@ -20,6 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when only those are pending. With "Run updates in Terminal" on it is still
   one bulk run in one window, covering Homebrew and the App Store.
 
+### Fixed
+
+- **Homebrew apps no longer show up as "Installed manually".** One
+  half-removed cask (a Caskroom folder with no version left) makes
+  `brew list --cask --versions` abort with nothing listed, so every app lost
+  its Homebrew label. The engine now falls back to reading the Caskroom and
+  skips the broken cask. Casks named `<app>-app` (Ollama, Homebrew.app) are
+  matched too.
+
 ## [1.6.1] - 2026-11-03
 
 The app stopped asking to install itself, and SwiftBar is gone.

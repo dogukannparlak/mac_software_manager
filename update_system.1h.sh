@@ -831,7 +831,7 @@ if [[ "$1" == "scan_migration" ]]; then
     # The scan skips apps that are already casks, which it reads from this
     # entry - so make sure it exists first, exactly as the "apps" tier does
     # before collect_app_updates (collect_cache_data, lib/cache.sh).
-    [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew list --cask --versions
+    [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew_casks_versions
     cache_refresh_entry "$MIGRATION_CACHE_KEY" migration_scan
 
     release_lock "cache"

@@ -471,6 +471,9 @@ enum InstalledInventory {
         if camel != base { candidates.append(camel) }
         candidates.append(base.replacingOccurrences(of: ".", with: ""))
         candidates.append(camel.replacingOccurrences(of: ".", with: ""))
+        // Casks that would clash with a formula of the same name carry an
+        // "-app" suffix: Ollama.app is "ollama-app", Homebrew.app "homebrew-app".
+        candidates.append(base + "-app")
 
         var seen = Set<String>()
         return candidates.filter { !$0.isEmpty && seen.insert($0).inserted }

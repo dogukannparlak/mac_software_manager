@@ -677,7 +677,7 @@ collect_cache_data() {
 
     if [[ "$tier" == "installed" || "$tier" == "all" ]]; then
         cache_refresh_entry "brew_pinned"        brew list --pinned
-        cache_refresh_entry "brew_casks"         brew list --cask --versions
+        cache_refresh_entry "brew_casks"         brew_casks_versions
         cache_refresh_entry "brew_formulae"      brew list --formula --versions
         # Homebrew's own leaf/dependency split - which formulae the user
         # actually asked for vs. what got pulled in transitively. Drives the
@@ -704,12 +704,12 @@ collect_cache_data() {
     if [[ "$tier" == "apps" || "$tier" == "all" ]]; then
         # Depends on brew_casks to skip Homebrew-managed apps, so make sure
         # that entry exists before scanning.
-        [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew list --cask --versions
+        [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew_casks_versions
         cache_refresh_entry "app_updates" collect_app_updates
     fi
 
     if [[ "$tier" == "websites" || "$tier" == "all" ]]; then
-        [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew list --cask --versions
+        [[ -f "$CACHE_DIR/brew_casks" ]] || cache_refresh_entry "brew_casks" brew_casks_versions
         cache_refresh_entry "cask_homepages"   collect_cask_homepages
         cache_refresh_entry "github_homepages" collect_github_homepages
     fi
@@ -765,7 +765,7 @@ collect_cache_for_item() {
             # the one of the two this item lives in: a cask upgrade cannot
             # change the formula list, or the other way round.
             if [[ "$item_type" == "cask" ]]; then
-                cache_refresh_entry "brew_casks" brew list --cask --versions
+                cache_refresh_entry "brew_casks" brew_casks_versions
             else
                 cache_refresh_entry "brew_formulae" brew list --formula --versions
             fi
@@ -812,7 +812,7 @@ collect_cache_after_bulk_run() {
     acquire_lock "cache" "$CACHE_LOCK_WAIT"
 
     if (( brew_changed )); then
-        cache_refresh_entry "brew_casks"    brew list --cask --versions
+        cache_refresh_entry "brew_casks"    brew_casks_versions
         cache_refresh_entry "brew_formulae" brew list --formula --versions
     fi
     # Cheap, and the run may have pulled new metadata.
