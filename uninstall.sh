@@ -192,7 +192,7 @@ if (( LIST_ONLY )); then
     exit 0
 fi
 
-say "${fg[red]}=== Mac Software Manager: Uninstaller v1.6.1 ===${reset_color}"
+say "${fg[red]}=== Mac Software Manager: Uninstaller v1.7.0 ===${reset_color}"
 (( DRY_RUN )) && say "${fg[yellow]}Dry run: nothing will actually be removed.${reset_color}"
 
 # 1. Remove the GuideApp Application

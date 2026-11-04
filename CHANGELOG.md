@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-05
+
+"Update Everything" now updates every row on screen, and Homebrew apps are
+labelled correctly again.
+
 ### Changed
 
 - **"Update Everything" lights up every row.** In the default background
